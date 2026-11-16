@@ -379,11 +379,33 @@ mod url_tests {
 /// The window as it was left last time (position and size, maximized), read without any side
 /// effect: a damaged settings file is dealt with when the app loads its settings.
 pub fn saved_window() -> Option<([f32; 4], bool)> {
-    let text = std::fs::read_to_string(settings_path()?).ok()?;
-    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    parse_window(&std::fs::read_to_string(settings_path()?).ok()?)
+}
+
+fn parse_window(text: &str) -> Option<([f32; 4], bool)> {
+    let v: serde_json::Value = serde_json::from_str(text).ok()?;
     let a = v.get("window")?.as_array()?;
     let n: Vec<f32> = a.iter().filter_map(|x| x.as_f64()).map(|x| x as f32).collect();
     let rect: [f32; 4] = n.try_into().ok()?;
     let maximized = v.get("window_maximized").and_then(|m| m.as_bool()).unwrap_or(true);
     Some((rect, maximized))
+}
+
+#[cfg(test)]
+mod window_tests {
+    use super::parse_window;
+
+    #[test]
+    fn the_saved_window_is_read_when_it_is_whole() {
+        let (r, max) = parse_window(r#"{"window": [10, 20, 1300.5, 800], "window_maximized": false, "ui_scale": 1.0}"#).unwrap();
+        assert_eq!(r, [10.0, 20.0, 1300.5, 800.0]);
+        assert!(!max);
+        // Maximized is the default when the file doesn't say.
+        assert!(parse_window(r#"{"window": [0, 0, 900, 600]}"#).unwrap().1);
+        // Anything incomplete or damaged is simply "no saved window".
+        assert!(parse_window(r#"{"window": [1, 2, 3]}"#).is_none());
+        assert!(parse_window(r#"{"window": null}"#).is_none());
+        assert!(parse_window("{ not json").is_none());
+        assert!(parse_window("{}").is_none());
+    }
 }
