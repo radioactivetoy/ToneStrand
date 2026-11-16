@@ -59,15 +59,7 @@ impl App {
                         theme::pill(ui, &format!("{}  {}", slot_label((*idx).max(0) as usize), name), accent());
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Open file...").on_hover_text("Open a preset file (Ctrl+O)").clicked() {
-                            if let Some(p) = rfd::FileDialog::new()
-                                .set_directory(&self.library_dir)
-                                .add_filter("Presets", &["hlx", "hxpreset"])
-                                .pick_file()
-                            {
-                                self.open_file(&p);
-                            }
-                        }
+                        self.open_controls(ui);
                         // A new preset is made for the current unit.
                         let mut make: Option<i64> = None;
                         if ui
@@ -150,6 +142,52 @@ impl App {
         self.active = self.docs.len() - 1;
     }
 
+    /// "Open file..." and the list of recent files beside it (for a right-to-left bar: the
+    /// list comes out to the left of the button).
+    pub(super) fn open_controls(&mut self, ui: &mut egui::Ui) {
+        if ui.button("Open file...").on_hover_text("Open a preset file (Ctrl+O)").clicked() {
+            self.open_file_dialog();
+        }
+        let recent = self.settings.recent.clone();
+        let mut open = None;
+        let mut clear = false;
+        ui.add_enabled_ui(!recent.is_empty(), |ui| {
+            ui.menu_button("Recent", |ui| {
+                for p in &recent {
+                    let path = Path::new(p);
+                    let name = path.file_name().and_then(|s| s.to_str()).unwrap_or(p);
+                    if ui.button(name).on_hover_text(p).clicked() {
+                        open = Some(p.clone());
+                        ui.close_menu();
+                    }
+                }
+                ui.separator();
+                if ui.button("Clear this list").clicked() {
+                    clear = true;
+                    ui.close_menu();
+                }
+            })
+            .response
+            .on_hover_text("Presets you opened lately")
+            .on_disabled_hover_text("No presets opened yet");
+        });
+        if let Some(p) = open {
+            let path = PathBuf::from(&p);
+            if path.is_file() {
+                self.view = View::Editor;
+                self.open_file(&path);
+            } else {
+                self.settings.recent.retain(|r| *r != p);
+                self.settings.save();
+                self.note(LogLevel::Bad, format!("{p} is not there any more"));
+            }
+        }
+        if clear {
+            self.settings.recent.clear();
+            self.settings.save();
+        }
+    }
+
     pub(super) fn open_file_dialog(&mut self) {
         if let Some(p) = rfd::FileDialog::new().set_directory(&self.library_dir).add_filter("Presets", &["hlx", "hxpreset"]).pick_file() {
             self.open_file(&p);
@@ -201,9 +239,7 @@ impl App {
                         theme::pill(ui, &format!("playing {}  {}", slot_label((*idx).max(0) as usize), name), accent());
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Open file...").on_hover_text("Open a preset file (Ctrl+O)").clicked() {
-                            self.open_file_dialog();
-                        }
+                        self.open_controls(ui);
                         if ui.button("New preset").on_hover_text(format!("An empty preset for the {} (Ctrl+N)", crate::units::unit_name(self.unit))).clicked() {
                             self.new_preset();
                         }
@@ -243,7 +279,10 @@ impl App {
                                 self.settings.save();
                             }
                         }
-                        ui.label(RichText::new("Accent").color(MUTED));
+                        // On a narrow window the dots alone are enough (they have tips).
+                        if ui.available_width() > 120.0 {
+                            ui.label(RichText::new("Accent").color(MUTED));
+                        }
                     });
                 });
             });

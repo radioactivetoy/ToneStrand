@@ -66,6 +66,14 @@ pub struct Settings {
     pub studio: bool,
     /// The accent colour (0xRRGGBB).
     pub accent: u32,
+    /// The last preset files opened, newest first (at most 10).
+    pub recent: Vec<String>,
+    /// Open the files that were open when the app last closed.
+    pub reopen_tabs: bool,
+    /// The saved preset files that were open when the app last closed.
+    pub last_tabs: Vec<String>,
+    /// Connect again by itself when the USB pedal comes back after being unplugged.
+    pub auto_reconnect: bool,
 }
 
 impl Default for Settings {
@@ -90,6 +98,10 @@ impl Default for Settings {
             tone_library: None,
             studio: true,
             accent: 0x2ec4b6,
+            recent: Vec::new(),
+            reopen_tabs: false,
+            last_tabs: Vec::new(),
+            auto_reconnect: true,
         }
     }
 }

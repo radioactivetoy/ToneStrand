@@ -230,6 +230,10 @@ impl App {
                         changed |= ui.checkbox(&mut self.settings.confirm_delete, "Ask before deleting a preset file").changed();
                         changed |= ui.checkbox(&mut self.settings.show_sample, "Open the sample preset at start").changed();
                         changed |= ui.checkbox(&mut self.settings.start_in_library, "Start on the library page").changed();
+                        ui.horizontal(|ui| {
+                            changed |= ui.checkbox(&mut self.settings.reopen_tabs, "Reopen last session's presets at start").changed();
+                            theme::help(ui, "Opens the preset files that were open when you last closed ToneStrand. Presets read from the pedal aren't included: they have no file.");
+                        });
                     });
                     ui.add_space(10.0);
 

@@ -325,6 +325,14 @@ impl App {
             _ => {}
         }
         app.scan_library();
+        if app.settings.reopen_tabs && app.screenshot.is_none() {
+            for p in app.settings.last_tabs.clone() {
+                let p = PathBuf::from(p);
+                if p.is_file() {
+                    app.open_file(&p);
+                }
+            }
+        }
         app.note(LogLevel::Info, "Ready. Plug in a pedal or pick a Helrig Box to start.");
         if let Some(n) = settings_note {
             app.note(LogLevel::Bad, n);
@@ -429,6 +437,7 @@ impl App {
         };
         self.docs.push(Doc { title, name, path: Some(path.to_owned()), kind, dirty: false, selected: None, example: false, undo: Vec::new(), redo: Vec::new(), last_edit: None });
         self.active = self.docs.len() - 1;
+        self.remember_recent(path);
         // A preset made for another unit is converted to this one, or explained.
         let i = self.active;
         let unit = crate::units::unit_name(self.unit);
@@ -444,6 +453,24 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    /// Put a file at the top of the recent list (at most 10, no repeats).
+    fn remember_recent(&mut self, path: &Path) {
+        if self.screenshot.is_some() {
+            return;
+        }
+        let p = path.to_string_lossy().into_owned();
+        self.settings.recent.retain(|r| *r != p);
+        self.settings.recent.insert(0, p);
+        self.settings.recent.truncate(10);
+        self.settings.save();
+    }
+
+    /// The saved preset files that are open now, for "reopen last session's tabs". Live and
+    /// pedal-slot documents have no file and are left out.
+    fn open_file_paths(&self) -> Vec<String> {
+        self.docs.iter().filter_map(|d| d.path.as_ref()).map(|p| p.to_string_lossy().into_owned()).collect()
     }
 
     fn save_doc(&mut self, i: usize, save_as: bool) {
@@ -1578,6 +1605,13 @@ impl eframe::App for App {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if self.screenshot.is_none() {
+            let tabs = self.open_file_paths();
+            if tabs != self.settings.last_tabs {
+                self.settings.last_tabs = tabs;
+                self.settings.save();
+            }
+        }
         // Let a write in progress finish (the thread takes Disconnect after its current
         // command) rather than cutting it off when the program exits.
         if let Some(link) = &mut self.link {
