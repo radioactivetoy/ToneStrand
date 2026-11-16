@@ -1,0 +1,77 @@
+name: Release
+
+# Push a tag like v0.3.0 to build the Windows installer and zip and publish a GitHub release.
+# "Run workflow" (workflow_dispatch) does the same build without publishing, to try it out:
+# the files are attached to the run.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Version
+        shell: bash
+        run: |
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF_NAME#v}" != "$VERSION" ]]; then
+            echo "The tag $GITHUB_REF_NAME does not match Cargo.toml's version $VERSION" >&2
+            exit 1
+          fi
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Zip
+        shell: pwsh
+        run: |
+          $dir = "ToneStrand-$env:VERSION-windows"
+          New-Item -ItemType Directory $dir | Out-Null
+          Copy-Item target\release\tonestrand.exe, README.md, LICENSE $dir
+          Compress-Archive $dir "$dir.zip"
+
+      - name: Installer
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DAppVersion=$env:VERSION" installer\tonestrand.iss
+          if (-not (Test-Path "installer\Output\ToneStrand-Setup-$env:VERSION.exe")) { throw "the installer was not built" }
+
+      - name: Release notes
+        shell: bash
+        run: |
+          awk -v v="$VERSION" '$0 ~ "^## " v {f=1; next} /^## /{f=0} f' CHANGELOG.md > notes.md
+          {
+            echo
+            echo "### Install"
+            echo "- **ToneStrand-Setup-$VERSION.exe**: installer (current user, no administrator rights)."
+            echo "- **ToneStrand-$VERSION-windows.zip**: portable, just unzip and run."
+            echo "- Needs Line 6's HX Edit installed on the same computer."
+            echo "- Windows SmartScreen may warn because the program is not code-signed: choose More info, then Run anyway."
+          } >> notes.md
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ToneStrand-${{ env.VERSION }}-windows
+          path: |
+            ToneStrand-${{ env.VERSION }}-windows.zip
+            installer/Output/ToneStrand-Setup-${{ env.VERSION }}.exe
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "ToneStrand $VERSION" --notes-file notes.md \
+            "ToneStrand-$VERSION-windows.zip" "installer/Output/ToneStrand-Setup-$VERSION.exe"

@@ -59,7 +59,20 @@ The effect pictures and names come from Line 6; see "Third-party material" below
 - A Helix-family pedal on USB, or a paired Helrig Box with the pedal plugged into it.
 - To build: Rust (stable). See [docs/BUILDING.md](docs/BUILDING.md).
 
-## Quick start
+## Download
+
+Get the latest Windows build from the [Releases](https://github.com/radioactivetoy/ToneStrand/releases)
+page, in either form:
+
+- **`ToneStrand-Setup-<version>.exe`**: the installer. It installs for your user only (no
+  administrator rights), adds a Start menu entry and an uninstaller.
+- **`ToneStrand-<version>-windows.zip`**: portable. Unzip anywhere and run `tonestrand.exe`.
+
+You also need [HX Edit](https://line6.com/software/) installed (see above). The program isn't
+code-signed, so Windows SmartScreen may warn the first time: choose **More info**, then
+**Run anyway**. Only Windows has been tried; macOS and Linux users can build from source.
+
+## Quick start (build from source)
 
 ```sh
 cargo run --release
