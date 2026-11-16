@@ -290,8 +290,11 @@ fn draw_loop_marker(ui: &egui::Ui, rect: Rect, title: &str, on: bool, selected: 
             arrow(Pos2::new(l, top + 14.0), true);
             arrow(Pos2::new(r, cy - 10.0), false);
             tag(Pos2::new(rect.center().x, top));
-            // The dry line under the loop is cut: everything goes out and back.
-            p.line_segment([Pos2::new(l + 2.0, cy), Pos2::new(r - 2.0, cy)], Stroke::new(4.0_f32, bg()));
+            // The dry line under the loop is cut: everything goes out and back. A loop that is
+            // off passes the signal straight through, so the line stays.
+            if on {
+                p.line_segment([Pos2::new(l + 2.0, cy), Pos2::new(r - 2.0, cy)], Stroke::new(4.0_f32, bg()));
+            }
         }
         1 => {
             let x = rect.center().x;

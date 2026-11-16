@@ -61,8 +61,6 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
             // On units whose two lanes share the slots, a full path has no room for a lower lane.
             let dev_fam = snapshots::family_of_device(crate::nam::unit());
             let path_full = in_path.iter().filter(|s| s.kind == Kind::Block).count() as i64 >= dev_fam.max_blocks;
-            let last_used_lower = lower.iter().rposition(|s| s.kind != Kind::Empty).map(|i| split_col + i + 1).unwrap_or(split_col + 1);
-            let _ = last_used_lower;
             // The lower lane is drawn packed: its effects in order from the split, then one free place.
             // (The pedal keeps them in numbered slots with gaps; only their order matters.)
             let lower_view: Vec<&SlotView> = lower
