@@ -532,6 +532,9 @@ impl App {
                         self.send(Cmd::Backup { setlist: self.setlist, count: self.presets.len(), folder, names });
                     }
                 }
+                if ui.button("Restore...").on_hover_text("Write a backed-up preset back into a slot").clicked() {
+                    self.open_restore();
+                }
             });
             ui.add_space(4.0);
             let current_idx = self.current.as_ref().filter(|c| c.0 == self.setlist).map(|c| c.1);

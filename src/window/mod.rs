@@ -20,6 +20,7 @@ use crate::proto::slot_label;
 use crate::theme::{self, *};
 use crate::wire::{self, UsbPedal};
 
+mod backups;
 mod bars;
 mod connection;
 mod irs;
@@ -179,6 +180,8 @@ pub struct App {
     irs_local: bool,
     /// The IR list was asked for from the library view.
     tones_list_asked: bool,
+    /// The "Restore from a backup" window, when open.
+    restore: Option<backups::RestoreState>,
 }
 
 /// The hidden Tests page (Ctrl+Shift+T).
@@ -263,6 +266,7 @@ impl App {
             tones: crate::tonelib::ToneLib::default(),
             irs_local: false,
             tones_list_asked: false,
+            restore: None,
         };
         app.catalog = crate::catalog::find_dir(app.settings.hx_edit.as_deref())
             .and_then(|d| Catalog::load(&d).ok())
@@ -1225,6 +1229,7 @@ impl App {
             }
         }
         self.ir_plan_window(ctx);
+        self.restore_window(ctx);
         if let Some((text, cmd)) = self.confirm.take() {
             let mut result = None;
             egui::Window::new("Please confirm")
