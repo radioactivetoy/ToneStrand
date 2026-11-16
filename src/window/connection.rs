@@ -573,9 +573,13 @@ impl App {
             let row_h = 24.0;
             let presets = self.presets.clone();
             let sl = self.setlist;
+            // Leave room under the list for the buttons of the picked preset (their height as
+            // last drawn: one row, or two when the panel is narrow).
+            let actions_id = egui::Id::new("preset-actions-height");
+            let reserve = if self.chosen.is_some() { ui.data(|d| d.get_temp::<f32>(actions_id)).unwrap_or(40.0) + 8.0 } else { 0.0 };
             egui::ScrollArea::vertical()
                 .id_salt("presets")
-                .max_height((ui.available_height() - 10.0).max(240.0))
+                .max_height((ui.available_height() - 10.0 - reserve).max(160.0))
                 .auto_shrink([false, true])
                 .show(ui, |ui| {
                     for (i, name) in presets.iter().enumerate() {
@@ -648,7 +652,7 @@ impl App {
                 });
             if let Some(i) = self.chosen {
                 ui.add_space(4.0);
-                ui.horizontal_wrapped(|ui| {
+                let row = ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(slot_label(i)).monospace().color(accent()));
                     if theme::primary_button(ui, "Load").clicked() {
                         self.send(Cmd::Select(sl, i as i64));
@@ -663,6 +667,7 @@ impl App {
                         self.send(Cmd::FetchSlot { setlist: sl, index: i as i64, purpose: Purpose::SaveToFile });
                     }
                 });
+                ui.data_mut(|d| d.insert_temp(actions_id, row.response.rect.height()));
             }
         });
     }
