@@ -341,9 +341,11 @@ impl App {
                 ui.horizontal(|ui| {
                     if ui.button("Disconnect").clicked() {
                         self.disconnect();
+                        ui.close_menu();
                     }
                     if self.connected.is_some() && ui.button("Refresh").on_hover_text("Read the preset list again").clicked() {
                         self.send(Cmd::Refresh);
+                        ui.close_menu();
                     }
                 });
                 return;
@@ -432,6 +434,7 @@ impl App {
                     };
                     let btn = egui::Button::new(RichText::new("Connect").strong().color(Color32::from_rgb(8, 26, 24))).fill(accent());
                     if ui.add_enabled(can, btn).on_disabled_hover_text("Pick a pedal, or a paired box, first").clicked() {
+                        ui.close_menu();
                         self.connect(ctx);
                     }
                 }
