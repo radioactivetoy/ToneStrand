@@ -6,11 +6,18 @@ Helix Floor / LT / Rack), connected over **USB** or wirelessly through a **Helri
 Written in Rust with [egui](https://github.com/emilk/egui) / eframe. One self-contained
 program; no account, no cloud, nothing leaves your computer.
 
-![The ToneStrand editor with the sample preset: signal chain on top, the selected amp's knobs below](docs/images/editor.png)
+![The ToneStrand editor connected to an HX Stomp: the pedal's presets on the left, the loaded preset's signal chain on top, the selected amp's knobs below](docs/images/editor.png)
 
-*The editor with the built-in sample preset: the signal chain on top (the lower lane is a
-parallel path), the selected effect's knobs below, snapshots and the DSP meter in the bar.
-The effect pictures and names come from Line 6; see "Third-party material" below.*
+*Editing the preset loaded on an HX Stomp, connected through a Helrig Box: the pedal's preset
+list on the left, the signal chain on top, the selected effect's knobs below, snapshots and
+the DSP meter above the chain. Every change is heard at once.*
+
+![The IRs page listing the 47 User IRs on the pedal, with buttons to send, download, rename and remove them](docs/images/pedal-irs.png)
+
+*The pedal's User IRs: which of the 128 slots are in use, with download, rename, remove and
+"Send IRs or NAM captures" (the slot is backed up first).*
+
+The effect pictures and names come from Line 6; see "Third-party material" below.
 
 ## What it does
 
