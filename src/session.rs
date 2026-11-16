@@ -834,6 +834,16 @@ impl Session {
         Ok(())
     }
 
+    /// Replace the loaded preset in the pedal's edit buffer with `doc` (op 21). Nothing goes to a slot; the
+    /// person saves it on the pedal, or reloads the preset to drop the change.
+    pub fn write_edit_buffer(&mut self, doc: Vec<u8>) -> Result<()> {
+        let parsed = crate::devpreset::DevicePreset::parse(&doc)
+            .map_err(|e| SessionError::Protocol(format!("refusing to write a non-pedal preset document to the unit ({e})")))?;
+        let doc = parsed.encode_checked().map_err(SessionError::Protocol)?;
+        self.request(op::WRITE_EDIT_BUFFER, Value::map(vec![(key::DOCUMENT, Value::Bin(doc, 0xda))]))?;
+        Ok(())
+    }
+
     /// Make snapshot `to` the same as snapshot `from` on the loaded preset: ops 90 and 91 work on the
     /// current snapshot, so the pedal is switched to `from`, copies, switches to `to` and pastes.
     /// The pedal pastes the name too; `keep_name` puts the destination's own name back.

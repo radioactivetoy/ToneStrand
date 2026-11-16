@@ -993,7 +993,13 @@ const DEVICE_COMMANDS: [i64; 2] = [14, 15];
 /// The Command Center of a pedal document: what each trigger does. FS 4 and FS 5 can be set to HX
 /// Preset or HX Snapshot on a preset that isn't the loaded one (it is written to its slot after);
 /// everything else is shown as it is.
-pub fn device_command_center(ui: &mut egui::Ui, preset: &mut crate::devpreset::DevicePreset, live: bool, dirty: &mut bool) {
+pub fn device_command_center(
+    ui: &mut egui::Ui,
+    preset: &mut crate::devpreset::DevicePreset,
+    live: bool,
+    cmds: &mut Vec<crate::device::Cmd>,
+    dirty: &mut bool,
+) {
     let fam = snapshots::family_of_device(crate::nam::unit());
     let device = crate::nam::unit();
     let count = preset.command_count();
@@ -1004,7 +1010,7 @@ pub fn device_command_center(ui: &mut egui::Ui, preset: &mut crate::devpreset::D
             ui.label(RichText::new("Command Center").size(17.0).strong());
             theme::help(
                 ui,
-                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed.\nFS 4 and FS 5 can be set to HX Preset or HX Snapshot here; other commands (MIDI, hotkeys, looper) are shown and kept as they are. Change the rest in HX Edit.",
+                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed.\nFS 4 and FS 5 can be set to HX Preset or HX Snapshot here (on the loaded preset the pedal changes at once, and Save on pedal keeps it); other commands (MIDI, hotkeys, looper) are shown and kept as they are. Change the rest in HX Edit.",
             );
         });
         if count == 0 {
@@ -1015,16 +1021,9 @@ pub fn device_command_center(ui: &mut egui::Ui, preset: &mut crate::devpreset::D
             ui.label(RichText::new("The Command Center of this unit isn't read here yet.").color(muted()));
             return;
         }
-        if live {
-            ui.label(
-                RichText::new("The loaded preset's Command Center is shown, not changed live. To change it, open the preset from its slot (or a file), edit it and write it back.")
-                    .small()
-                    .color(muted()),
-            );
-        }
         let snap_count = fam.snapshot_count;
         for (i, slot) in slots.iter().enumerate() {
-            let editable = !live && DEVICE_EDITABLE.contains(&slot.key.as_str());
+            let editable = DEVICE_EDITABLE.contains(&slot.key.as_str());
             let cmd = preset.command(i);
             if cmd.is_none() && !editable {
                 continue;
@@ -1060,6 +1059,9 @@ pub fn device_command_center(ui: &mut egui::Ui, preset: &mut crate::devpreset::D
                     };
                     if preset.set_command(i, new_id, start) {
                         *dirty = true;
+                        if live {
+                            cmds.push(crate::device::Cmd::SetCommand { slot: i, id: new_id, args: start.to_vec() });
+                        }
                     }
                     return;
                 }
@@ -1089,6 +1091,9 @@ pub fn device_command_center(ui: &mut egui::Ui, preset: &mut crate::devpreset::D
                 }
                 if changed && preset.set_command(i, id, &args) {
                     *dirty = true;
+                    if live {
+                        cmds.push(crate::device::Cmd::SetCommand { slot: i, id, args: args.clone() });
+                    }
                 }
             });
         }

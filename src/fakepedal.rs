@@ -441,3 +441,18 @@ fn a_snapshot_copy_uses_the_pedals_copy_and_paste_on_the_current_snapshot() {
         vec![(op::SELECT_SNAPSHOT, 0), (op::COPY_SNAPSHOT, 0), (op::SELECT_SNAPSHOT, 2), (op::PASTE_SNAPSHOT, 2), (op::RENAME_SNAPSHOT, 2)]
     );
 }
+
+#[test]
+fn an_edit_buffer_write_sends_the_document_with_op_21_and_nothing_else_is_saved() {
+    let (mut s, shared) = open(friendly);
+    let doc = big_document();
+    s.write_edit_buffer(doc.clone()).unwrap();
+    let reqs = shared.lock().unwrap().requests.clone();
+    let sent: Vec<&(i64, Value)> = reqs.iter().filter(|(o, _)| *o == op::WRITE_EDIT_BUFFER).collect();
+    assert_eq!(sent.len(), 1);
+    assert!(matches!(sent[0].1.get(key::DOCUMENT), Some(Value::Bin(b, _)) if *b == doc));
+    assert!(!reqs.iter().any(|(o, _)| [op::WRITE_SLOT_NAMED, op::SAVE_PRESET].contains(o)), "no slot is written, nothing saved");
+    // Something that isn't a pedal document is refused before it is sent.
+    assert!(s.write_edit_buffer(b"nonsense".to_vec()).is_err());
+    assert_eq!(shared.lock().unwrap().requests.iter().filter(|(o, _)| *o == op::WRITE_EDIT_BUFFER).count(), 1);
+}

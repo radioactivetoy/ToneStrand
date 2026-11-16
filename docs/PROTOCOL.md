@@ -148,12 +148,18 @@ Keys used in arguments: `107` setlist, `108` preset index, `109` name, `110` doc
 | 43 | move block | from / to wire numbers |
 | 46 | move split | `{98: 20*path + attach}` |
 | 47 | move merge | same |
+| 21 | write the edit buffer | `{110: document}` (reply status 1; nothing is saved to a slot) |
 | 71 | save | `{107, 108, 109}` |
 | 78 | select block | `{98}` |
 | 88 | select snapshot | `{92}` |
 | 89 | rename snapshot | `{92, 109}` |
 | 90 | copy snapshot | `{92}` (ignored: copies the *current* snapshot) |
 | 91 | paste snapshot | `{92}` (ignored: pastes into the *current* snapshot) |
+
+Op 21 (tried on an HX Stomp) replaces the loaded preset in the pedal's edit buffer with a whole document, so
+anything that has no operation of its own (Command Center, the guitar pad and impedance) can be changed live:
+read the current document, change it, write it back. The stored slot stays as it was until "Save on pedal";
+reloading the preset drops the change. Found in TonePush's notes (MIT) and checked on the pedal.
 
 Ops 90 and 91 (tried on an HX Stomp): copy takes the current snapshot, paste writes what was copied
 into the current snapshot, so select the source, copy, select the destination, paste. The paste

@@ -160,6 +160,9 @@ pub mod op {
     pub const WRITE_SLOT_NAMED: i64 = 8;
     pub const CLEAR_SLOT: i64 = 16;
     pub const SELECT_PRESET: i64 = 20;
+    /// Replace the loaded preset (the pedal's edit buffer) with a whole document: `{110: document}`. The reply
+    /// status is 1. Nothing is saved to a slot; reloading the preset brings back what is in flash.
+    pub const WRITE_EDIT_BUFFER: i64 = 21;
     pub const READ_PRESET: i64 = 22;
     pub const PRESET_INFO: i64 = 23;
     pub const CLEAR_BLOCK: i64 = 28;
