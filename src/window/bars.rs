@@ -61,10 +61,19 @@ impl App {
         let recent = self.settings.recent.clone();
         let mut open = None;
         let mut clear = false;
+        let mut compare = false;
         let mut dialog = false;
         ui.menu_button("Open", |ui| {
             if ui.button("Open file...  (Ctrl+O)").on_hover_text("Open a preset file").clicked() {
                 dialog = true;
+                ui.close_menu();
+            }
+            if ui
+                .button("Compare two presets...")
+                .on_hover_text("See what differs between two presets: effects, places, on/off and knob values")
+                .clicked()
+            {
+                compare = true;
                 ui.close_menu();
             }
             if !recent.is_empty() {
@@ -89,6 +98,9 @@ impl App {
         .on_hover_text("Open a preset file, or one you opened lately (Ctrl+O)");
         if dialog {
             self.open_file_dialog();
+        }
+        if compare {
+            self.open_compare();
         }
         if let Some(p) = open {
             let path = PathBuf::from(&p);

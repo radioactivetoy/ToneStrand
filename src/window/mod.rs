@@ -22,6 +22,7 @@ use std::sync::Arc;
 
 mod backups;
 mod bars;
+mod compare_window;
 mod connection;
 mod irs;
 mod library_page;
@@ -213,6 +214,7 @@ pub struct App {
     /// The "Restore from a backup" window, when open.
     restore: Option<backups::RestoreState>,
     restore_all: Option<restore_all::RestoreAllState>,
+    compare: Option<compare_window::CompareState>,
     /// The USB pedal the current (or last) link was made to; None for a Helrig Box.
     last_usb: Option<u16>,
     /// A USB pedal that dropped out: its product id, and whether it has left the USB list
@@ -313,6 +315,7 @@ impl App {
             tones_list_asked: false,
             restore: None,
             restore_all: None,
+            compare: None,
             last_usb: None,
             reconnect: None,
             user_disconnected: false,
@@ -1710,6 +1713,7 @@ impl App {
         self.ir_plan_window(ctx);
         self.restore_window(ctx);
         self.restore_all_window(ctx);
+        self.compare_window(ctx);
         if let Some((text, cmd)) = self.confirm.take() {
             let mut result = None;
             egui::Window::new("Please confirm").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(

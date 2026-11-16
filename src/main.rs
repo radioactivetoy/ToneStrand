@@ -5,6 +5,7 @@ mod boxes;
 mod catalog;
 mod chain;
 mod cli;
+mod compare;
 mod controllers;
 mod device;
 mod devpreset;
