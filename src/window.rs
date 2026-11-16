@@ -356,11 +356,12 @@ impl App {
         self.tones.scan(opts);
     }
 
+    /// Where a slot or IR is kept before the pedal writes over it (sent with each write).
+    fn backup_dir(&self) -> PathBuf {
+        self.library_dir.join("Pedal backups")
+    }
+
     fn scan_library(&mut self) {
-        // Slots are backed up here before the pedal is written.
-        if let Ok(mut d) = crate::device::BACKUP_DIR.lock() {
-            *d = Some(self.library_dir.join("Pedal backups"));
-        }
         let cat = self.catalog.clone();
         self.lib.skip = vec![self.tone_dir(), self.library_dir.join("Self-test backups")];
         self.lib.scan(cat.as_deref());
@@ -1561,9 +1562,8 @@ impl App {
                     .inner_margin(egui::Margin::symmetric(10, 5))
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            let dot = if d.is_live() { "" } else { "" };
                             let star = if d.dirty { " •" } else { "" };
-                            let text = RichText::new(format!("{dot}{}{star}", d.title)).color(if active { TEXT } else { MUTED });
+                            let text = RichText::new(format!("{}{star}", d.title)).color(if active { TEXT } else { MUTED });
                             if ui.add(egui::Label::new(text).sense(egui::Sense::click())).clicked() {
                                 self.active = i;
                             }
@@ -1862,7 +1862,7 @@ impl App {
                     self.ir_kinds.insert((r.slot, r.name.clone()), r.nam);
                     items.push((r.slot, r.name, r.audio));
                 }
-                self.send(Cmd::ImportIrs(items));
+                self.send(Cmd::ImportIrs { items, backup: self.backup_dir() });
             }
             Some(false) => {}
             None => self.ir_plan = Some(plan),
@@ -1937,7 +1937,7 @@ impl App {
                         }
                         if ui.add_enabled(!picked.is_empty(), egui::Button::new(RichText::new("Remove").color(BAD))).clicked() {
                             let names: Vec<String> = picked.iter().map(|(s, n)| format!("{} \"{n}\"", s + 1)).collect();
-                            self.confirm = Some((format!("Remove {} IR{} from the pedal? ({})\nPresets that use them will have an empty IR.", picked.len(), if picked.len() == 1 { "" } else { "s" }, names.join(", ")), Cmd::DeleteIrs(picked.iter().map(|p| p.0).collect())));
+                            self.confirm = Some((format!("Remove {} IR{} from the pedal? ({})\nPresets that use them will have an empty IR.", picked.len(), if picked.len() == 1 { "" } else { "s" }, names.join(", ")), Cmd::DeleteIrs { slots: picked.iter().map(|p| p.0).collect(), backup: self.backup_dir() }));
                         }
                     });
                     if !sel.is_empty() && ui.small_button("Clear selection").clicked() {
@@ -1949,6 +1949,7 @@ impl App {
                     ui.label(RichText::new(if busy { "Reading..." } else { "Press \"Read list\" to see the pedal's IRs." }).color(MUTED));
                 } else {
                     let multi = ui.input(|i| i.modifiers.ctrl || i.modifiers.command || i.modifiers.shift);
+                    let backup = self.backup_dir();
                     // IRs and NAM captures share the pedal's slots but are different things: show them apart.
                     let kind_of = |slot: i64| -> Option<Option<bool>> { used.get(&slot).map(|n| self.ir_kinds.get(&(slot, n.clone())).copied()) };
                     let n_nam = used.keys().filter(|s| kind_of(**s) == Some(Some(true))).count();
@@ -2052,7 +2053,7 @@ impl App {
                                         if ui.button(RichText::new("Remove").color(BAD)).clicked() {
                                             self.confirm = Some((
                                                 format!("Remove {} \"{n}\" from the pedal?\nPresets that use it will have an empty IR.", slot + 1),
-                                                Cmd::DeleteIrs(vec![slot]),
+                                                Cmd::DeleteIrs { slots: vec![slot], backup: backup.clone() },
                                             ));
                                             ui.close_menu();
                                         }
@@ -2345,7 +2346,7 @@ impl App {
                             }
                             if ui.button("Show in Explorer").clicked() {
                                 let _ = std::fs::create_dir_all(&self.library_dir);
-                                open_in_file_manager(&self.library_dir);
+                                crate::folders::open_in_explorer(&self.library_dir);
                             }
                             if ui
                                 .add_enabled(self.settings.library.is_some(), egui::Button::new("Use the default"))
@@ -2735,7 +2736,7 @@ impl App {
                     let now = self.presets.get(slot).cloned().unwrap_or_default();
                     self.confirm = Some((
                         format!("Write \"{name}\" into {} (now \"{now}\")?\n\nIt is converted from .hlx using the pedal's loaded preset as the template. The slot's current preset is backed up first.{warning}", slot_label(slot)),
-                        Cmd::WriteHlx { setlist: self.setlist, index: slot as i64, name, json, cat },
+                        Cmd::WriteHlx { setlist: self.setlist, index: slot as i64, name, json, cat, backup: self.backup_dir() },
                     ));
                 }
                 library::Action::SendToPedal(p) => {
@@ -2751,7 +2752,7 @@ impl App {
                             let now = self.presets.get(slot).cloned().unwrap_or_default();
                             self.confirm = Some((
                                 format!("Write \"{name}\" into {} (now \"{now}\")?", slot_label(slot)),
-                                Cmd::WriteSlot { setlist: self.setlist, index: slot as i64, name, doc },
+                                Cmd::WriteSlot { setlist: self.setlist, index: slot as i64, name, doc, backup: self.backup_dir() },
                             ));
                         }
                         Err(e) => self.note(LogLevel::Bad, format!("Cannot send {} to the pedal: {e}", p.display())),
@@ -3107,6 +3108,7 @@ impl App {
         let chosen = self.chosen;
         let chosen_name = chosen.and_then(|c| self.presets.get(c).cloned()).unwrap_or_default();
         let setlist = self.setlist;
+        let backup = self.backup_dir();
         let mut cmds: Vec<Cmd> = Vec::new();
         let mut save = None;
         let mut confirm = None;
@@ -3203,7 +3205,7 @@ impl App {
                     if ui.add_enabled(connected && doc.dirty, egui::Button::new("Write back to its slot")).clicked() {
                         *confirm = Some((
                             format!("Replace {} on the pedal with your edited version?", slot_label((*index).max(0) as usize)),
-                            Cmd::WriteSlot { setlist: *sl, index: *index, name: name.clone(), doc: preset.encode() },
+                            Cmd::WriteSlot { setlist: *sl, index: *index, name: name.clone(), doc: preset.encode(), backup: backup.clone() },
                         ));
                         clean = true;
                     }
@@ -3220,7 +3222,7 @@ impl App {
                     if let Some(c) = chosen {
                         *confirm = Some((
                             format!("Write \"{}\" into {} (now \"{}\")?", name, slot_label(c), chosen_name),
-                            Cmd::WriteSlot { setlist, index: c as i64, name, doc: preset.encode() },
+                            Cmd::WriteSlot { setlist, index: c as i64, name, doc: preset.encode(), backup: backup.clone() },
                         ));
                     }
                 }
@@ -3253,7 +3255,7 @@ impl App {
                                 "Write \"{name}\" into {} (now \"{chosen_name}\")?\n\nIt is converted from .hlx using the pedal's loaded preset as the template. The slot's current preset is backed up first.{warning}",
                                 slot_label(c)
                             ),
-                            Cmd::WriteHlx { setlist, index: c as i64, name, json: json.clone(), cat: catalog },
+                            Cmd::WriteHlx { setlist, index: c as i64, name, json: json.clone(), cat: catalog, backup: backup.clone() },
                         ));
                     }
                 }
@@ -3511,15 +3513,6 @@ fn dsp_warning(cat: &Catalog, json: &serde_json::Value) -> Option<String> {
             "⚠ Path {n} is estimated at about {used:.0}% of the DSP. The estimate can be off; if the pedal can't run it, it will refuse the preset or leave blocks out. You can still try."
         )
     })
-}
-
-fn open_in_file_manager(dir: &Path) {
-    #[cfg(target_os = "windows")]
-    let _ = std::process::Command::new("explorer").arg(dir).spawn();
-    #[cfg(target_os = "macos")]
-    let _ = std::process::Command::new("open").arg(dir).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let _ = std::process::Command::new("xdg-open").arg(dir).spawn();
 }
 
 impl eframe::App for App {

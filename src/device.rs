@@ -5,22 +5,9 @@ use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 
 use crate::msgpack::Value;
+use std::path::{Path, PathBuf};
+
 use crate::session::{Session, IR_NAME_MAX, PRESET_NAME_MAX, SNAPSHOT_NAME_MAX};
-
-/// Tell the person when a name reads differently on the pedal.
-fn note_name(send: &dyn Fn(Event), name: &str, max_len: usize) {
-    if let Some(n) = crate::session::name_note(name, max_len) {
-        send(Event::Info(n));
-    }
-}
-
-/// Read a slot just written and compare it with what was sent.
-fn reads_back_same(s: &mut Session, setlist: i64, index: i64, sent: &[u8]) -> Result<bool, String> {
-    let back = s
-        .fetch_slot(setlist, index)
-        .map_err(|e| format!("it was written, but couldn't be read back to check ({e}): check it on the pedal"))?;
-    Ok(back.as_deref().and_then(|b| crate::devpreset::DevicePreset::parse(b).ok()).map(|d| d.encode()).as_deref() == Some(sent))
-}
 use crate::wire::{BoxWire, UsbWire, Wire};
 
 pub enum Target {
@@ -34,7 +21,8 @@ pub enum Cmd {
     Select(i64, i64),
     ReadCurrent,
     FetchSlot { setlist: i64, index: i64, purpose: Purpose },
-    WriteSlot { setlist: i64, index: i64, name: String, doc: Vec<u8> },
+    /// `backup`: the folder the slot is kept in before it is written over.
+    WriteSlot { setlist: i64, index: i64, name: String, doc: Vec<u8>, backup: PathBuf },
     Rename { setlist: i64, index: i64, name: String },
     Clear { setlist: i64, index: i64 },
     SaveCurrent { setlist: i64, index: i64, name: String },
@@ -54,16 +42,17 @@ pub enum Cmd {
     /// Read the names of the pedal's User IRs.
     ListIrs,
     /// Write IRs into slots: (slot from 0, name, 8,192 bytes of audio).
-    ImportIrs(Vec<(i64, String, Vec<u8>)>),
+    /// `backup`: the folder replaced IRs are kept in first.
+    ImportIrs { items: Vec<(i64, String, Vec<u8>)>, backup: PathBuf },
     /// Save IRs from slots as .wav files in a folder: (slot, name).
     ExportIrs { slots: Vec<(i64, String)>, folder: std::path::PathBuf },
     RenameIr { slot: i64, name: String },
-    DeleteIrs(Vec<i64>),
+    DeleteIrs { slots: Vec<i64>, backup: PathBuf },
     /// Look at slots' audio to tell IRs from NAM captures: (slot, name).
     IrKinds(Vec<(i64, String)>),
     /// Convert a .hlx preset to the pedal's format (using the loaded preset as the
     /// template) and write it into a slot, then read it back to check.
-    WriteHlx { setlist: i64, index: i64, name: String, json: serde_json::Value, cat: std::sync::Arc<crate::catalog::Catalog> },
+    WriteHlx { setlist: i64, index: i64, name: String, json: serde_json::Value, cat: std::sync::Arc<crate::catalog::Catalog>, backup: PathBuf },
     /// Live controller and footswitch changes on the loaded preset.
     AssignController { block: i64, cab: bool, index: i64, controller: i64, cc: i64 },
     UnassignController { block: i64, cab: bool, index: i64 },
@@ -169,7 +158,6 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
             -2
         }
     };
-    let mut setlist = 0i64;
     // A small question every so often while nothing happens keeps the pedal's editing link
     // in use (left alone for long, live edits stopped landing) and finds out early when it
     // stopped answering, to pick the loaded preset up again.
@@ -229,14 +217,16 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
             }
             continue;
         };
+        if matches!(cmd, Cmd::Disconnect) {
+            return send(Event::Disconnected("Disconnected".into()));
+        }
         let result: Result<(), String> = (|| {
             match cmd {
-                Cmd::Disconnect => return Err("__bye".into()),
+                Cmd::Disconnect => {} // handled above
                 Cmd::Refresh => {
-                    setlist = refresh(s, send)?;
+                    refresh(s, send)?;
                 }
                 Cmd::Presets(sl) => {
-                    setlist = sl;
                     let p = s.presets(sl).map_err(|e| e.to_string())?;
                     send(Event::Presets(sl, p));
                 }
@@ -259,9 +249,9 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     send(Event::Document { setlist: sl, index, live: false, purpose, blob });
                     send(Event::Done("Preset read".into()));
                 }
-                Cmd::WriteSlot { setlist: sl, index, name, doc } => {
+                Cmd::WriteSlot { setlist: sl, index, name, doc, backup } => {
                     send(Event::Busy("Backing up the slot...".into()));
-                    if let Some(note) = backup_slot(s, sl, index)? {
+                    if let Some(note) = backup_slot(s, &backup, sl, index)? {
                         send(Event::Info(note));
                     }
                     send(Event::Busy("Writing preset to the pedal...".into()));
@@ -421,14 +411,14 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     read_live(s, send)?;
                     send(Event::Done("Footswitch removed".into()));
                 }
-                Cmd::WriteHlx { setlist: sl, index, name, json, cat } => {
+                Cmd::WriteHlx { setlist: sl, index, name, json, cat, backup } => {
                     send(Event::Busy("Converting the .hlx preset...".into()));
                     let template = s.read_current().map_err(|e| e.to_string())?;
                     let template = crate::devpreset::DevicePreset::parse(&template)?;
                     let (doc, notes) = crate::devpreset::DevicePreset::from_hlx(&template, &json, &cat).map_err(|e| format!("Can't convert it: {e}"))?;
                     let bytes = doc.encode_checked()?;
                     send(Event::Busy("Backing up the slot...".into()));
-                    if let Some(note) = backup_slot(s, sl, index)? {
+                    if let Some(note) = backup_slot(s, &backup, sl, index)? {
                         send(Event::Info(note));
                     }
                     send(Event::Busy("Writing preset to the pedal...".into()));
@@ -464,13 +454,13 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     send(Event::Irs(l));
                     send(Event::Done(format!("{n} IR slots in use")));
                 }
-                Cmd::ImportIrs(items) => {
+                Cmd::ImportIrs { items, backup } => {
                     let total = items.len();
                     let mut done = 0;
                     send(Event::Busy("Backing up the IR slots...".into()));
                     let in_use = s.list_irs().map_err(|e| format!("can't read the IR list to back it up ({e}); nothing was written"))?;
                     for (slot, _, _) in &items {
-                        if let Some(note) = backup_ir(s, *slot, &in_use)? {
+                        if let Some(note) = backup_ir(s, &backup, *slot, &in_use)? {
                             send(Event::Info(note));
                         }
                     }
@@ -518,11 +508,11 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     }
                     send(Event::IrKinds(out));
                 }
-                Cmd::DeleteIrs(slots) => {
+                Cmd::DeleteIrs { slots, backup } => {
                     send(Event::Busy("Backing up the IR slots...".into()));
                     let in_use = s.list_irs().map_err(|e| format!("can't read the IR list to back it up ({e}); nothing was removed"))?;
                     for slot in &slots {
-                        if let Some(note) = backup_ir(s, *slot, &in_use)? {
+                        if let Some(note) = backup_ir(s, &backup, *slot, &in_use)? {
                             send(Event::Info(note));
                         }
                     }
@@ -536,14 +526,10 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
             }
             Ok(())
         })();
-        let _ = setlist;
         for w in s.take_warnings() {
             send(Event::Info(w));
         }
         if let Err(e) = result {
-            if e == "__bye" {
-                return send(Event::Disconnected("Disconnected".into()));
-            }
             send(Event::Error(e));
             // Whatever failed, re-open the loaded preset so the next live edit has a fresh link.
             if let Ok(i) = read_live(s, send) {
@@ -554,19 +540,29 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
     }
 }
 
-/// Where a slot's old preset is kept before it's overwritten (set by the window).
-pub static BACKUP_DIR: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
+/// Tell the person when a name reads differently on the pedal.
+fn note_name(send: &dyn Fn(Event), name: &str, max_len: usize) {
+    if let Some(n) = crate::session::name_note(name, max_len) {
+        send(Event::Info(n));
+    }
+}
 
-/// The backup folder, or an error that stops the write: nothing is written to the pedal
-/// unless what it replaces can be kept first.
-fn backup_dir() -> Result<std::path::PathBuf, String> {
-    let dir = BACKUP_DIR
-        .lock()
-        .ok()
-        .and_then(|d| d.clone())
-        .ok_or("there is no folder to keep a backup in yet; nothing was written")?;
-    std::fs::create_dir_all(&dir).map_err(|e| format!("can't make the backup folder ({e}); nothing was written"))?;
-    Ok(dir)
+/// Read a slot just written and compare it with what was sent.
+fn reads_back_same(s: &mut Session, setlist: i64, index: i64, sent: &[u8]) -> Result<bool, String> {
+    let back = s
+        .fetch_slot(setlist, index)
+        .map_err(|e| format!("it was written, but couldn't be read back to check ({e}): check it on the pedal"))?;
+    Ok(back.as_deref().and_then(|b| crate::devpreset::DevicePreset::parse(b).ok()).map(|d| d.encode()).as_deref() == Some(sent))
+}
+
+/// Make the backup folder, or stop: nothing is written to the pedal unless what it
+/// replaces can be kept first.
+fn ready_backup_dir(dir: &Path) -> Result<PathBuf, String> {
+    if dir.as_os_str().is_empty() {
+        return Err("there is no folder to keep a backup in; nothing was written".into());
+    }
+    std::fs::create_dir_all(dir).map_err(|e| format!("can't make the backup folder ({e}); nothing was written"))?;
+    Ok(dir.to_owned())
 }
 
 fn stamp() -> u64 {
@@ -574,8 +570,8 @@ fn stamp() -> u64 {
 }
 
 /// Keep a copy of what a slot holds before writing over it. Returns a note for the person.
-fn backup_slot(s: &mut Session, setlist: i64, index: i64) -> Result<Option<String>, String> {
-    let dir = backup_dir()?;
+fn backup_slot(s: &mut Session, backup: &Path, setlist: i64, index: i64) -> Result<Option<String>, String> {
+    let dir = ready_backup_dir(backup)?;
     let Some(old) = s.fetch_slot(setlist, index).map_err(|e| e.to_string())? else { return Ok(None) };
     let name = s.presets(setlist).ok().and_then(|p| p.get(index.max(0) as usize).cloned()).unwrap_or_default();
     let file = crate::files::unique_path(
@@ -588,8 +584,8 @@ fn backup_slot(s: &mut Session, setlist: i64, index: i64) -> Result<Option<Strin
 
 /// Keep a copy of a User IR slot before it is replaced or removed (`IRs` in the backup
 /// folder). Empty slots need nothing. Returns a note for the person.
-fn backup_ir(s: &mut Session, slot: i64, in_use: &[(i64, String)]) -> Result<Option<String>, String> {
-    let dir = backup_dir()?.join("IRs");
+fn backup_ir(s: &mut Session, backup: &Path, slot: i64, in_use: &[(i64, String)]) -> Result<Option<String>, String> {
+    let dir = ready_backup_dir(backup)?.join("IRs");
     let Some((_, name)) = in_use.iter().find(|(n, _)| *n == slot) else { return Ok(None) };
     let audio = s.ir_audio(slot).map_err(|e| format!("can't read IR slot {} to back it up ({e}); nothing was changed", slot + 1))?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("can't make the IR backup folder ({e}); nothing was changed"))?;

@@ -41,7 +41,8 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 6. **Two looks.** Studio (default) and Classic must both keep working; check
    `chain::studio()` where layout differs. Use `theme::bg()/panel()/card_bg()/card_hi()/line()`
    and `theme::accent()`, never fixed greys or teal.
-7. **Settings stay compatible:** new `Settings` fields need `#[serde(default)]`.
+7. **Settings stay compatible:** `Settings` has a struct-level `#[serde(default)]`; give a new
+   field its value in `impl Default for Settings` (older files then load with it).
 8. **Units differ.** Use `snapshots::family_of_device(unit)` for paths, lanes, slot limits
    (HX Stomp shares 8 slots between both lanes), snapshot counts, footswitches, expression
    pedals and FX loops (4 on Helix Floor/Rack and HX Effects, 2 on Helix LT and HX Stomp/XL).

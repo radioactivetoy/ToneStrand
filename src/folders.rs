@@ -59,18 +59,11 @@ pub fn open_in_explorer(dir: &Path) {
 /// Move a file into a folder of the library, keeping its name (adding " (2)" if taken).
 pub fn move_into(file: &Path, dir: &Path) -> Result<PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    let name = file.file_name().ok_or("no file name")?;
-    let mut to = dir.join(name);
-    if to == file {
-        return Ok(to);
+    let name = file.file_name().ok_or("no file name")?.to_string_lossy().into_owned();
+    if dir.join(&name) == file {
+        return Ok(file.to_owned());
     }
-    let stem = file.file_stem().and_then(|s| s.to_str()).unwrap_or("file").to_owned();
-    let ext = file.extension().and_then(|s| s.to_str()).map(|e| format!(".{e}")).unwrap_or_default();
-    let mut n = 2;
-    while to.exists() {
-        to = dir.join(format!("{stem} ({n}){ext}"));
-        n += 1;
-    }
+    let to = crate::files::unique_path(dir, &name);
     std::fs::rename(file, &to).map_err(|e| e.to_string())?;
     Ok(to)
 }

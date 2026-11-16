@@ -27,72 +27,46 @@ pub struct RelayStatus {
     pub id: String,
 }
 
+/// Fields missing from an older file take their value from `Default` (the struct-level
+/// `#[serde(default)]`), so a new field only needs a value there.
 #[derive(Serialize, Deserialize)]
+#[serde(default)]
 pub struct Settings {
     /// Token per box, keyed by the box id (or its address when it has none).
-    #[serde(default)]
     pub tokens: BTreeMap<String, String>,
-    #[serde(default)]
     pub saved: Vec<BoxInfo>,
-    #[serde(default)]
     pub library: Option<String>,
     /// Where HX Edit's resource files are, when not in the usual place.
-    #[serde(default)]
     pub hx_edit: Option<String>,
     /// The unit picked when no pedal is connected (its device number).
-    #[serde(default)]
     pub unit: Option<i64>,
     /// Ask before writing to or clearing a slot on the pedal.
-    #[serde(default = "yes")]
     pub confirm_pedal: bool,
     /// Ask before deleting a preset file from the library.
-    #[serde(default = "yes")]
     pub confirm_delete: bool,
     /// Open the sample preset when the app starts.
-    #[serde(default = "yes")]
     pub show_sample: bool,
     /// Start on the library page instead of the editor.
-    #[serde(default)]
     pub start_in_library: bool,
     /// Look for Helrig Boxes on the network automatically.
-    #[serde(default = "yes")]
     pub discover_boxes: bool,
     /// Size of everything in the window (1.0 = normal).
-    #[serde(default = "one")]
     pub ui_scale: f32,
     /// Show the real gear each effect is based on instead of the pedal's names.
-    #[serde(default)]
     pub real_names: bool,
     /// The pedal runs the community NAM A2 Lite firmware (HX Stomp, XL, HX Effects).
-    #[serde(default)]
     pub nam_lite: bool,
     /// Converter options: keep the capture's input level and loudness.
-    #[serde(default = "yes")]
     pub nam_use_level: bool,
-    #[serde(default = "yes")]
     pub nam_use_loudness: bool,
     /// Where converted captures were saved last.
-    #[serde(default)]
     pub nam_out_dir: Option<String>,
     /// The IR and NAM library folder (default: "IRs and NAM" in the preset library).
-    #[serde(default)]
     pub tone_library: Option<String>,
     /// The new "Studio" look (bigger, colourful chain); off goes back to the classic look.
-    #[serde(default = "yes")]
     pub studio: bool,
     /// The accent colour (0xRRGGBB).
-    #[serde(default = "teal")]
     pub accent: u32,
-}
-
-fn yes() -> bool {
-    true
-}
-fn teal() -> u32 {
-    0x2ec4b6
-}
-fn one() -> f32 {
-    1.0
 }
 
 impl Default for Settings {
