@@ -147,7 +147,8 @@ impl App {
                         self.devices_card(ui, ctx);
                     });
                     r.response.on_hover_text("Connect to the pedal (USB or Helrig Box)");
-                    if let Some((_, idx, name)) = &self.current {
+                    // The pill only when there is room left for it and the controls on the right.
+                    if let (Some((_, idx, name)), true) = (&self.current, ui.available_width() > 620.0) {
                         ui.add_space(8.0);
                         theme::pill(ui, &format!("playing {}  {}", slot_label((*idx).max(0) as usize), name), accent());
                     }
@@ -193,7 +194,14 @@ impl App {
             self.doc_bar(ui, i, 1);
             ui.add(egui::Separator::default().vertical().spacing(10.0));
             self.doc_bar(ui, i, 2);
-            ui.add(egui::Separator::default().vertical().spacing(10.0));
+            // The snapshot chips are one block the row cannot split: start a new row when
+            // they would run past the edge (a live preset has the extra "Save on pedal").
+            let room = ui.ctx().screen_rect().right() - 14.0 - ui.cursor().min.x;
+            if room < 300.0 {
+                ui.end_row();
+            } else {
+                ui.add(egui::Separator::default().vertical().spacing(10.0));
+            }
             self.studio_strip(ui, i);
             ui.add(egui::Separator::default().vertical().spacing(10.0));
             self.studio_meters(ui, i);
