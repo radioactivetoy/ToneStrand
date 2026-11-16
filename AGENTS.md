@@ -8,7 +8,7 @@ Read this first, then `docs/ARCHITECTURE.md`. The protocol and formats are in
 ```sh
 cargo build                     # debug (optimised enough to use)
 cargo build --release
-cargo test                      # 45 tests; must stay green
+cargo test                      # 49 tests; must stay green
 cargo clippy --all-targets -- -D warnings   # must stay clean (CI runs both)
 cargo run -- --help             # the command-line tools
 cargo run -- --screenshot shot.png   # render the window to a PNG and exit
@@ -71,6 +71,7 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 | Top bars, status bar, left panel | `window/bars.rs` |
 | Connecting, pairing, device events | `window/connection.rs` |
 | Library / IRs / Settings / Tests pages | `window/library_page.rs`, `window/irs.rs`, `window/settings.rs`, `window/tests_page.rs` |
+| Restore from a slot backup (`Pedal backups`), window-wide shortcuts, drag and drop | `window/backups.rs`, `window/mod.rs` (`shortcuts`, `drop_files`) |
 | Command-line tools | `cli.rs` |
 | A pedal operation | `session.rs` (request), `device.rs` (Cmd/Event), `proto.rs` (opcode) |
 | Pedal document fields | `devpreset.rs` (+ `docs/FILE_FORMATS.md`) |

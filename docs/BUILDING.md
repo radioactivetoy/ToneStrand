@@ -62,7 +62,8 @@ cargo test
 cargo clippy --all-targets -- -D warnings
 ```
 
-45 tests: the session against a fake pedal (`fakepedal.rs`: handshake order, refusals,
+49 tests: the session against a fake pedal (`fakepedal.rs`: handshake order, refusals,
+Ignored on purpose: `cargo test -- --ignored recycles_to_the_bin` moves a scratch file into the real Windows Recycle Bin.
 timeouts, chunked writes, half-finished transfers, pings), the MessagePack codec, the pedal document round trip, `.hlx` editing,
 snapshots and controllers, unit conversion, IR/NAM conversion (byte-for-byte against the NAM
 A2 Lite project's own converter, using `tests/data/`), icons, catalog value formatting.
