@@ -51,7 +51,7 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
    field its value in `impl Default for Settings` (older files then load with it).
 8. **Units differ.** Use `snapshots::family_of_device(unit)` for paths, lanes, slot limits
    (HX Stomp shares 8 slots between both lanes), snapshot counts, footswitches, expression
-   pedals and FX loops (4 on Helix Floor/Rack and HX Effects, 2 on Helix LT and HX Stomp/XL).
+   pedals and FX loops (4 on Helix Floor/Rack, 2 on Helix LT, HX Effects and HX Stomp/XL).
 
 ## How to verify a change
 

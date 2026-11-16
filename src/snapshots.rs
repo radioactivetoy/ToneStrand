@@ -35,8 +35,9 @@ pub struct Family {
     pub shared_slots: bool,
     /// Command Center footswitch slots (`FS 1`..`FS N`).
     pub cc_switches: i64,
-    /// Mono FX loops (send/return jack pairs): 4 on Helix Floor/Rack and HX Effects, 2 on the
-    /// Helix LT and the HX Stomp / XL (whose TRS send and two returns make 2 mono or 1 stereo).
+    /// Mono FX loops (send/return jack pairs): 4 on Helix Floor/Rack, 2 on the HX Effects (two
+    /// jack rows on its rear panel), the Helix LT and the HX Stomp / XL (whose TRS send and two
+    /// returns make 2 mono or 1 stereo).
     pub fx_loops: i64,
 }
 
@@ -132,7 +133,7 @@ pub fn family_of_device(device: i64) -> Family {
             positions: 9,
             max_blocks: 9,
             cc_switches: 6,
-            fx_loops: 4,
+            fx_loops: 2,
             ..stomp
         },
         2162689 => Family { name: "Helix Floor", ..helix },
@@ -721,6 +722,7 @@ mod unit_tests {
         assert_eq!(unit_for_product("HX Stomp via Rack room"), Some(2162694));
         assert_eq!(unit_for_product("Helix LT (USB)"), Some(2162692));
         assert_eq!(unit_for_product("Helix Stadium"), None);
+        assert_eq!((family_of_device(2162693).fx_loops, family_of_device(2162689).fx_loops), (2, 4), "HX Effects has two loop rows");
 
         // A Helix preset with a block on the lower lane gets a split and a merge.
         let mut doc = helix;
