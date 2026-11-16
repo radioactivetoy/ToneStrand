@@ -412,7 +412,8 @@ fn looper_press_options() -> Vec<(i64, String)> {
 }
 
 fn specs_for(kind: SlotKind, device: i64, snap_count: usize) -> Vec<CmdSpec> {
-    let is_stomp = device == 2162694;
+    // The HX Stomp and Stomp XL have no Ext Amp jack (the HX Effects and the Helix units do).
+    let is_stomp = snapshots::family_of_device(device).name.starts_with("HX Stomp");
     let ch = || FieldSpec::Choice { key: "@channel", label: "Channel", options: channel_options() };
     let wait = || FieldSpec::Range { key: "@waittime", label: "Wait (ms)", min: 0, max: 5000 };
     match kind {

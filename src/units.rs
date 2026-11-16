@@ -107,7 +107,7 @@ pub fn convert(doc: &mut Value, target: i64, cat: Option<&Catalog>) -> Result<Ve
         } else if slot_key == "commandExpSwitch" && !to.name.starts_with("Helix") {
             errors.push(format!("Command Center uses EXP Toe; the {to_name} does not have that switch."));
         }
-        if target == 2162694 && (cmd_id == 7 || cmd_id == 8) {
+        if to.name.starts_with("HX Stomp") && (cmd_id == 7 || cmd_id == 8) {
             errors.push(format!("Command Center uses Ext Amp, which is not available on the {to_name}."));
         }
     }
@@ -150,6 +150,22 @@ pub fn convert(doc: &mut Value, target: i64, cat: Option<&Catalog>) -> Result<Ve
     }
     if let Some(d) = work.pointer_mut("/data").and_then(Value::as_object_mut) {
         d.insert("device".into(), json!(target));
+    }
+    // A unit with fewer places on the main lane (HX Effects 9, the others 8): blocks past its
+    // last place move to free ones, in order.
+    for dsp in hlx::dsps(&work) {
+        let mut over: Vec<_> = hlx::blocks(&work)
+            .into_iter()
+            .filter(|b| b.dsp == dsp && b.path == 0 && b.key.starts_with("block") && b.position >= to.positions)
+            .collect();
+        over.sort_by_key(|b| b.position);
+        for b in over {
+            let taken: Vec<i64> = hlx::blocks(&work).iter().filter(|x| x.dsp == dsp && x.path == 0).map(|x| x.position).collect();
+            if let Some(free) = (0..to.positions).find(|p| !taken.contains(p)) {
+                hlx::move_to(&mut work, &b, 0, free);
+                changes.push(format!("A block past the {to_name}'s last place moved to place {}.", free + 1));
+            }
+        }
     }
     changes.extend(convert_io(&mut work, from, to, to_name));
     if hlx::ensure_paths(&mut work, to.paths) {
@@ -445,5 +461,32 @@ mod io_tests {
         assert!(tone["snapshot0"]["blocks"].get("dsp1").is_none());
         assert!(notes.iter().any(|n| n.contains("\"Mic\" isn't on the")));
         assert!(notes.iter().any(|n| n.contains("\"XLR\" isn't on the")));
+    }
+}
+
+#[cfg(test)]
+mod range_tests {
+    use super::*;
+
+    #[test]
+    fn blocks_past_the_new_units_last_place_move_in() {
+        let mut doc = hlx::blank_for("t", 2162693); // HX Effects: 9 places
+        let nm = hlx::NewModel { model: "HD2_DelaySimpleDelay", stereo: false, params: &[], cab: None };
+        for p in [0, 1, 8] {
+            hlx::place_model(&mut doc, "dsp0", 0, p, None, &nm);
+        }
+        let notes = convert(&mut doc, 2162694, None).unwrap(); // HX Stomp: 8 places
+        assert!(hlx::blocks(&doc).iter().all(|b| b.position < 8));
+        assert!(notes.iter().any(|n| n.contains("moved to place 3")));
+    }
+
+    #[test]
+    fn stomp_family_has_no_ext_amp() {
+        let mut doc = hlx::blank_for("t", 2162689);
+        doc["data"]["tone"]["controller"] = json!({});
+        for target in [2162694, 2162699] {
+            assert!(snapshots::family_of_device(target).name.starts_with("HX Stomp"));
+        }
+        assert!(!snapshots::family_of_device(2162693).name.starts_with("HX Stomp"));
     }
 }
