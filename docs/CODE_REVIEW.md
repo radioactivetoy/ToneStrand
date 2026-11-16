@@ -54,6 +54,11 @@ Severity: **High** = can lose the owner's data or break a project rule;
 
 ## 3. Bad practices and redundancy (Low)
 
+> **Status:** done on branch `cleanup/section-3` (built on `fix/medium`), except the
+> `PresetDoc` trait: `editors::DeviceEdit` is a first step, but unifying the two editors is a
+> design change of its own. Also done: all 41 compiler warnings removed (mostly dead code),
+> and `rustfmt` left out of CI because the code has never been formatted with it.
+
 - **String errors with a sentinel.** `device.rs:218` uses `Err("__bye")` to mean "disconnect", then string-compares at `:473`. Use an enum (`enum Stop { Bye, Error(String) }`). Most of the crate uses `Result<_, String>`; a small `thiserror`-style enum per layer would keep messages but let code match on cause (`SessionError` already shows the pattern).
 - **Global mutable state.** `device::BACKUP_DIR` (`device.rs:487`) is a `static Mutex`, set as a side effect of `App::scan_library` (`window.rs:341`). Pass the folder with the command.
 - **Dead code.** `device.rs:471` `let _ = setlist;`: `setlist` is written in two places and never read. `window.rs:1541` `let dot = if d.is_live() { "" } else { "" };` is always `""`.

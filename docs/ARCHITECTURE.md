@@ -6,8 +6,8 @@ thread. Everything else is plain data structures edited in place every frame.
 
 ```
             ┌───────────────────────── main thread (egui) ─────────────────────────┐
-            │ window.rs  App: tabs of Doc { kind: Hlx(json) | Device(DevicePreset) }│
-            │   ├─ editors.rs   chain + block panel + controllers (per Doc kind)    │
+            │ window/    App: tabs of Doc { kind: Hlx(json) | Device(DevicePreset) }│
+            │   ├─ editors/     chain + block panel + controllers (per Doc kind)    │
             │   ├─ chain.rs     signal-path diagram (cells, hits, line menu)        │
             │   ├─ controllers.rs / snapshots.rs / units.rs   (.hlx editing)        │
             │   ├─ library.rs / folders.rs / tonelib.rs        (files on disk)      │
@@ -28,9 +28,10 @@ thread. Everything else is plain data structures edited in place every frame.
 
 | File | Role |
 |---|---|
-| `main.rs` | Entry point: window options, `--screenshot`, the read-only CLI tools (see BUILDING.md). |
-| `window.rs` | `App`: top bar, sidebar, tabs, pages (Editor, Library, IRs, Settings, hidden Tests), dialogs, the Studio layout, connection handling, saving/loading, undo/redo. |
-| `editors.rs` | The editor for both document kinds: chain per path, block panel (photo, knobs, cab, footswitch), value widgets (knobs, typed values, IR/NAM slot pickers), effect picker window, controllers card for pedal documents, Studio top-bar strips (snapshot chips, BPM, path meters). |
+| `main.rs` | Entry point: window options, `--screenshot`; hands command-line tools to `cli.rs`. |
+| `cli.rs` | The command-line tools (`--help` lists them; see BUILDING.md). |
+| `window/` | `App` (`mod.rs`: tabs, the Studio layout, dialogs, saving/loading, undo/redo) and one file per part: `bars.rs` (top bars, status bar, left panel), `connection.rs` (device thread events, pairing, pedal cards), `library_page.rs`, `irs.rs`, `settings.rs`, `tests_page.rs`. Pages (Editor, Library, IRs, Settings, hidden Tests), dialogs, the Studio layout, connection handling, saving/loading, undo/redo. |
+| `editors/` | The editor for both document kinds (`mod.rs`: shared widgets and the effect picker; `device.rs`: pedal documents and their controllers card; `hlx_file.rs`: `.hlx`; `studio.rs`: Studio top-bar strips): chain per path, block panel (photo, knobs, cab, footswitch), value widgets (knobs, typed values, IR/NAM slot pickers), effect picker window, controllers card for pedal documents, Studio top-bar strips (snapshot chips, BPM, path meters). |
 | `chain.rs` | The diagram: `Chain { main, lower, split, merge, selected, ... }` → `show()` returns `Vec<Hit>` (click, drop, toggle, gap menu actions...). Draws effect boxes, loop markers for sends/returns, IN/OUT terminals, split/merge dots, keyboard shortcuts. |
 | `controllers.rs` | Controllers panel for `.hlx` (footswitches, expression, snapshots, MIDI, Command Center). |
 | `snapshots.rs` | `.hlx` snapshots (select, add, copy/paste, delete) and controller assignments; unit `Family` table (snapshot counts, footswitches, paths, FX loops, slot limits). |
@@ -49,6 +50,7 @@ thread. Everything else is plain data structures edited in place every frame.
 | `nam.rs` | NAM A2 Lite support: block knob mapping and the `.nam` → IR converter. |
 | `files.rs` | Safe writes: `write_atomic` (temp file + rename) and `unique_path` / `copy_into` (never replace an existing file). |
 | `library.rs`, `folders.rs`, `tonelib.rs` | Preset library and IR/NAM library as real folders on disk. |
+| `fakepedal.rs` | Tests only: a fake pedal behind `Wire` for testing `Session` without hardware. |
 | `selftest.rs` | Hidden Tests page: backs up, exercises every operation on one preset slot and one IR slot, restores, verifies; stops immediately if the link drops. |
 | `theme.rs` | Palette (Studio vs Classic, switchable at run time), accent colour, cards, pills, help (?) icons, logos. |
 | `icons.rs` | Effect-type icons cut from `assets/block Images/Blocks_stadium.png` (category line icons and per-kind tiles). `kind_label` names an amp carrying its cab "Amp+Cab" (a cab carrying a second cab "Dual Cab"); `paint_model` draws Amp+Cab as the amp tile with a small cab tile on its corner. |
@@ -73,7 +75,7 @@ thread. Everything else is plain data structures edited in place every frame.
 
 ## Editing flow
 
-1. `window.rs` draws a tab and calls `editors::hlx_editor` or `editors::device_editor`.
+1. `window/mod.rs` draws a tab and calls `editors::hlx_editor` or `editors::device_editor`.
 2. The editor builds `chain::Chain` per path and calls `show()`; the returned `Hit`s are
    applied to the document (moves, toggles, picker requests, split/merge changes).
 3. On a live pedal document each change also pushes a `Cmd` (`SetParam`, `SetEnabled`,

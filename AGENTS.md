@@ -8,7 +8,9 @@ Read this first, then `docs/ARCHITECTURE.md`. The protocol and formats are in
 ```sh
 cargo build                     # debug (optimised enough to use)
 cargo build --release
-cargo test                      # 37 unit tests; must stay green
+cargo test                      # 45 tests; must stay green
+cargo clippy --all-targets -- -D warnings   # must stay clean (CI runs both)
+cargo run -- --help             # the command-line tools
 cargo run -- --screenshot shot.png   # render the window to a PNG and exit
 ```
 
@@ -49,7 +51,8 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 
 ## How to verify a change
 
-- `cargo test`.
+- `cargo test` and `cargo clippy --all-targets -- -D warnings` (CI runs both on pull requests).
+- A change to `session.rs`: add a case to `fakepedal.rs` (a fake pedal behind `Wire`).
 - A screenshot (`--screenshot`) of the page you changed; use the `TONESTRAND_*` variables in
   `docs/BUILDING.md` to open a given page or file.
 - Anything that talks to the pedal: run the hidden self-test (Ctrl+Shift+T) on a spare slot,
@@ -60,8 +63,12 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 | Want to change | Look at |
 |---|---|
 | Chain drawing, gap menu, keyboard | `chain.rs` |
-| Block panel, knobs, pickers, controllers card | `editors.rs` |
-| Window layout, top bar, sidebar, dialogs, saving | `window.rs` |
+| Block panel, knobs, pickers | `editors/mod.rs` (shared widgets, picker), `editors/device.rs` (pedal documents + controllers card), `editors/hlx_file.rs` (.hlx), `editors/studio.rs` (top-bar strips) |
+| Window layout, tabs, dialogs, saving | `window/mod.rs` |
+| Top bars, status bar, left panel | `window/bars.rs` |
+| Connecting, pairing, device events | `window/connection.rs` |
+| Library / IRs / Settings / Tests pages | `window/library_page.rs`, `window/irs.rs`, `window/settings.rs`, `window/tests_page.rs` |
+| Command-line tools | `cli.rs` |
 | A pedal operation | `session.rs` (request), `device.rs` (Cmd/Event), `proto.rs` (opcode) |
 | Pedal document fields | `devpreset.rs` (+ `docs/FILE_FORMATS.md`) |
 | `.hlx` editing | `hlx.rs`, `snapshots.rs`, `controllers.rs`, `units.rs` |

@@ -59,9 +59,11 @@ from `src/`. Adding a photo: drop `<name>.png` into that folder and reference it
 
 ```sh
 cargo test
+cargo clippy --all-targets -- -D warnings
 ```
 
-28 unit tests: the MessagePack codec, the pedal document round trip, `.hlx` editing,
+45 tests: the session against a fake pedal (`fakepedal.rs`: handshake order, refusals,
+timeouts, chunked writes, half-finished transfers, pings), the MessagePack codec, the pedal document round trip, `.hlx` editing,
 snapshots and controllers, unit conversion, IR/NAM conversion (byte-for-byte against the NAM
 A2 Lite project's own converter, using `tests/data/`), icons, catalog value formatting.
 Some tests read HX Edit's files when present and skip themselves otherwise.
@@ -103,6 +105,10 @@ Handy when working on formats or the protocol; none of them writes to the pedal.
 | `--hlx-check <files>` | Convert `.hlx` files to pedal documents and report |
 | `--fmt-check` | Print value formatting for every catalog parameter |
 | `--find-blocks <files>` | Find which documents use given models |
+| `--nam2ir <out> <files>` | Convert NAM captures to User IR `.wav` files (writes files, not the pedal) |
+
+Run `tonestrand --help` for the full list. In release builds on Windows the output appears in
+the terminal the tool was started from.
 
 ## Where things are stored
 
