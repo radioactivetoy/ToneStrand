@@ -429,6 +429,10 @@ pub fn show_model(ui: &mut egui::Ui, category: &str, symbol: &str, name: &str, s
         return false;
     }
     let (rect, _) = ui.allocate_exact_size(egui::Vec2::splat(size), egui::Sense::hover());
+    // The icons are drawn for a dark ground: on the light palette they get a dark tile.
+    if crate::theme::is_light() {
+        ui.painter().rect_filled(rect.expand(1.5), egui::CornerRadius::same(8), Color32::from_rgb(0x20, 0x22, 0x28));
+    }
     paint_model(ui.painter(), ui.ctx(), rect, category, symbol, name, Color32::WHITE)
 }
 

@@ -1420,7 +1420,7 @@ impl App {
                 if ui.button("Save as...").clicked() {
                     *save = Some(true);
                 }
-                let primary = egui::Button::new(RichText::new("Save").strong().color(on_accent())).fill(accent());
+                let primary = egui::Button::new(RichText::new("Save").strong().color(on_accent())).fill(accent_fill());
                 if ui.add(primary).on_hover_text("Save this preset (Ctrl+S)").clicked() {
                     *save = Some(false);
                 }
@@ -1465,7 +1465,7 @@ impl App {
                 let name = doc.name.clone();
                 let mut clean = false;
                 if let Origin::Live { setlist: sl, index } = origin {
-                    let btn = egui::Button::new(RichText::new("Save on pedal").strong().color(on_accent())).fill(accent());
+                    let btn = egui::Button::new(RichText::new("Save on pedal").strong().color(on_accent())).fill(accent_fill());
                     if ui.add_enabled(connected, btn).on_hover_text("Keep the live changes in this preset slot").clicked() {
                         cmds.push(Cmd::SaveCurrent { setlist: *sl, index: *index, name: name.clone() });
                         clean = true;
@@ -1662,13 +1662,16 @@ impl App {
         // What converting presets to the unit did, or why it could not.
         if let Some((title, lines, refusal)) = self.unit_report.clone() {
             let mut close = false;
-            egui::Window::new(RichText::new(&title).strong().color(if refusal { bad() } else { ink() }))
-                .id(egui::Id::new("unit-report"))
+            // The title is the first line of the card, not a bar across its top.
+            egui::Window::new("unit-report")
+                .title_bar(false)
                 .collapsible(false)
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
                     ui.set_max_width(520.0);
+                    ui.label(RichText::new(&title).size(17.0).strong().color(if refusal { bad() } else { ink() }));
+                    ui.add_space(6.0);
                     for l in &lines {
                         ui.label(l);
                     }

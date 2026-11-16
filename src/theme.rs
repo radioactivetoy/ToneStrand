@@ -46,10 +46,22 @@ pub fn ink() -> Color32 {
 pub fn muted() -> Color32 {
     pick(0x9aa2b6, 0x596176)
 }
-/// Text on the accent colour (a button or the picked tab): dark or white, whichever reads better.
+/// The accent as a fill (a button, the picked tab): on the light palette a deeper shade, so white
+/// text sits on it and it stands out from the pale surfaces around it.
+pub fn accent_fill() -> Color32 {
+    if is_light() {
+        let v = ACCENT_RGB.load(Ordering::Relaxed);
+        let k = 0.62;
+        Color32::from_rgb((((v >> 16) & 0xff) as f32 * k) as u8, (((v >> 8) & 0xff) as f32 * k) as u8, ((v & 0xff) as f32 * k) as u8)
+    } else {
+        accent()
+    }
+}
+
+/// Text on the accent fill: dark or white, whichever reads better.
 pub fn on_accent() -> Color32 {
     let dark = Color32::from_rgb(0x08, 0x1a, 0x18);
-    if contrast(dark, accent()) >= contrast(Color32::WHITE, accent()) {
+    if contrast(dark, accent_fill()) >= contrast(Color32::WHITE, accent_fill()) {
         dark
     } else {
         Color32::WHITE
@@ -317,7 +329,7 @@ pub fn segmented(ui: &mut egui::Ui, labels: &[&str], current: usize) -> Option<u
                     let on = i == current;
                     let text = egui::RichText::new(*l).size(14.5).strong().color(if on { on_accent() } else { muted() });
                     let b = egui::Button::new(text)
-                        .fill(if on { accent() } else { Color32::TRANSPARENT })
+                        .fill(if on { accent_fill() } else { Color32::TRANSPARENT })
                         .stroke(Stroke::NONE)
                         .corner_radius(CornerRadius::same(7))
                         .min_size(egui::vec2(78.0, 26.0));
@@ -348,7 +360,9 @@ pub fn pill(ui: &mut egui::Ui, text: &str, colour: Color32) {
 }
 
 pub fn primary_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
-    ui.add(egui::Button::new(egui::RichText::new(text).strong().color(on_accent())).fill(accent()).corner_radius(CornerRadius::same(6)))
+    ui.add(
+        egui::Button::new(egui::RichText::new(text).strong().color(on_accent())).fill(accent_fill()).corner_radius(CornerRadius::same(6)),
+    )
 }
 
 /// A one-line search box with a visible frame (egui's own frame vanishes on this background).
@@ -394,7 +408,7 @@ mod tests {
             // Text on the accent colour (a primary button, the picked tab), for every accent.
             for (rgb, name) in ACCENTS {
                 set_accent(rgb);
-                assert!(contrast(on_accent(), accent()) >= 4.5, "{name} accent, light={light}");
+                assert!(contrast(on_accent(), accent_fill()) >= 4.5, "{name} accent, light={light}");
             }
         }
         set_light(false);

@@ -466,7 +466,7 @@ impl App {
                         Some(Pick::Box(i)) => self.boxes.get(*i).is_some_and(|b| self.settings.token_for(b).is_some()),
                         None => false,
                     };
-                    let btn = egui::Button::new(RichText::new("Connect").strong().color(on_accent())).fill(accent());
+                    let btn = egui::Button::new(RichText::new("Connect").strong().color(on_accent())).fill(accent_fill());
                     if ui.add_enabled(can, btn).on_disabled_hover_text("Pick a pedal, or a paired box, first").clicked() {
                         ui.close_menu();
                         self.connect(ctx);
@@ -616,7 +616,7 @@ impl App {
     pub(super) fn pedal_card(&mut self, ui: &mut egui::Ui) {
         side_section(ui, "PRESETS", |ui| {
             if self.connected.is_none() {
-                ui.label(RichText::new("Connect to a pedal to see and edit its presets.").color(muted()));
+                self.connect_prompt(ui);
                 return;
             }
             if !self.setlists.is_empty() {
@@ -813,6 +813,54 @@ fn reconnect_delay(tries: u32) -> Duration {
     Duration::from_secs(3 << tries.min(4))
 }
 
+impl App {
+    /// The pedal list's place while nothing is connected: say so, and offer the pedals and
+    /// paired boxes that are there to connect to with one click.
+    pub(super) fn connect_prompt(&mut self, ui: &mut egui::Ui) {
+        let ctx = ui.ctx().clone();
+        if self.link.is_some() {
+            ui.label(RichText::new("Connecting...").color(muted()));
+            return;
+        }
+        ui.label(RichText::new("Not connected").strong());
+        ui.label(RichText::new("Connect to see and edit the presets on your pedal.").color(muted()));
+        ui.add_space(6.0);
+        let mut any = false;
+        for (i, p) in self.usb.clone().iter().enumerate() {
+            any = true;
+            if theme::primary_button(ui, &format!("Connect to {} (USB)", p.product)).clicked() {
+                self.pick = Some(Pick::Usb(i));
+                self.pick_manual = true;
+                self.connect(&ctx);
+            }
+        }
+        for (i, b) in self.boxes.clone().iter().enumerate() {
+            any = true;
+            if self.settings.token_for(b).is_some() {
+                if theme::primary_button(ui, &format!("Connect to {} (Wi-Fi)", b.name)).clicked() {
+                    self.pick = Some(Pick::Box(i));
+                    self.pick_manual = true;
+                    self.connect(&ctx);
+                }
+            } else {
+                ui.label(
+                    RichText::new(format!("{} is on the network: pair with it from the pedal menu at the top.", b.name))
+                        .small()
+                        .color(muted()),
+                );
+            }
+        }
+        if !any {
+            ui.label(
+                RichText::new("No pedal found yet. Plug it in by USB, or switch on a Helrig Box with its relay mode on.")
+                    .small()
+                    .color(muted()),
+            );
+        }
+        ui.add_space(4.0);
+        ui.label(RichText::new("More options are in the pedal menu at the top.").small().color(muted()));
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

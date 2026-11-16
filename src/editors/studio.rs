@@ -7,7 +7,10 @@ fn snap_chip(ui: &mut egui::Ui, n: usize, name: &str, on: bool) -> egui::Respons
     let label = if name.trim().is_empty() { format!("{n}") } else { format!("{n}  {}", name.trim()) };
     let text = RichText::new(label).monospace().size(12.5).color(if on { on_accent() } else { ink() });
     ui.add(
-        egui::Button::new(text).fill(if on { accent() } else { Color32::TRANSPARENT }).stroke(Stroke::NONE).min_size(Vec2::new(0.0, 24.0)),
+        egui::Button::new(text)
+            .fill(if on { accent_fill() } else { Color32::TRANSPARENT })
+            .stroke(Stroke::NONE)
+            .min_size(Vec2::new(0.0, 24.0)),
     )
 }
 

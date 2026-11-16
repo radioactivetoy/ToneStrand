@@ -99,7 +99,7 @@ impl App {
                         });
                         ui.add_space(6.0);
                         let ready = self.tests.preset_slot.is_some() && self.tests.ir_slot.is_some() && (!writes || self.tests.understood) && self.busy.is_none();
-                        if ui.add_enabled(ready, egui::Button::new(RichText::new("▶ Run the self-test").strong().color(on_accent())).fill(accent())).clicked() {
+                        if ui.add_enabled(ready, egui::Button::new(RichText::new("▶ Run the self-test").strong().color(on_accent())).fill(accent_fill())).clicked() {
                             start = true;
                         }
                     });

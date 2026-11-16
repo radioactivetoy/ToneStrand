@@ -461,7 +461,7 @@ impl Chain<'_> {
                 let r = ui.interact(rect, pid.with("hit"), egui::Sense::click());
                 let open = ui.memory(|m| m.is_popup_open(pid));
                 if r.hovered() || open {
-                    p.circle_filled(rect.center(), 8.0, accent());
+                    p.circle_filled(rect.center(), 8.0, accent_fill());
                     p.text(rect.center(), egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(13.0), on_accent());
                 }
                 if r.clicked() {
