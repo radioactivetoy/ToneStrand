@@ -30,6 +30,10 @@ pub mod key {
     pub const SNAPSHOT_NAME: i64 = 4;
     /// Command Center: `{0: [command id per slot], 1: [[id, arg1..arg6] per slot]}`.
     pub const COMMANDS: i64 = 2;
+    /// Preset settings (`tone[5]`): guitar input impedance (0 Auto, 1 10k, 2 22k, 3 32k, 4 70k, 5 90k, 6 136k,
+    /// 7 230k, 8 1M) and guitar pad (0 Global, 1 Off, 2 On).
+    pub const GUITAR_IN_Z: i64 = 30;
+    pub const GUITAR_PAD: i64 = 134;
 }
 
 /// Which top-level tone keys the offset table points at, in table order.
@@ -477,6 +481,22 @@ impl DevicePreset {
     /// How many slots each path has: the shape that tells which unit a document is for.
     pub fn layout(&self) -> Vec<usize> {
         (0..8).map_while(|d| self.tone.at(&[key::PATH0 + d, key::SLOTS]).and_then(Value::as_array).map(|a| a.len())).collect()
+    }
+
+    /// A whole-number setting of the preset (`tone[5]`), if the document has it.
+    pub fn setting_int(&self, field: i64) -> Option<i64> {
+        self.tone.at(&[key::SETTINGS, field])?.as_i64()
+    }
+
+    /// Change a whole-number setting the document already has. False when it doesn't have it.
+    pub fn set_setting_int(&mut self, field: i64, value: i64) -> bool {
+        match self.tone.at_mut(&[key::SETTINGS, field]) {
+            Some(v @ Value::Int(..)) => {
+                *v = Value::int(value);
+                true
+            }
+            _ => false,
+        }
     }
 
     // ------------------------------------------------------------ Command Center ---
@@ -1011,6 +1031,15 @@ impl DevicePreset {
         }
         if let Some(t) = doc.pointer("/data/tone/global/@tempo").and_then(serde_json::Value::as_f64) {
             out.set_tempo(t);
+        }
+        // The guitar input impedance and pad: preset settings on the pedal, preset globals in the file
+        // (the same numbering: 0 Auto .. 8 1M, and 0 Global / 1 Off / 2 On).
+        for (name, field) in [("@guitarinputZ", key::GUITAR_IN_Z), ("@guitarpad", key::GUITAR_PAD)] {
+            if let Some(v) = doc.pointer(&format!("/data/tone/global/{name}")).and_then(serde_json::Value::as_i64) {
+                if out.setting_int(field) != Some(v) && !out.set_setting_int(field, v) {
+                    notes.push(format!("{name} has no place in this pedal's preset; left out."));
+                }
+            }
         }
         let n = out.snapshot_names().len();
         for (i, name) in crate::snapshots::list(doc) {
@@ -1573,5 +1602,30 @@ mod command_tests {
             back.slots().iter().map(|s| (s.kind, s.model)).collect::<Vec<_>>(),
             d.slots().iter().map(|s| (s.kind, s.model)).collect::<Vec<_>>()
         );
+    }
+}
+
+#[cfg(test)]
+mod setting_tests {
+    use super::*;
+
+    /// `HX_FIXTURE` is a pedal document, `HLX_FIXTURE` a .hlx: the file's guitar impedance and pad go to the
+    /// pedal document's settings (fields 30 and 134), and a file without them leaves the template's.
+    #[test]
+    fn guitar_impedance_and_pad_are_carried_from_a_hlx() {
+        let (Ok(tpl), Ok(file), Some(dir)) = (std::env::var("HX_FIXTURE"), std::env::var("HLX_FIXTURE"), crate::catalog::find_dir(None))
+        else {
+            return;
+        };
+        let cat = crate::catalog::Catalog::load(&dir).unwrap();
+        let template = DevicePreset::parse(&std::fs::read(tpl).unwrap()).unwrap();
+        let mut json = crate::hlx::parse_text(&std::fs::read_to_string(file).unwrap()).unwrap();
+        json["data"]["tone"]["global"]["@guitarinputZ"] = serde_json::json!(8);
+        json["data"]["tone"]["global"]["@guitarpad"] = serde_json::json!(2);
+        let (out, notes) = DevicePreset::from_hlx(&template, &json, &cat).unwrap();
+        assert_eq!((out.setting_int(key::GUITAR_IN_Z), out.setting_int(key::GUITAR_PAD)), (Some(8), Some(2)));
+        assert!(!notes.iter().any(|n| n.contains("guitar")), "{notes:?}");
+        let back = DevicePreset::parse(&out.encode()).unwrap();
+        assert_eq!((back.setting_int(key::GUITAR_IN_Z), back.setting_int(key::GUITAR_PAD)), (Some(8), Some(2)));
     }
 }

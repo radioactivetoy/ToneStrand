@@ -24,7 +24,7 @@ tone                    one MessagePack map
 | `0`, `1` | path 0, path 1 (each a map; `22` = its slots) |
 | `3` | footswitches (`{7: 2, 8: [per footswitch: nil or records]}`) |
 | `4` | controllers (one entry per controller number) |
-| `5` | settings (`16` = tempo) |
+| `5` | settings (`16` = tempo, `30` = guitar input impedance: 0 Auto, 1 10k, 2 22k, 3 32k, 4 70k, 5 90k, 6 136k, 7 230k, 8 1M; `134` = guitar pad: 0 Global, 1 Off, 2 On). Same numbering as `.hlx` `@guitarinputZ` / `@guitarpad`. The pedal also has global settings under the same ids; a preset value is its own, pad "Global" defers to the pedal's. |
 | `7` | meta |
 | `10` | snapshot section (`6` = current snapshot, `10` = snapshot list) |
 | `35` | firmware |
