@@ -89,6 +89,7 @@ Severity: **High** = can lose the owner's data or break a project rule;
 ## 5. Missing features and usability
 
 **Status (branch `feature/usability`):** done: U2, U3, U4, U5, U6, U7 (backup only; no restore-all), U8 (no F2 rename), U10, U11, U12, U13, U14. Not done: U9 (compare). U1 was done earlier. U3 uses the Windows shell directly (`files::delete_file`) instead of the `trash` crate; other systems delete for good after always asking. Needing a real pedal to check: U2 write-back, U7, U10.
+
 | # | Idea | Why |
 |---|---|---|
 | U1 | **Unsaved-changes prompt** on tab and window close (see H5). | The most likely way to lose work today. |
