@@ -38,6 +38,23 @@ enum DocKind {
     Device { preset: DevicePreset, origin: Origin },
 }
 
+impl DocKind {
+    /// The open preset as the trait both kinds share (saving, tempo, path meters).
+    fn doc(&self) -> &dyn editors::PresetDoc {
+        match self {
+            DocKind::Hlx { json } => json,
+            DocKind::Device { preset, .. } => preset,
+        }
+    }
+
+    fn doc_mut(&mut self) -> &mut dyn editors::PresetDoc {
+        match self {
+            DocKind::Hlx { json } => json,
+            DocKind::Device { preset, .. } => preset,
+        }
+    }
+}
+
 #[derive(Clone)]
 enum Origin {
     Live { setlist: i64, index: i64 },
@@ -486,10 +503,7 @@ impl App {
     fn save_doc(&mut self, i: usize, save_as: bool) {
         let lib = self.library_dir.clone();
         let Some(doc) = self.docs.get_mut(i) else { return };
-        let (ext, bytes) = match &doc.kind {
-            DocKind::Hlx { json } => ("hlx", serde_json::to_vec_pretty(json).unwrap_or_default()),
-            DocKind::Device { preset, .. } => ("hxpreset", preset.encode()),
-        };
+        let (ext, bytes) = (doc.kind.doc().file_ext(), doc.kind.doc().encode());
         let path = if save_as || doc.path.is_none() {
             let _ = std::fs::create_dir_all(&lib);
             let base = if doc.name.is_empty() { doc.title.clone() } else { doc.name.clone() };
