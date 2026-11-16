@@ -136,6 +136,21 @@ impl Value {
         write(self, &mut out);
         out
     }
+
+    /// The same value in the same format: like `==`, but floats compare by their bits, so a
+    /// NaN equals itself and 0.0 differs from -0.0 (as their encodings do). Much cheaper
+    /// than comparing encodings.
+    pub fn same_as(&self, other: &Value) -> bool {
+        match (self, other) {
+            (Value::F32(a), Value::F32(b)) => a.to_bits() == b.to_bits(),
+            (Value::F64(a), Value::F64(b)) => a.to_bits() == b.to_bits(),
+            (Value::Array(a, f), Value::Array(b, g)) => f == g && a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.same_as(y)),
+            (Value::Map(a, f), Value::Map(b, g)) => {
+                f == g && a.len() == b.len() && a.iter().zip(b).all(|((k1, v1), (k2, v2))| k1.same_as(k2) && v1.same_as(v2))
+            }
+            _ => self == other,
+        }
+    }
 }
 
 // ------------------------------------------------------------------ writing ---
@@ -363,7 +378,13 @@ fn write_int(n: i64, fmt: u8, out: &mut Vec<u8>) {
 pub struct Decoder<'a> {
     buf: &'a [u8],
     pos: usize,
+    /// How many arrays/maps the value being read sits inside.
+    depth: usize,
 }
+
+/// Real documents nest a handful of levels; a damaged file nesting deeper than this is
+/// refused instead of overflowing the stack.
+const MAX_DEPTH: usize = 64;
 
 #[derive(Debug)]
 pub struct DecodeError(pub &'static str);
@@ -376,7 +397,7 @@ impl std::fmt::Display for DecodeError {
 
 impl<'a> Decoder<'a> {
     pub fn new(buf: &'a [u8]) -> Self {
-        Decoder { buf, pos: 0 }
+        Decoder { buf, pos: 0, depth: 0 }
     }
 
     pub fn remaining(&self) -> usize {
@@ -428,20 +449,31 @@ impl<'a> Decoder<'a> {
             Err(_) => Value::Bin(b.to_vec(), fmt),
         })
     }
+    fn enter(&mut self) -> Result<(), DecodeError> {
+        if self.depth >= MAX_DEPTH {
+            return Err(DecodeError("nested too deeply"));
+        }
+        self.depth += 1;
+        Ok(())
+    }
     fn array(&mut self, n: usize, fmt: u8) -> Result<Value, DecodeError> {
+        self.enter()?;
         let mut items = Vec::with_capacity(n.min(4096));
         for _ in 0..n {
             items.push(self.value()?);
         }
+        self.depth -= 1;
         Ok(Value::Array(items, fmt))
     }
     fn map(&mut self, n: usize, fmt: u8) -> Result<Value, DecodeError> {
+        self.enter()?;
         let mut pairs = Vec::with_capacity(n.min(4096));
         for _ in 0..n {
             let k = self.value()?;
             let v = self.value()?;
             pairs.push((k, v));
         }
+        self.depth -= 1;
         Ok(Value::Map(pairs, fmt))
     }
     fn ext(&mut self, n: usize, fmt: u8) -> Result<Value, DecodeError> {
@@ -545,6 +577,29 @@ mod tests {
         let v = Decoder::new(&raw).value().unwrap();
         assert_eq!(v.get(102).unwrap().as_i64(), Some(1009));
         assert_eq!(v.encode(), raw);
+    }
+
+    #[test]
+    fn refuses_deep_nesting_instead_of_crashing() {
+        let mut raw = vec![0x91u8; 100_000];
+        raw.push(0x00);
+        assert!(Decoder::decode_all(&raw).is_err());
+        // Ordinary nesting still reads.
+        let mut ok = vec![0x91u8; 10];
+        ok.push(0x00);
+        assert_eq!(Decoder::decode_all(&ok).unwrap()[0].encode(), ok);
+    }
+
+    #[test]
+    fn same_as_compares_floats_by_bits() {
+        let nan = Value::Array(vec![Value::F32(f32::NAN)], AUTO);
+        assert!(nan.same_as(&nan.clone()));
+        assert!(!Value::F32(0.0).same_as(&Value::F32(-0.0)));
+        let a = Value::map(vec![(1, Value::F32(0.5))]);
+        let mut b = a.clone();
+        assert!(a.same_as(&b));
+        *b.get_mut(1).unwrap() = Value::F32(0.6);
+        assert!(!a.same_as(&b));
     }
 
     #[test]

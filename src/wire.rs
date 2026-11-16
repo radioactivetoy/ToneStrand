@@ -100,6 +100,14 @@ impl Wire for UsbWire {
             }
             if Instant::now() >= deadline {
                 self.out_q.cancel_all();
+                // Collect the cancelled transfer now, or the next send would take its
+                // "cancelled" result for its own.
+                let until = Instant::now() + Duration::from_millis(500);
+                while self.out_q.pending() > 0 && Instant::now() < until {
+                    if poll_now(self.out_q.next_complete()).is_none() {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                }
                 return Err("USB write timed out".into());
             }
             std::thread::sleep(Duration::from_millis(1));
@@ -111,10 +119,12 @@ impl Wire for UsbWire {
         loop {
             if let Some(c) = poll_now(self.in_q.next_complete()) {
                 let data = c.data;
+                // Always keep one read waiting, even after a failed one: an empty queue
+                // would leave every later read with nothing to wait on.
+                self.in_q.submit(nusb::transfer::RequestBuffer::new(512));
                 if let Err(e) = c.status {
                     return Err(format!("USB read failed: {e}"));
                 }
-                self.in_q.submit(nusb::transfer::RequestBuffer::new(512));
                 return Ok(data);
             }
             if Instant::now() >= deadline {
@@ -142,7 +152,8 @@ impl BoxWire {
     /// Open `ws://<host>/raw` with the box's token and read its hello.
     pub fn open(host: &str, token: &str, label: &str) -> Result<BoxWire, String> {
         use tungstenite::client::IntoClientRequest;
-        let addr: SocketAddr = format!("{host}:80")
+        let url_host = crate::boxes::url_host(host);
+        let addr: SocketAddr = format!("{url_host}:80")
             .to_socket_addrs()
             .map_err(|e| format!("could not find {host}: {e}"))?
             .next()
@@ -153,7 +164,7 @@ impl BoxWire {
         stream
             .set_read_timeout(Some(Duration::from_secs(5)))
             .map_err(|e| e.to_string())?;
-        let mut req = format!("ws://{host}/raw")
+        let mut req = format!("ws://{url_host}/raw")
             .into_client_request()
             .map_err(|e| e.to_string())?;
         req.headers_mut().insert(

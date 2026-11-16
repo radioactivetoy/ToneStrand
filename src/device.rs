@@ -5,7 +5,22 @@ use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 
 use crate::msgpack::Value;
-use crate::session::Session;
+use crate::session::{Session, IR_NAME_MAX, PRESET_NAME_MAX, SNAPSHOT_NAME_MAX};
+
+/// Tell the person when a name reads differently on the pedal.
+fn note_name(send: &dyn Fn(Event), name: &str, max_len: usize) {
+    if let Some(n) = crate::session::name_note(name, max_len) {
+        send(Event::Info(n));
+    }
+}
+
+/// Read a slot just written and compare it with what was sent.
+fn reads_back_same(s: &mut Session, setlist: i64, index: i64, sent: &[u8]) -> Result<bool, String> {
+    let back = s
+        .fetch_slot(setlist, index)
+        .map_err(|e| format!("it was written, but couldn't be read back to check ({e}): check it on the pedal"))?;
+    Ok(back.as_deref().and_then(|b| crate::devpreset::DevicePreset::parse(b).ok()).map(|d| d.encode()).as_deref() == Some(sent))
+}
 use crate::wire::{BoxWire, UsbWire, Wire};
 
 pub enum Target {
@@ -197,7 +212,8 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
             match s.idle(Duration::from_millis(30)) {
                 Ok(notes) => {
                     // A preset change on the pedal itself: find out which.
-                    if notes.iter().any(|(e, _)| *e == 20 || *e == 1) {
+                    use crate::proto::event::{PRESET_CHANGED, PRESET_CHANGED_ALT};
+                    if notes.iter().any(|(e, _)| *e == PRESET_CHANGED || *e == PRESET_CHANGED_ALT) {
                         if let Ok((sl, idx, name)) = s.preset_info() {
                             send(Event::Current(sl.max(0), idx, name));
                             // Another preset was picked on the pedal: follow it.
@@ -249,13 +265,20 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                         send(Event::Info(note));
                     }
                     send(Event::Busy("Writing preset to the pedal...".into()));
-                    s.write_slot(sl, index, &name, doc).map_err(|e| e.to_string())?;
+                    let sent = s.write_slot(sl, index, &name, doc).map_err(|e| e.to_string())?;
+                    note_name(send, &name, PRESET_NAME_MAX);
+                    let same = reads_back_same(s, sl, index, &sent)?;
                     let p = s.presets(sl).map_err(|e| e.to_string())?;
                     send(Event::Presets(sl, p));
-                    send(Event::Done(format!("Wrote \"{name}\" to the pedal")));
+                    if same {
+                        send(Event::Done(format!("Wrote \"{name}\" to the pedal (read back the same)")));
+                    } else {
+                        send(Event::Error(format!("Wrote \"{name}\", but it reads back different from what was sent: check it on the pedal")));
+                    }
                 }
                 Cmd::Rename { setlist: sl, index, name } => {
                     s.rename_slot(sl, index, &name).map_err(|e| e.to_string())?;
+                    note_name(send, &name, PRESET_NAME_MAX);
                     let p = s.presets(sl).map_err(|e| e.to_string())?;
                     send(Event::Presets(sl, p));
                     send(Event::Done(format!("Renamed to \"{name}\"")));
@@ -269,6 +292,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                 Cmd::SaveCurrent { setlist: sl, index, name } => {
                     send(Event::Busy("Saving on the pedal...".into()));
                     s.save_current(sl, index, &name).map_err(|e| e.to_string())?;
+                    note_name(send, &name, PRESET_NAME_MAX);
                     let p = s.presets(sl).map_err(|e| e.to_string())?;
                     send(Event::Presets(sl, p));
                     send(Event::Done(format!("Saved \"{name}\" on the pedal")));
@@ -324,24 +348,52 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                 }
                 Cmd::RenameSnapshot { index, name } => {
                     s.rename_snapshot(index, &name).map_err(|e| e.to_string())?;
+                    note_name(send, &name, SNAPSHOT_NAME_MAX);
                 }
                 Cmd::Backup { setlist: sl, count, folder, names } => {
-                    let _ = std::fs::create_dir_all(&folder);
+                    std::fs::create_dir_all(&folder).map_err(|e| format!("can't make {} ({e})", folder.display()))?;
                     let mut saved = 0;
+                    // Keep going past a slot that fails; stop only when the pedal seems gone.
+                    let mut failed: Vec<String> = Vec::new();
+                    let mut in_a_row = 0;
                     for i in 0..count {
                         send(Event::Busy(format!("Backing up {}/{}...", i + 1, count)));
-                        if let Some(blob) = s.fetch_slot(sl, i as i64).map_err(|e| e.to_string())? {
+                        let label = crate::proto::slot_label(i);
+                        let outcome = s.fetch_slot(sl, i as i64).map_err(|e| e.to_string()).and_then(|blob| {
+                            let Some(blob) = blob else { return Ok(false) };
                             let n = names.get(i).cloned().unwrap_or_default();
-                            let file = folder.join(format!(
-                                "{} {}.hxpreset",
-                                crate::proto::slot_label(i),
-                                sanitize(&n)
-                            ));
-                            crate::files::write_atomic(&file, &blob).map_err(|e| e.to_string())?;
-                            saved += 1;
+                            let file = folder.join(format!("{label} {}.hxpreset", sanitize(&n)));
+                            crate::files::write_atomic(&file, &blob).map_err(|e| e.to_string()).map(|_| true)
+                        });
+                        match outcome {
+                            Ok(wrote) => {
+                                saved += wrote as usize;
+                                in_a_row = 0;
+                            }
+                            Err(e) => {
+                                failed.push(format!("{label} ({e})"));
+                                in_a_row += 1;
+                                if in_a_row >= 3 {
+                                    return Err(format!(
+                                        "Backed up {saved} presets to {}, then stopped: {} slots in a row failed: {}",
+                                        folder.display(),
+                                        in_a_row,
+                                        failed.join(", ")
+                                    ));
+                                }
+                            }
                         }
                     }
-                    send(Event::Done(format!("Backed up {saved} presets to {}", folder.display())));
+                    if failed.is_empty() {
+                        send(Event::Done(format!("Backed up {saved} presets to {}", folder.display())));
+                    } else {
+                        send(Event::Error(format!(
+                            "Backed up {saved} presets to {}; {} failed: {}",
+                            folder.display(),
+                            failed.len(),
+                            failed.join(", ")
+                        )));
+                    }
                 }
                 Cmd::AssignController { block, cab, index, controller, cc } => {
                     s.assign_controller(block, cab, index, controller, cc).map_err(|e| e.to_string())?;
@@ -380,9 +432,9 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                         send(Event::Info(note));
                     }
                     send(Event::Busy("Writing preset to the pedal...".into()));
-                    s.write_slot(sl, index, &name, bytes.clone()).map_err(|e| e.to_string())?;
-                    let back = s.fetch_slot(sl, index).map_err(|e| e.to_string())?;
-                    let same = back.as_deref().and_then(|b| crate::devpreset::DevicePreset::parse(b).ok()).map(|d| d.encode()) == Some(bytes);
+                    let sent = s.write_slot(sl, index, &name, bytes).map_err(|e| e.to_string())?;
+                    note_name(send, &name, PRESET_NAME_MAX);
+                    let same = reads_back_same(s, sl, index, &sent)?;
                     for n in notes {
                         send(Event::Info(n));
                     }
@@ -430,6 +482,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                             }
                             return Err(format!("Wrote {done} of {total} IRs; slot {} failed: {e}", slot + 1));
                         }
+                        note_name(send, &name, IR_NAME_MAX);
                         done += 1;
                     }
                     send(Event::Irs(s.list_irs().map_err(|e| e.to_string())?));
@@ -448,6 +501,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                 }
                 Cmd::RenameIr { slot, name } => {
                     s.rename_ir(slot, &name).map_err(|e| e.to_string())?;
+                    note_name(send, &name, IR_NAME_MAX);
                     send(Event::Irs(s.list_irs().map_err(|e| e.to_string())?));
                     send(Event::Done(format!("IR slot {} renamed", slot + 1)));
                 }
@@ -483,6 +537,9 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
             Ok(())
         })();
         let _ = setlist;
+        for w in s.take_warnings() {
+            send(Event::Info(w));
+        }
         if let Err(e) = result {
             if e == "__bye" {
                 return send(Event::Disconnected("Disconnected".into()));

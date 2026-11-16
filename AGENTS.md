@@ -8,7 +8,7 @@ Read this first, then `docs/ARCHITECTURE.md`. The protocol and formats are in
 ```sh
 cargo build                     # debug (optimised enough to use)
 cargo build --release
-cargo test                      # 33 unit tests; must stay green
+cargo test                      # 37 unit tests; must stay green
 cargo run -- --screenshot shot.png   # render the window to a PNG and exit
 ```
 

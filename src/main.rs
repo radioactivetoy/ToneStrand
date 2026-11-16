@@ -30,8 +30,59 @@ mod wire;
 
 use eframe::egui;
 
+/// The command-line tools (everything else opens the window).
+const CLI_FLAGS: [&str; 12] = [
+    "--probe", "--nam2ir", "--read-backup", "--fmt-check", "--find-blocks", "--attach-check",
+    "--dsp-report", "--ctl-check", "--dump-doc", "--hlx-check", "--list-models", "--find-boxes",
+];
+
+/// Release builds are windowed programs on Windows, with no console: borrow the console of
+/// the shell that started us so the tools' output shows up there.
+fn attach_console() {
+    #[cfg(windows)]
+    {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn AttachConsole(process_id: u32) -> i32;
+        }
+        const ATTACH_PARENT_PROCESS: u32 = u32::MAX;
+        // Fails harmlessly when there already is a console (debug builds) or no parent one.
+        unsafe {
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+    }
+}
+
+/// A value or, for the tools, a printed reason and None.
+fn need<T, E: std::fmt::Display>(r: Result<T, E>, what: &str) -> Option<T> {
+    match r {
+        Ok(v) => Some(v),
+        Err(e) => {
+            eprintln!("{what}: {e}");
+            None
+        }
+    }
+}
+
+/// HX Edit's catalog for the tools that need it.
+fn tool_catalog() -> Option<catalog::Catalog> {
+    let Some(dir) = catalog::find_dir(boxes::Settings::load().hx_edit.as_deref()) else {
+        eprintln!("HX Edit's files were not found; install HX Edit or set its folder in Settings");
+        return None;
+    };
+    need(catalog::Catalog::load(&dir), "HX Edit's files")
+}
+
+fn read_preset(f: &str) -> Option<devpreset::DevicePreset> {
+    let b = need(std::fs::read(f), f)?;
+    need(devpreset::DevicePreset::parse(&b), f)
+}
+
 fn main() -> eframe::Result<()> {
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| CLI_FLAGS.contains(&a.as_str())) {
+        attach_console();
+    }
     let screenshot = args
         .iter()
         .position(|a| a == "--screenshot")
@@ -56,7 +107,7 @@ fn main() -> eframe::Result<()> {
     if let Some(i) = args.iter().position(|a| a == "--read-backup") {
         // Read-only: list what a .hxb or .hls holds.
         for f in &args[i + 1..] {
-            let b = std::fs::read(f).expect("read");
+            let Some(b) = need(std::fs::read(f), f) else { continue };
             let r = if f.to_ascii_lowercase().ends_with(".hls") { backup::read_hls(&b).map(|s| (vec![s], 0)) } else { backup::read_hxb(&b).map(|c| (c.setlists, c.irs.len())) };
             match r {
                 Ok((sets, irs)) => {
@@ -73,8 +124,11 @@ fn main() -> eframe::Result<()> {
     }
     if args.iter().any(|a| a == "--fmt-check") {
         // Read-only: how a dual cab's knobs read at their edges.
-        let cat = catalog::find_dir(None).and_then(|p| catalog::Catalog::load(&p).ok()).expect("HX Edit's files");
-        let n = cat.number_for_hlx("HD2_CabMicIr_1x12USDeluxeWithPan", false).expect("model");
+        let Some(cat) = tool_catalog() else { return Ok(()) };
+        let Some(n) = cat.number_for_hlx("HD2_CabMicIr_1x12USDeluxeWithPan", false) else {
+            eprintln!("this HX Edit has no HD2_CabMicIr_1x12USDeluxeWithPan");
+            return Ok(());
+        };
         for (k, (id, _, _)) in cat.default_values(n).into_iter().enumerate() {
             let (name, meta) = cat.param(n, k);
             let (lo, hi) = meta.as_ref().map(|m| (m.min, m.max)).unwrap_or((0.0, 1.0));
@@ -134,7 +188,7 @@ fn main() -> eframe::Result<()> {
     }
     if let Some(i) = args.iter().position(|a| a == "--dsp-report") {
         // Read-only: the DSP estimate of pedal presets, path by path, with each block's load.
-        let cat = catalog::find_dir(None).and_then(|p| catalog::Catalog::load(&p).ok()).expect("HX Edit's files");
+        let Some(cat) = tool_catalog() else { return Ok(()) };
         for f in &args[i + 1..] {
             let Ok(b) = std::fs::read(f) else { continue };
             let Ok(d) = devpreset::DevicePreset::parse(&b) else { continue };
@@ -160,8 +214,7 @@ fn main() -> eframe::Result<()> {
         // Read-only: read each preset's controllers and write them back unchanged; it must stay identical.
         let (mut same, mut differ) = (0, 0);
         for f in &args[i + 1..] {
-            let b = std::fs::read(f).expect("read");
-            let d = devpreset::DevicePreset::parse(&b).expect("parses");
+            let Some(d) = read_preset(f) else { continue };
             let list = d.controllers();
             let mut d2 = d.clone();
             d2.set_controllers(&list);
@@ -177,8 +230,11 @@ fn main() -> eframe::Result<()> {
     }
     if let Some(i) = args.iter().position(|a| a == "--dump-doc") {
         // Read-only: print a pedal preset document's structure (to learn its layout).
-        let b = std::fs::read(args.get(i + 1).expect("file")).expect("read");
-        let d = devpreset::DevicePreset::parse(&b).expect("parses");
+        let Some(f) = args.get(i + 1) else {
+            eprintln!("usage: --dump-doc <file.hxpreset>");
+            return Ok(());
+        };
+        let Some(d) = read_preset(f) else { return Ok(()) };
         fn show(v: &msgpack::Value) -> String {
             use msgpack::Value as V;
             match v {
@@ -204,11 +260,18 @@ fn main() -> eframe::Result<()> {
     }
     if let Some(i) = args.iter().position(|a| a == "--hlx-check") {
         // Offline check of the .hlx -> pedal conversion: --hlx-check <template.hxpreset> [file.hlx]
-        let cat = catalog::find_dir(None).and_then(|p| catalog::Catalog::load(&p).ok()).expect("HX Edit's files");
-        let template = std::fs::read(args.get(i + 1).expect("template")).expect("read template");
-        let template = devpreset::DevicePreset::parse(&template).expect("template parses");
+        let Some(cat) = tool_catalog() else { return Ok(()) };
+        let Some(f) = args.get(i + 1) else {
+            eprintln!("usage: --hlx-check <template.hxpreset> [file.hlx]");
+            return Ok(());
+        };
+        let Some(template) = read_preset(f) else { return Ok(()) };
         let json = match args.get(i + 2) {
-            Some(p) => serde_json::from_str(&std::fs::read_to_string(p).expect("read hlx")).expect("hlx json"),
+            Some(p) => {
+                let Some(text) = need(std::fs::read_to_string(p), p) else { return Ok(()) };
+                let Some(j) = need(serde_json::from_str(&text), p) else { return Ok(()) };
+                j
+            }
             None => hlx::sample(),
         };
         match devpreset::DevicePreset::from_hlx(&template, &json, &cat) {
@@ -246,7 +309,7 @@ fn main() -> eframe::Result<()> {
     }
     if args.iter().any(|a| a == "--list-models") {
         // Print every effect in the picker with its real-gear name, if known.
-        if let Some(cat) = catalog::find_dir(None).and_then(|p| catalog::Catalog::load(&p).ok()) {
+        if let Some(cat) = tool_catalog() {
             for g in &cat.groups {
                 for m in &g.models {
                     println!("{}\t{}\t{}\t{}", g.category, g.sub, m.name, realnames::real(&m.name).unwrap_or_else(|| "-".into()));

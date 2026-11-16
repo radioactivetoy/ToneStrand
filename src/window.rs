@@ -2637,7 +2637,7 @@ impl App {
         }
         let changed = match (&before, &doc.kind) {
             (DocKind::Hlx { json: a }, DocKind::Hlx { json: b }) => a != b,
-            (DocKind::Device { preset: a, .. }, DocKind::Device { preset: b, .. }) => a.encode() != b.encode(),
+            (DocKind::Device { preset: a, .. }, DocKind::Device { preset: b, .. }) => !a.same_as(b),
             _ => true,
         };
         if !changed {
@@ -2812,7 +2812,13 @@ impl App {
                                 }
                             }
                         }
-                        self.note(LogLevel::Good, format!("Imported {n} presets"));
+                        let failures = report.iter().filter(|l| l.starts_with('✖')).count();
+                        let (level, summary) = match (n, failures) {
+                            (_, 0) if n > 0 => (LogLevel::Good, format!("Imported {n} presets")),
+                            (0, 0) => (LogLevel::Info, "Nothing was imported".to_owned()),
+                            (_, f) => (LogLevel::Bad, format!("Imported {n} presets; {f} could not be imported (see the report)")),
+                        };
+                        self.note(level, summary);
                         if !report.is_empty() {
                             self.unit_report = Some((format!("Imported {n} presets"), report, false));
                         }

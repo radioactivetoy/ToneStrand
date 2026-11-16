@@ -229,6 +229,14 @@ pub fn start_discovery(tx: Sender<BoxInfo>) -> Option<mdns_sd::ServiceDaemon> {
     Some(daemon)
 }
 
+/// A box address as it goes in a URL or `host:port`: IPv6 addresses need brackets.
+pub fn url_host(host: &str) -> String {
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V6(v6)) => format!("[{v6}]"),
+        _ => host.to_owned(),
+    }
+}
+
 fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(3))
@@ -253,7 +261,7 @@ fn read_json(r: Result<ureq::Response, ureq::Error>) -> Result<(u16, serde_json:
 
 /// `GET /api/relay`: is relay mode on, is a pedal attached, is someone using it.
 pub fn relay_status(host: &str) -> Result<RelayStatus, String> {
-    let (_, v) = read_json(agent().get(&format!("http://{host}/api/relay")).call())?;
+    let (_, v) = read_json(agent().get(&format!("http://{}/api/relay", url_host(host))).call())?;
     let pedal = v.get("pedal").and_then(|p| {
         if p.get("present").and_then(|x| x.as_bool()) == Some(true) {
             Some(p.get("product").and_then(|x| x.as_str()).unwrap_or("pedal").trim().to_owned())
@@ -273,7 +281,7 @@ pub fn relay_status(host: &str) -> Result<RelayStatus, String> {
 /// `POST /api/relay {"on": ...}` with the token.
 pub fn set_relay(host: &str, token: &str, on: bool) -> Result<(), String> {
     let r = agent()
-        .post(&format!("http://{host}/api/relay"))
+        .post(&format!("http://{}/api/relay", url_host(host)))
         .set("Authorization", &format!("Bearer {token}"))
         .set("Content-Type", "application/json")
         .send_string(&format!("{{\"on\":{on}}}"));
@@ -288,7 +296,7 @@ pub fn set_relay(host: &str, token: &str, on: bool) -> Result<(), String> {
 
 /// `POST /api/pair`: open the 30 s window. Returns the nonce.
 pub fn pair_start(host: &str) -> Result<String, String> {
-    let r = agent().post(&format!("http://{host}/api/pair")).send_string("");
+    let r = agent().post(&format!("http://{}/api/pair", url_host(host))).send_string("");
     let (code, v) = read_json(r)?;
     if code == 409 {
         return Err("someone else is pairing with this box right now; try again in 30 seconds".into());
@@ -307,7 +315,7 @@ pub enum PairPoll {
 
 /// `GET /api/pair?nonce=...`: has the BOOT button been pressed yet?
 pub fn pair_poll(host: &str, nonce: &str) -> Result<PairPoll, String> {
-    let r = agent().get(&format!("http://{host}/api/pair?nonce={nonce}")).call();
+    let r = agent().get(&format!("http://{}/api/pair?nonce={nonce}", url_host(host))).call();
     let (code, v) = read_json(r)?;
     if code == 403 {
         return Err("the box rejected the pairing request".into());
@@ -369,5 +377,18 @@ mod tests {
         assert_eq!(s.ui_scale, 1.25);
         assert!(s.confirm_pedal);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod url_tests {
+    #[test]
+    fn ipv6_hosts_get_brackets() {
+        use super::url_host;
+        assert_eq!(url_host("192.168.1.20"), "192.168.1.20");
+        assert_eq!(url_host("helrigbox.local"), "helrigbox.local");
+        assert_eq!(url_host("fe80::1"), "[fe80::1]");
+        let a: std::net::SocketAddr = format!("{}:80", url_host("fe80::1")).parse().unwrap();
+        assert_eq!(a.port(), 80);
     }
 }

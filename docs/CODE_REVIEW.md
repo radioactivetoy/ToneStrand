@@ -29,6 +29,11 @@ Severity: **High** = can lose the owner's data or break a project rule;
 
 ## 2. Bugs and fragile code (Medium)
 
+> **Status:** M1–M15 fixed on branch `fix/medium` (built on `fix/data-safety`). M12 replaces
+> the per-frame encoding with a value comparison; the per-frame clone of the document stays.
+> M8 keeps writing when the pedal *refuses* BEGIN (as before, now with a note) but stops
+> when the link doesn't answer. Not tried on hardware: M1–M3, M8, M9, M11.
+
 | # | Where | Problem |
 |---|---|---|
 | M1 | `src/wire.rs:145`, `:156` | `format!("{host}:80")` and `ws://{host}/raw` break for IPv6 addresses (needs `[addr]:80`). `boxes::start_discovery` falls back to an IPv6 address when a box has no IPv4 one (`boxes.rs:178`). Parse with `IpAddr` and add brackets, or build a `SocketAddr` directly. |

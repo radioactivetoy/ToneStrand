@@ -145,6 +145,13 @@ pub mod key {
 }
 
 /// Operation codes.
+/// Notification event numbers (events channel).
+pub mod event {
+    /// Both mean the loaded preset changed on the pedal itself.
+    pub const PRESET_CHANGED: i64 = 20;
+    pub const PRESET_CHANGED_ALT: i64 = 1;
+}
+
 pub mod op {
     pub const LIST_SETLISTS: i64 = 0;
     pub const LIST_PRESETS: i64 = 1;

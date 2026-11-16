@@ -84,9 +84,30 @@ pub struct Session {
     notifications: Vec<(i64, Value)>,
     broken: Option<String>,
     browse_open: bool,
+    /// Things worth telling the person that didn't stop an operation.
+    warnings: Vec<String>,
 }
 
 impl Session {
+    /// Warnings gathered since the last call.
+    pub fn take_warnings(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.warnings)
+    }
+
+    /// Announce a flash write (op BEGIN). A refusal is passed on as a warning and the write
+    /// goes ahead (as it always has); a link that doesn't answer stops it, since a write
+    /// over that link could stop half way.
+    fn begin_write(&mut self) -> Result<()> {
+        match self.request(op::BEGIN, Value::empty_map()) {
+            Ok(_) => Ok(()),
+            Err(SessionError::Refused(code)) => {
+                self.warnings.push(format!("the pedal answered the start of the write with code {code}; went ahead"));
+                Ok(())
+            }
+            Err(e) => Err(SessionError::Protocol(format!("the pedal didn't answer the start of the write ({e}); nothing was written"))),
+        }
+    }
+
     pub fn open(wire: Box<dyn Wire>) -> Result<Session> {
         let mut s = Session {
             wire,
@@ -95,6 +116,7 @@ impl Session {
             notifications: Vec::new(),
             broken: None,
             browse_open: false,
+            warnings: Vec::new(),
         };
         s.drain();
         // The order the pedal expects: control (service 5, then closed),
@@ -463,8 +485,9 @@ impl Session {
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
             let _ = self.idle(Duration::from_millis(40));
-            if let Ok((_, current, _)) = self.preset_info() {
-                if current == index {
+            if let Ok((current_list, current, _)) = self.preset_info() {
+                // Some units report no setlist (-1); otherwise it must match too.
+                if current == index && (current_list == setlist || current_list < 0) {
                     return Ok(());
                 }
             }
@@ -507,8 +530,9 @@ impl Session {
         Ok(Some(bytes))
     }
 
-    /// Write a document straight into a slot and name it.
-    pub fn write_slot(&mut self, setlist: i64, index: i64, name: &str, doc: Vec<u8>) -> Result<()> {
+    /// Write a document straight into a slot and name it. Returns the bytes sent, to compare
+    /// with what reads back.
+    pub fn write_slot(&mut self, setlist: i64, index: i64, name: &str, doc: Vec<u8>) -> Result<Vec<u8>> {
         let parsed = crate::devpreset::DevicePreset::parse(&doc).map_err(|e| {
             SessionError::Protocol(format!("refusing to write a non-pedal preset document to the unit ({e})"))
         })?;
@@ -518,7 +542,7 @@ impl Session {
         }
         self.browse_open = false;
         self.open_browse();
-        let _ = self.request(op::BEGIN, Value::empty_map());
+        self.begin_write()?;
         if self.wire.slow() {
             let _ = self.idle(Duration::from_millis(400));
         }
@@ -527,16 +551,16 @@ impl Session {
             Value::map(vec![
                 (key::SETLIST, Value::int(setlist)),
                 (key::PRESET_INDEX, Value::int(index)),
-                (key::NAME, wire_name(name, 16)),
+                (key::NAME, wire_name(name, PRESET_NAME_MAX)),
                 (123, Value::Bool(false)),
                 (124, Value::Bool(false)),
                 (125, Value::int(0)),
-                (key::DOCUMENT, Value::Bin(doc, 0xda)),
+                (key::DOCUMENT, Value::Bin(doc.clone(), 0xda)),
             ]),
         )?;
         self.browse_open = false;
         std::thread::sleep(SETTLE_FLASH);
-        Ok(())
+        Ok(doc)
     }
 
     pub fn rename_slot(&mut self, setlist: i64, index: i64, name: &str) -> Result<()> {
@@ -546,7 +570,7 @@ impl Session {
             Value::map(vec![
                 (key::SETLIST, Value::int(setlist)),
                 (key::PRESET_INDEX, Value::int(index)),
-                (key::NAME, wire_name(name, 16)),
+                (key::NAME, wire_name(name, PRESET_NAME_MAX)),
             ]),
         )?;
         self.browse_open = false;
@@ -572,7 +596,7 @@ impl Session {
             Value::map(vec![
                 (key::SETLIST, Value::int(setlist)),
                 (key::PRESET_INDEX, Value::int(index)),
-                (key::NAME, wire_name(name, 16)),
+                (key::NAME, wire_name(name, PRESET_NAME_MAX)),
             ]),
         )?;
         std::thread::sleep(SETTLE_FLASH);
@@ -809,7 +833,7 @@ impl Session {
         let sum = audio.chunks_exact(4).fold(0u32, |a, w| a.wrapping_add(u32::from_le_bytes([w[0], w[1], w[2], w[3]])));
         self.browse_open = false;
         self.open_browse();
-        let _ = self.request(op::BEGIN, Value::empty_map());
+        self.begin_write()?;
         if self.wire.slow() {
             let _ = self.idle(Duration::from_millis(400));
         }
@@ -851,24 +875,72 @@ impl Session {
     pub fn rename_snapshot(&mut self, index: i64, name: &str) -> Result<()> {
         self.request(
             op::RENAME_SNAPSHOT,
-            Value::map(vec![(key::SNAPSHOT, Value::int(index)), (key::NAME, wire_name(name, 10))]),
+            Value::map(vec![(key::SNAPSHOT, Value::int(index)), (key::NAME, wire_name(name, SNAPSHOT_NAME_MAX))]),
         )?;
         Ok(())
     }
 }
 
-/// Sanitize a preset or snapshot name to printable ASCII and append the trailing zero byte the pedal expects.
-fn wire_name(name: &str, max_len: usize) -> Value {
-    let trimmed = clean(name);
-    let mut s: String = trimmed
-        .chars()
-        .filter(|c| (' '..='~').contains(c))
-        .take(max_len)
-        .collect();
-    if s.is_empty() {
-        s.push_str("New Preset");
-        s.truncate(max_len);
+/// Longest preset and snapshot names the pedal keeps (IRs: [`IR_NAME_MAX`]).
+pub const PRESET_NAME_MAX: usize = 16;
+pub const SNAPSHOT_NAME_MAX: usize = 10;
+
+/// What a name becomes on the pedal: printable ASCII only (common accented letters lose
+/// their accent rather than disappearing), at most `max_len` characters.
+pub fn pedal_name(name: &str, max_len: usize) -> String {
+    let mut s = String::new();
+    for c in clean(name).chars() {
+        let plain = match c {
+            ' '..='~' => None,
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => Some("a"),
+            'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' => Some("A"),
+            'ç' => Some("c"),
+            'Ç' => Some("C"),
+            'è' | 'é' | 'ê' | 'ë' => Some("e"),
+            'È' | 'É' | 'Ê' | 'Ë' => Some("E"),
+            'ì' | 'í' | 'î' | 'ï' => Some("i"),
+            'Ì' | 'Í' | 'Î' | 'Ï' => Some("I"),
+            'ñ' => Some("n"),
+            'Ñ' => Some("N"),
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' => Some("o"),
+            'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' => Some("O"),
+            'ù' | 'ú' | 'û' | 'ü' => Some("u"),
+            'Ù' | 'Ú' | 'Û' | 'Ü' => Some("U"),
+            'ý' | 'ÿ' => Some("y"),
+            'Ý' => Some("Y"),
+            'ß' => Some("ss"),
+            'æ' => Some("ae"),
+            'Æ' => Some("AE"),
+            'œ' => Some("oe"),
+            'Œ' => Some("OE"),
+            '‘' | '’' => Some("'"),
+            '“' | '”' => Some("\""),
+            '–' | '—' => Some("-"),
+            _ => Some(""),
+        };
+        match plain {
+            None => s.push(c),
+            Some(p) => s.push_str(p),
+        }
     }
+    let mut s: String = s.chars().take(max_len).collect::<String>().trim_end().to_owned();
+    if s.trim().is_empty() {
+        s = "New Preset".chars().take(max_len).collect();
+    }
+    s
+}
+
+/// A note for the person when a name will read differently on the pedal.
+pub fn name_note(name: &str, max_len: usize) -> Option<String> {
+    let on_pedal = pedal_name(name, max_len);
+    (on_pedal != clean(name)).then(|| {
+        format!("On the pedal the name reads \"{on_pedal}\" (it keeps up to {max_len} plain letters, digits and symbols)")
+    })
+}
+
+/// A name as the pedal takes it, with the trailing zero byte it expects.
+fn wire_name(name: &str, max_len: usize) -> Value {
+    let mut s = pedal_name(name, max_len);
     s.push('\0');
     Value::str(&s)
 }
@@ -886,4 +958,21 @@ fn hex(b: &[u8]) -> String {
 /// Names arrive padded with a zero byte and sometimes trailing spaces.
 pub fn clean(s: &str) -> String {
     s.trim_end_matches('\0').trim_end().to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_keep_letters_without_accents() {
+        assert_eq!(pedal_name("Café Lead", PRESET_NAME_MAX), "Cafe Lead");
+        assert_eq!(pedal_name("Señor Crunch Über Long", PRESET_NAME_MAX), "Senor Crunch Ube");
+        assert_eq!(pedal_name("Ritmo ★", PRESET_NAME_MAX), "Ritmo");
+        assert_eq!(pedal_name("   ", PRESET_NAME_MAX), "New Preset");
+        assert_eq!(pedal_name("Clean\0", PRESET_NAME_MAX), "Clean");
+        assert!(name_note("Clean", PRESET_NAME_MAX).is_none());
+        assert!(name_note("Café", PRESET_NAME_MAX).unwrap().contains("\"Cafe\""));
+        assert!(name_note("A very long preset name", PRESET_NAME_MAX).is_some());
+    }
 }

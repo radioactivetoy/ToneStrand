@@ -143,6 +143,16 @@ impl DevicePreset {
         Ok(self.encode_with(table))
     }
 
+    /// The same document (as `encode()` would tell, without encoding anything).
+    pub fn same_as(&self, other: &DevicePreset) -> bool {
+        self.magic.same_as(&other.magic)
+            && self.table_fmt == other.table_fmt
+            && self.table == other.table
+            && self.tone.same_as(&other.tone)
+            && self.rest.len() == other.rest.len()
+            && self.rest.iter().zip(&other.rest).all(|(a, b)| a.same_as(b))
+    }
+
     fn encode_with(&self, table: Vec<u8>) -> Vec<u8> {
         let mut out = self.magic.encode();
         out.extend(Value::Bin(table, self.table_fmt).encode());

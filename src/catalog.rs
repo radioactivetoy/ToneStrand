@@ -171,6 +171,12 @@ pub fn find_dir(custom: Option<&str>) -> Option<PathBuf> {
         candidates.push(PathBuf::from(c));
         candidates.push(PathBuf::from(c).join("res"));
     }
+    // Program Files wherever Windows put it (another drive, a localised name), then the usual places.
+    for var in ["ProgramFiles(x86)", "ProgramFiles", "ProgramW6432"] {
+        if let Some(pf) = std::env::var_os(var) {
+            candidates.push(PathBuf::from(pf).join("Line6").join("HX Edit").join("res"));
+        }
+    }
     for base in ["C:\\Program Files (x86)\\Line6\\HX Edit", "C:\\Program Files\\Line6\\HX Edit"] {
         candidates.push(PathBuf::from(base).join("res"));
     }
