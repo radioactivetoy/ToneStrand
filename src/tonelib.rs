@@ -161,9 +161,8 @@ impl ToneLib {
                     None => entries.len(),
                     Some(f) => entries.iter().filter(|e| e.folder == f).count(),
                 };
-                let mut events = Vec::new();
                 let fl = self.folders.clone();
-                folders::pane(ui, &mut self.pane, &self.root, &fl, &mut self.current, &count, "Everything", &mut events);
+                let events = folders::pane(ui, &mut self.pane, &self.root, &fl, &mut self.current, &count, "Everything");
                 for ev in events {
                     match ev {
                         FolderEvent::Dropped(files, to) => {

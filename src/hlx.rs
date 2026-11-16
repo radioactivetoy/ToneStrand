@@ -5,6 +5,9 @@
 
 use serde_json::{json, Map, Value};
 
+/// One knob value for a block: (parameter id, value type, value).
+pub type ParamValue = (String, i64, f64);
+
 #[derive(Clone, Debug)]
 pub struct HlxBlock {
     pub dsp: String,
@@ -152,20 +155,19 @@ fn free_key(section: &Map<String, Value>, prefix: &str) -> String {
     (0..1000).map(|i| format!("{prefix}{i}")).find(|k| !section.contains_key(k)).unwrap_or_else(|| format!("{prefix}999"))
 }
 
+/// The model going into a block: its id, mono/stereo, knob values, and optionally the
+/// amp's matching cab (id and knob values).
+pub struct NewModel<'a> {
+    pub model: &'a str,
+    pub stereo: bool,
+    pub params: &'a [ParamValue],
+    pub cab: Option<(&'a str, &'a [ParamValue])>,
+}
+
 /// Put a model at a path position (adding a block), or into an existing block
-/// (`key`), with every knob at its default. `cab` adds the amp's matching cab.
-#[allow(clippy::too_many_arguments)]
-pub fn place_model(
-    doc: &mut Value,
-    dsp: &str,
-    path: i64,
-    position: i64,
-    key: Option<&str>,
-    model: &str,
-    stereo: bool,
-    params: &[(String, i64, f64)],
-    cab: Option<(&str, &[(String, i64, f64)])>,
-) -> Option<String> {
+/// (`key`), with every knob at its default.
+pub fn place_model(doc: &mut Value, dsp: &str, path: i64, position: i64, key: Option<&str>, new: &NewModel) -> Option<String> {
+    let NewModel { model, stereo, params, cab } = *new;
     let tone = doc.pointer_mut("/data/tone")?.as_object_mut()?;
     let section = tone.entry(dsp.to_owned()).or_insert_with(|| json!({})).as_object_mut()?;
     let k = key.map(str::to_owned).unwrap_or_else(|| free_key(section, "block"));
@@ -317,7 +319,7 @@ pub fn set_lower_slots(doc: &mut Value, dsp: &str, count: i64) {
 
 /// Make sure a path that uses its lower lane has a split and a merge around it
 /// (and the matching topology), with every split/merge knob at its default.
-pub fn ensure_split(doc: &mut Value, dsp: &str, defaults: &dyn Fn(&str) -> Vec<(String, i64, f64)>) {
+pub fn ensure_split(doc: &mut Value, dsp: &str, defaults: &dyn Fn(&str) -> Vec<ParamValue>) {
     let lane_b: Vec<i64> = blocks(doc).iter().filter(|b| b.dsp == dsp && b.path == 1).map(|b| b.position).collect();
     if lane_b.is_empty() {
         return;
@@ -511,12 +513,12 @@ pub fn split_active(doc: &Value, dsp: &str) -> bool {
     doc.pointer(&format!("/data/tone/global/@topology{}", dsp_index(dsp))).and_then(Value::as_str).unwrap_or("A") != "A"
 }
 
-pub fn add_split(doc: &mut Value, dsp: &str, defaults: &dyn Fn(&str) -> Vec<(String, i64, f64)>) {
+pub fn add_split(doc: &mut Value, dsp: &str, defaults: &dyn Fn(&str) -> Vec<ParamValue>) {
     add_split_at(doc, dsp, None, defaults);
 }
 
 /// Split the path before position `at` (the first free place when None), merging one place later.
-pub fn add_split_at(doc: &mut Value, dsp: &str, at: Option<i64>, defaults: &dyn Fn(&str) -> Vec<(String, i64, f64)>) {
+pub fn add_split_at(doc: &mut Value, dsp: &str, at: Option<i64>, defaults: &dyn Fn(&str) -> Vec<ParamValue>) {
     // A split and merge left in the file from a single-lane path start over where they're needed.
     if split_of(doc, dsp).is_some() && !split_active(doc, dsp) {
         if let Some(section) = doc.pointer_mut(&format!("/data/tone/{dsp}")).and_then(Value::as_object_mut) {
@@ -552,7 +554,7 @@ pub fn remove_split(doc: &mut Value, dsp: &str) {
     }
 }
 
-fn make_split(doc: &mut Value, dsp: &str, first: i64, merge_at: i64, defaults: &dyn Fn(&str) -> Vec<(String, i64, f64)>) {
+fn make_split(doc: &mut Value, dsp: &str, first: i64, merge_at: i64, defaults: &dyn Fn(&str) -> Vec<ParamValue>) {
     let last = merge_at - 1;
     let Some(section) = doc.pointer_mut(&format!("/data/tone/{dsp}")).and_then(Value::as_object_mut) else { return };
     if !section.contains_key("split") {

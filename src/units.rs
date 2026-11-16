@@ -166,7 +166,7 @@ mod tests {
 
         // Extending the parallel lane to hold a second effect reduces main_cols to 6 (6 + 2 = 8 total slots).
         let col = hlx::extend_lower(&mut doc, "dsp0", fam.positions, fam.max_blocks, fam.shared_slots).unwrap();
-        hlx::place_model(&mut doc, "dsp0", 1, col as i64, None, "HD2_DelaySimpleDelay", false, &[], None);
+        hlx::place_model(&mut doc, "dsp0", 1, col as i64, None, &hlx::NewModel { model: "HD2_DelaySimpleDelay", stereo: false, params: &[], cab: None });
         hlx::fit_lanes(&mut doc, "dsp0", fam.positions, fam.max_blocks, fam.shared_slots);
         let main_cols2 = hlx::main_cols_for(&doc, "dsp0", fam.positions, fam.max_blocks, fam.shared_slots);
         let lower_slots2 = hlx::lower_slots_of(&doc, "dsp0");
@@ -187,7 +187,7 @@ mod tests {
         hlx::move_split_or_join(&mut doc, "dsp0", false, 1, fam.positions, fam.max_blocks, fam.shared_slots);
         for _ in 0..3 {
             let c = hlx::extend_lower(&mut doc, "dsp0", fam.positions, fam.max_blocks, fam.shared_slots).unwrap();
-            hlx::place_model(&mut doc, "dsp0", 1, c as i64, None, "HD2_DelaySimpleDelay", false, &[], None);
+            hlx::place_model(&mut doc, "dsp0", 1, c as i64, None, &hlx::NewModel { model: "HD2_DelaySimpleDelay", stereo: false, params: &[], cab: None });
         }
         hlx::fit_lanes(&mut doc, "dsp0", fam.positions, fam.max_blocks, fam.shared_slots);
         let lower_slots5 = hlx::lower_slots_of(&doc, "dsp0");
@@ -201,7 +201,7 @@ mod tests {
     fn helix_to_stomp_checks_and_renumbers() {
         // A Helix preset with a knob on footswitch 2 becomes an HX Stomp preset with it renumbered.
         let mut doc = hlx::blank_for("t", 2162689);
-        hlx::place_model(&mut doc, "dsp0", 0, 0, None, "HD2_DistScream808", false, &[("Gain".into(), 1, 0.5)], None);
+        hlx::place_model(&mut doc, "dsp0", 0, 0, None, &hlx::NewModel { model: "HD2_DistScream808", stereo: false, params: &[("Gain".into(), 1, 0.5)], cab: None });
         let b = hlx::blocks(&doc).into_iter().next().unwrap();
         snapshots::assign(&mut doc, &b, "Gain", Some(Source::Footswitch(2)), 0.0, 1.0, None);
         assert_eq!(doc.pointer("/data/tone/controller/dsp0/block0/Gain/@controller").unwrap(), &json!(7));
@@ -212,7 +212,7 @@ mod tests {
 
         // A block on Path 2 cannot go to a one-path unit: refused, nothing changed.
         let mut two = hlx::blank_for("t", 2162689);
-        hlx::place_model(&mut two, "dsp1", 0, 0, None, "HD2_DistScream808", false, &[], None);
+        hlx::place_model(&mut two, "dsp1", 0, 0, None, &hlx::NewModel { model: "HD2_DistScream808", stereo: false, params: &[], cab: None });
         let before = two.clone();
         assert!(convert(&mut two, 2162694, None).is_err());
         assert_eq!(two, before);

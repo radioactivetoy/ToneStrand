@@ -140,7 +140,7 @@ fn resample(x: &[f64], rate: u32, out: &mut [f32]) {
 
 /// The pedal's IR bytes as a 48 kHz mono 32-bit float .wav.
 pub fn audio_to_wav(audio: &[u8]) -> Vec<u8> {
-    let samples: Vec<f32> = audio.chunks_exact(4).map(|w| f32::from_le_bytes([w[0], w[1], w[2], w[3]])).collect();
+    let samples: Vec<f32> = audio.as_chunks::<4>().0.iter().map(|w| f32::from_le_bytes(*w)).collect();
     crate::nam::wav_bytes(&samples)
 }
 

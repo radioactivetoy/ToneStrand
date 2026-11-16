@@ -125,7 +125,8 @@ fn draw_block(ui: &egui::Ui, rect: Rect, cell: &Cell, selected: bool, hovered: b
             }
         }
         Cell::Block { title, subtitle, colour, on, detail, category, symbol } if studio() => {
-            draw_studio_block(ui, rect, title, subtitle, *colour, *on, detail.as_deref(), category, symbol, selected, hovered);
+            let look = StudioBlock { title, subtitle, colour: *colour, on: *on, detail: detail.as_deref(), category, symbol, selected, hovered };
+            draw_studio_block(ui, rect, look);
         }
         Cell::Block { title, subtitle, colour, on, detail, category, symbol } => {
             // A soft shadow; a little lift while hovered.
@@ -193,22 +194,23 @@ fn draw_block(ui: &egui::Ui, rect: Rect, cell: &Cell, selected: bool, hovered: b
     }
 }
 
-/// The Studio look's effect box: a colourful gradient in the effect type's colour, its icon
-/// tile with the type beside it, the name in bold at the bottom, and the on/off light.
-#[allow(clippy::too_many_arguments)]
-fn draw_studio_block(
-    ui: &egui::Ui,
-    rect: Rect,
-    title: &str,
-    subtitle: &str,
+/// What a Studio effect box shows.
+struct StudioBlock<'a> {
+    title: &'a str,
+    subtitle: &'a str,
     colour: Color32,
     on: bool,
-    detail: Option<&str>,
-    category: &str,
-    symbol: &str,
+    detail: Option<&'a str>,
+    category: &'a str,
+    symbol: &'a str,
     selected: bool,
     hovered: bool,
-) {
+}
+
+/// The Studio look's effect box: a colourful gradient in the effect type's colour, its icon
+/// tile with the type beside it, the name in bold at the bottom, and the on/off light.
+fn draw_studio_block(ui: &egui::Ui, rect: Rect, look: StudioBlock) {
+    let StudioBlock { title, subtitle, colour, on, detail, category, symbol, selected, hovered } = look;
     let p = ui.painter();
     // Sends, returns and FX loops aren't effects: they're drawn as a loop off the line.
     if category == "Send/Return" {

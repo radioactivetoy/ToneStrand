@@ -204,7 +204,7 @@ impl BoxWire {
         if proto != 0 {
             return Err(format!("the box speaks relay protocol {proto}; this app knows 0"));
         }
-        if v.get("pid").map_or(true, |p| p.is_null()) {
+        if v.get("pid").is_none_or(|p| p.is_null()) {
             return Err("no pedal is plugged into the box".into());
         }
         let product = v
@@ -238,7 +238,7 @@ impl Wire for BoxWire {
     fn send(&mut self, bytes: &[u8]) -> Result<(), String> {
         self.last_sent = Instant::now();
         self.ws
-            .send(tungstenite::Message::Binary(bytes.to_vec().into()))
+            .send(tungstenite::Message::Binary(bytes.to_vec()))
             .map_err(|e| format!("lost the box: {e}"))
     }
 

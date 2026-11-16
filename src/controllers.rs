@@ -71,19 +71,9 @@ fn add_menu(ui: &mut egui::Ui, json: &serde_json::Value, cat: Option<&Catalog>, 
 }
 
 /// One assigned knob: its name, the low and high ends, and a remove button.
-#[allow(clippy::too_many_arguments)]
-fn knob_row(
-    ui: &mut egui::Ui,
-    json: &mut serde_json::Value,
-    cat: Option<&Catalog>,
-    b: &HlxBlock,
-    knob: &str,
-    src: Source,
-    lo: f64,
-    hi: f64,
-    cc: Option<i64>,
-    dirty: &mut bool,
-) {
+fn knob_row(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catalog>, a: &snapshots::Assignment, dirty: &mut bool) {
+    let snapshots::Assignment { block: b, knob, src, lo, hi, cc } = a;
+    let (knob, src, lo, hi, cc) = (knob.as_str(), *src, *lo, *hi, *cc);
     let (name, min, max) = knob_meta(cat, b, knob);
     ui.horizontal(|ui| {
         ui.label(RichText::new(format!("{} › {}", block_name(cat, b), name)).strong());
@@ -196,9 +186,9 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
                                     }
                                 });
                             }
-                            for (b, knob, src, lo, hi, cc) in assignments.iter().filter(|a| a.2 == Source::Footswitch(n)) {
+                            for a in assignments.iter().filter(|a| a.src == Source::Footswitch(n)) {
                                 any = true;
-                                knob_row(ui, json, cat, b, knob, *src, *lo, *hi, *cc, dirty);
+                                knob_row(ui, json, cat, a, dirty);
                             }
                             if !any {
                                 ui.label(RichText::new("unassigned").color(MUTED));
@@ -224,12 +214,12 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
                         ui.label(RichText::new(format!("EXP {n}")).strong().color(ORANGE));
                         ui.add_space(8.0);
                         ui.vertical(|ui| {
-                            let list: Vec<_> = assignments.iter().filter(|a| a.2 == Source::Exp(n)).collect();
+                            let list: Vec<_> = assignments.iter().filter(|a| a.src == Source::Exp(n)).collect();
                             if list.is_empty() {
                                 ui.label(RichText::new("unassigned").color(MUTED));
                             }
-                            for (b, knob, src, lo, hi, cc) in list {
-                                knob_row(ui, json, cat, b, knob, *src, *lo, *hi, *cc, dirty);
+                            for a in list {
+                                knob_row(ui, json, cat, a, dirty);
                             }
                             if let Some((b, Some(k))) = add_menu(ui, json, cat, "+ Add knob", false) {
                                 let (_, lo, hi) = knob_meta(cat, &b, &k);
@@ -242,12 +232,12 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
                 }
             }
             Tab::Snapshots => {
-                let list: Vec<_> = assignments.iter().filter(|a| a.2 == Source::Snapshots).collect();
+                let list: Vec<_> = assignments.iter().filter(|a| a.src == Source::Snapshots).collect();
                 if list.is_empty() {
                     ui.label(RichText::new("No knob is stored per snapshot yet. Turn a knob while a snapshot is picked, or add one here.").color(MUTED));
                 }
-                for (b, knob, src, lo, hi, cc) in list {
-                    knob_row(ui, json, cat, b, knob, *src, *lo, *hi, *cc, dirty);
+                for a in list {
+                    knob_row(ui, json, cat, a, dirty);
                 }
                 if let Some((b, Some(k))) = add_menu(ui, json, cat, "+ Add knob", false) {
                     let (_, lo, hi) = knob_meta(cat, &b, &k);
@@ -257,12 +247,12 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
                 }
             }
             Tab::Midi => {
-                let list: Vec<_> = assignments.iter().filter(|a| a.2 == Source::Midi).collect();
+                let list: Vec<_> = assignments.iter().filter(|a| a.src == Source::Midi).collect();
                 if list.is_empty() {
                     ui.label(RichText::new("unassigned").color(MUTED));
                 }
-                for (b, knob, src, lo, hi, cc) in list {
-                    knob_row(ui, json, cat, b, knob, *src, *lo, *hi, *cc, dirty);
+                for a in list {
+                    knob_row(ui, json, cat, a, dirty);
                 }
                 if let Some((b, Some(k))) = add_menu(ui, json, cat, "+ Add knob", false) {
                     let (_, lo, hi) = knob_meta(cat, &b, &k);

@@ -645,14 +645,24 @@ mod tests {
     }
 }
 
-/// Every knob assignment in the preset: (block, knob, source, low, high, CC).
-pub fn all_assignments(doc: &Value) -> Vec<(HlxBlock, String, Source, f64, f64, Option<i64>)> {
+/// One knob on a controller.
+pub struct Assignment {
+    pub block: HlxBlock,
+    pub knob: String,
+    pub src: Source,
+    pub lo: f64,
+    pub hi: f64,
+    pub cc: Option<i64>,
+}
+
+/// Every knob assignment in the preset.
+pub fn all_assignments(doc: &Value) -> Vec<Assignment> {
     let mut out = Vec::new();
     for b in hlx::blocks(doc) {
         let Some(knobs) = doc.pointer(&format!("/data/tone/controller/{}/{}", b.dsp, b.key)).and_then(Value::as_object) else { continue };
         for knob in knobs.keys() {
             if let Some((src, lo, hi, cc)) = controller(doc, &b, knob) {
-                out.push((b.clone(), knob.clone(), src, lo, hi, cc));
+                out.push(Assignment { block: b.clone(), knob: knob.clone(), src, lo, hi, cc });
             }
         }
     }
@@ -689,7 +699,7 @@ mod unit_tests {
 
         // A Helix preset with a block on the lower lane gets a split and a merge.
         let mut doc = helix;
-        hlx::place_model(&mut doc, "dsp0", 1, 2, None, "HD2_Chorus70sChorus", false, &[], None);
+        hlx::place_model(&mut doc, "dsp0", 1, 2, None, &hlx::NewModel { model: "HD2_Chorus70sChorus", stereo: false, params: &[], cab: None });
         hlx::ensure_split(&mut doc, "dsp0", &|_| Vec::new());
         let (_, sp, jp) = hlx::split_of(&doc, "dsp0").unwrap();
         assert_eq!((sp, jp), (2, 3));

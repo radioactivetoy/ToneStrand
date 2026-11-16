@@ -785,7 +785,8 @@ fn c_printf(pattern: &str, val: f64) -> String {
     if !clean.contains('%') {
         return clean.replace('\x01', "%");
     }
-    let specs: &[(&str, fn(f64) -> String)] = &[
+    type Format = fn(f64) -> String;
+    let specs: &[(&str, Format)] = &[
         ("%+.0f", |x| format!("{x:+.0}")),
         ("%+.1f", |x| format!("{x:+.1}")),
         ("%+.2f", |x| format!("{x:+.2}")),

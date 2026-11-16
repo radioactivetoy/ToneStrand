@@ -19,6 +19,8 @@ mod irs;
 mod selftest;
 mod modelinfo;
 mod icons;
+#[cfg(test)]
+mod fakepedal;
 mod files;
 mod folders;
 mod backup;

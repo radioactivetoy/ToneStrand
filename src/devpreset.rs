@@ -583,6 +583,16 @@ pub struct Ctl {
     pub snaps: Vec<Option<(bool, Value)>>,
 }
 
+impl Ctl {
+    /// A new knob assignment with no range, CC or snapshot values yet; set those next.
+    pub fn knob(controller: i64, wire: i64, index: usize) -> Ctl {
+        Ctl { controller, kind: 0, wire, index, cab: false, min: Value::Nil, max: Value::Nil, cc: 0, snapshot_disable: false, raw: Value::Nil, snaps: Vec::new() }
+    }
+}
+
+/// A footswitch record while sorting: (primary flag, kind order, ordinal) and the record.
+type FootswitchEntry = ((i64, i64, i64), Vec<(i64, Value)>);
+
 impl DevicePreset {
     /// Every controller assignment, in the pedal's own order.
     pub fn controllers(&self) -> Vec<Ctl> {
@@ -757,13 +767,6 @@ impl DevicePreset {
         } else {
             s.values.get(index).cloned()
         }
-    }
-}
-
-impl Ctl {
-    /// A new knob assignment (written with the preset).
-    pub fn new_knob(controller: i64, wire: i64, index: usize, cab: bool, min: Value, max: Value, cc: i64, snaps: Vec<Option<(bool, Value)>>) -> Ctl {
-        Ctl { controller, kind: 0, wire, index, cab, min, max, cc, snapshot_disable: false, raw: Value::Nil, snaps }
     }
 }
 
@@ -1046,7 +1049,7 @@ impl DevicePreset {
         // Tone key 3: footswitches (block bypass, and knobs on a footswitch).
         let Some(switches) = self.tone.at(&[3, 8]).and_then(Value::as_array).map(|a| a.len()) else { return };
         // (sort keys: primary flag, kind order, ordinal), record
-        let mut per: Vec<Vec<((i64, i64, i64), Vec<(i64, Value)>)>> = vec![Vec::new(); switches];
+        let mut per: Vec<Vec<FootswitchEntry>> = vec![Vec::new(); switches];
         let wrap = |n: &serde_json::Map<String, serde_json::Value>, inner: Value| -> Vec<(i64, Value)> {
             let custom = n.get("@fs_customlabel").and_then(serde_json::Value::as_str).unwrap_or("").to_owned();
             let colour = n.get("@fs_customcolor").and_then(serde_json::Value::as_i64).unwrap_or(0);
@@ -1347,7 +1350,7 @@ mod editing_tests {
         let mut doc = crate::hlx::blank("t");
         let n = cat.number_of_symbol("HD2_DistScream808Mono").unwrap();
         let (m, st) = cat.hlx_model(n).unwrap();
-        crate::hlx::place_model(&mut doc, "dsp0", 0, 2, None, &m, st, &cat.default_values(n), None).unwrap();
+        crate::hlx::place_model(&mut doc, "dsp0", 0, 2, None, &crate::hlx::NewModel { model: &m, stereo: st, params: &cat.default_values(n), cab: None }).unwrap();
         let b = crate::hlx::blocks(&doc).into_iter().next().unwrap();
         assert_eq!(b.model, "HD2_DistScream808");
         assert_eq!(b.position, 2);

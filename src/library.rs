@@ -190,9 +190,8 @@ impl Library {
                     None => entries.len(),
                     Some(f) => entries.iter().filter(|e| e.setlist == f).count(),
                 };
-                let mut events = Vec::new();
                 let folders = self.setlists.clone();
-                crate::folders::pane(ui, &mut self.folders_pane, &self.root, &folders, &mut self.current, &count, "All presets", &mut events);
+                let events = crate::folders::pane(ui, &mut self.folders_pane, &self.root, &folders, &mut self.current, &count, "All presets");
                 for ev in events {
                     match ev {
                         crate::folders::FolderEvent::Dropped(files, to) => {

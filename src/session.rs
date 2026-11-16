@@ -15,12 +15,14 @@ const HELLO_FIELD: u32 = 0x2100_0100;
 const HELLO_TAIL: [u8; 4] = [0x00, 0x10, 0x00, 0x00];
 /// Stream bytes per frame; the pedal chunks its own large transfers the same way.
 const CHUNK: usize = 256;
-const HANDSHAKE_WAIT: Duration = Duration::from_secs(2);
-const REPLY_IDLE: Duration = Duration::from_secs(6);
-const REPLY_MAX: Duration = Duration::from_secs(10);
-const BETWEEN_CHUNKS: Duration = Duration::from_millis(80);
+// The tests talk to a fake pedal (fakepedal.rs) that answers at once, so they use short
+// waits; the real values are the ones the pedal needs.
+const HANDSHAKE_WAIT: Duration = Duration::from_millis(if cfg!(test) { 300 } else { 2000 });
+const REPLY_IDLE: Duration = Duration::from_millis(if cfg!(test) { 300 } else { 6000 });
+const REPLY_MAX: Duration = Duration::from_millis(if cfg!(test) { 600 } else { 10_000 });
+const BETWEEN_CHUNKS: Duration = Duration::from_millis(if cfg!(test) { 2 } else { 80 });
 /// Pause after a flash write so commits never stack.
-pub const SETTLE_FLASH: Duration = Duration::from_millis(750);
+pub const SETTLE_FLASH: Duration = Duration::from_millis(if cfg!(test) { 5 } else { 750 });
 /// A User IR: 2,048 samples of 32-bit float at 48 kHz.
 pub const IR_AUDIO_BYTES: usize = 8192;
 pub const IR_SLOTS: i64 = 128;
@@ -830,7 +832,7 @@ impl Session {
             return Err(SessionError::Protocol(format!("there is no IR slot {}", slot + 1)));
         }
         // The checksum: the sum of the audio's little-endian 32-bit words.
-        let sum = audio.chunks_exact(4).fold(0u32, |a, w| a.wrapping_add(u32::from_le_bytes([w[0], w[1], w[2], w[3]])));
+        let sum = audio.as_chunks::<4>().0.iter().fold(0u32, |a, w| a.wrapping_add(u32::from_le_bytes(*w)));
         self.browse_open = false;
         self.open_browse();
         self.begin_write()?;

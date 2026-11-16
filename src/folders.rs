@@ -90,7 +90,6 @@ pub enum FolderEvent {
 /// The folder list: "All", then each folder (indented by depth) with a count,
 /// a menu (new folder inside, rename, show in Explorer, remove when empty), and
 /// files dropped on it. `current` is None for "All", Some("") for the top folder.
-#[allow(clippy::too_many_arguments)]
 pub fn pane(
     ui: &mut egui::Ui,
     pane: &mut FolderPane,
@@ -99,8 +98,9 @@ pub fn pane(
     current: &mut Option<String>,
     count: &dyn Fn(Option<&str>) -> usize,
     all_label: &str,
-    events: &mut Vec<FolderEvent>,
-) {
+) -> Vec<FolderEvent> {
+    let mut out = Vec::new();
+    let events = &mut out;
     let row = |ui: &mut egui::Ui, label: String, selected: bool, depth: usize| -> egui::Response {
         ui.horizontal(|ui| {
             ui.add_space(depth as f32 * 14.0);
@@ -240,6 +240,7 @@ pub fn pane(
             }
         });
     }
+    out
 }
 
 fn ui_paint_drop(r: &egui::Response) {
