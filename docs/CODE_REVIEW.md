@@ -12,6 +12,10 @@ Severity: **High** = can lose the owner's data or break a project rule;
 
 ## 1. Safety and data-loss issues (High)
 
+> **Status:** H1–H8 fixed on branch `fix/data-safety` (see its commit). H4 (IR backups) and
+> the pedal-write paths haven't been tried on hardware yet. The window-close prompt was
+> checked by screenshot only, not by clicking the window's close button.
+
 | # | Where | Problem | Suggested fix |
 |---|---|---|---|
 | H1 | `src/device.rs:491` | `backup_slot` returns `Ok(None)` and **lets the write go ahead** when `BACKUP_DIR` is unset. Ground rule 1 says every slot write is preceded by a backup; here the guarantee depends on `scan_library()` having run first. | Fail closed: return `Err("no backup folder set; nothing was written")` when the dir is `None`. Better, pass the backup dir in `Cmd::WriteSlot`/`WriteHlx` instead of a global. |

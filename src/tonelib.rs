@@ -214,7 +214,7 @@ impl ToneLib {
                         if let Some(files) = rfd::FileDialog::new().add_filter("IRs and NAM captures", &["wav", "nam"]).pick_files() {
                             let dir = self.folder();
                             let _ = std::fs::create_dir_all(&dir);
-                            let n = files.iter().filter(|f| f.file_name().is_some_and(|name| std::fs::copy(f, dir.join(name)).is_ok())).count();
+                            let n = files.iter().filter(|f| crate::files::copy_into(f, &dir).is_ok()).count();
                             actions.push(Action::Note(true, format!("Imported {n} file{}", if n == 1 { "" } else { "s" })));
                             rescan = true;
                         }

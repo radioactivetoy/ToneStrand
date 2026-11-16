@@ -337,7 +337,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                                 crate::proto::slot_label(i),
                                 sanitize(&n)
                             ));
-                            std::fs::write(&file, blob).map_err(|e| e.to_string())?;
+                            crate::files::write_atomic(&file, &blob).map_err(|e| e.to_string())?;
                             saved += 1;
                         }
                     }
@@ -374,7 +374,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     let template = s.read_current().map_err(|e| e.to_string())?;
                     let template = crate::devpreset::DevicePreset::parse(&template)?;
                     let (doc, notes) = crate::devpreset::DevicePreset::from_hlx(&template, &json, &cat).map_err(|e| format!("Can't convert it: {e}"))?;
-                    let bytes = doc.encode();
+                    let bytes = doc.encode_checked()?;
                     send(Event::Busy("Backing up the slot...".into()));
                     if let Some(note) = backup_slot(s, sl, index)? {
                         send(Event::Info(note));
@@ -415,6 +415,13 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                 Cmd::ImportIrs(items) => {
                     let total = items.len();
                     let mut done = 0;
+                    send(Event::Busy("Backing up the IR slots...".into()));
+                    let in_use = s.list_irs().map_err(|e| format!("can't read the IR list to back it up ({e}); nothing was written"))?;
+                    for (slot, _, _) in &items {
+                        if let Some(note) = backup_ir(s, *slot, &in_use)? {
+                            send(Event::Info(note));
+                        }
+                    }
                     for (i, (slot, name, audio)) in items.into_iter().enumerate() {
                         send(Event::Busy(format!("Writing IR {}/{total} to slot {}...", i + 1, slot + 1)));
                         if let Err(e) = s.import_ir(slot, &name, &audio) {
@@ -435,7 +442,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                         send(Event::Busy(format!("Downloading IR {}/{total}...", i + 1)));
                         let audio = s.ir_audio(*slot).map_err(|e| e.to_string())?;
                         let file = folder.join(crate::irs::file_name(*slot, name));
-                        std::fs::write(&file, crate::irs::audio_to_wav(&audio)).map_err(|e| e.to_string())?;
+                        crate::files::write_atomic(&file, &crate::irs::audio_to_wav(&audio)).map_err(|e| e.to_string())?;
                     }
                     send(Event::Done(format!("Downloaded {total} IR{} to {}", if total == 1 { "" } else { "s" }, folder.display())));
                 }
@@ -458,6 +465,13 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     send(Event::IrKinds(out));
                 }
                 Cmd::DeleteIrs(slots) => {
+                    send(Event::Busy("Backing up the IR slots...".into()));
+                    let in_use = s.list_irs().map_err(|e| format!("can't read the IR list to back it up ({e}); nothing was removed"))?;
+                    for slot in &slots {
+                        if let Some(note) = backup_ir(s, *slot, &in_use)? {
+                            send(Event::Info(note));
+                        }
+                    }
                     for (i, slot) in slots.iter().enumerate() {
                         send(Event::Busy(format!("Removing IR {}/{}...", i + 1, slots.len())));
                         s.delete_ir(*slot).map_err(|e| e.to_string())?;
@@ -486,16 +500,48 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
 /// Where a slot's old preset is kept before it's overwritten (set by the window).
 pub static BACKUP_DIR: std::sync::Mutex<Option<std::path::PathBuf>> = std::sync::Mutex::new(None);
 
+/// The backup folder, or an error that stops the write: nothing is written to the pedal
+/// unless what it replaces can be kept first.
+fn backup_dir() -> Result<std::path::PathBuf, String> {
+    let dir = BACKUP_DIR
+        .lock()
+        .ok()
+        .and_then(|d| d.clone())
+        .ok_or("there is no folder to keep a backup in yet; nothing was written")?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("can't make the backup folder ({e}); nothing was written"))?;
+    Ok(dir)
+}
+
+fn stamp() -> u64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+}
+
 /// Keep a copy of what a slot holds before writing over it. Returns a note for the person.
 fn backup_slot(s: &mut Session, setlist: i64, index: i64) -> Result<Option<String>, String> {
-    let Some(dir) = BACKUP_DIR.lock().ok().and_then(|d| d.clone()) else { return Ok(None) };
+    let dir = backup_dir()?;
     let Some(old) = s.fetch_slot(setlist, index).map_err(|e| e.to_string())? else { return Ok(None) };
     let name = s.presets(setlist).ok().and_then(|p| p.get(index.max(0) as usize).cloned()).unwrap_or_default();
-    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    std::fs::create_dir_all(&dir).map_err(|e| format!("can't keep a backup of the slot ({e}); nothing was written"))?;
-    let file = dir.join(format!("{} {} - before overwrite {stamp}.hxpreset", crate::proto::slot_label(index.max(0) as usize), sanitize(&name)));
-    std::fs::write(&file, old).map_err(|e| format!("can't keep a backup of the slot ({e}); nothing was written"))?;
+    let file = crate::files::unique_path(
+        &dir,
+        &format!("{} {} - before overwrite {}.hxpreset", crate::proto::slot_label(index.max(0) as usize), sanitize(&name), stamp()),
+    );
+    crate::files::write_atomic(&file, &old).map_err(|e| format!("can't keep a backup of the slot ({e}); nothing was written"))?;
     Ok(Some(format!("The old \"{name}\" was kept in {}", file.display())))
+}
+
+/// Keep a copy of a User IR slot before it is replaced or removed (`IRs` in the backup
+/// folder). Empty slots need nothing. Returns a note for the person.
+fn backup_ir(s: &mut Session, slot: i64, in_use: &[(i64, String)]) -> Result<Option<String>, String> {
+    let dir = backup_dir()?.join("IRs");
+    let Some((_, name)) = in_use.iter().find(|(n, _)| *n == slot) else { return Ok(None) };
+    let audio = s.ir_audio(slot).map_err(|e| format!("can't read IR slot {} to back it up ({e}); nothing was changed", slot + 1))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("can't make the IR backup folder ({e}); nothing was changed"))?;
+    let base = crate::irs::file_name(slot, name);
+    let stem = base.strip_suffix(".wav").unwrap_or(&base);
+    let file = crate::files::unique_path(&dir, &format!("{stem} - before overwrite {}.wav", stamp()));
+    crate::files::write_atomic(&file, &crate::irs::audio_to_wav(&audio))
+        .map_err(|e| format!("can't keep a backup of IR slot {} ({e}); nothing was changed", slot + 1))?;
+    Ok(Some(format!("The old IR \"{name}\" was kept in {}", file.display())))
 }
 
 pub fn sanitize(name: &str) -> String {

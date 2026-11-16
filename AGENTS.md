@@ -8,7 +8,7 @@ Read this first, then `docs/ARCHITECTURE.md`. The protocol and formats are in
 ```sh
 cargo build                     # debug (optimised enough to use)
 cargo build --release
-cargo test                      # 28 unit tests; must stay green
+cargo test                      # 33 unit tests; must stay green
 cargo run -- --screenshot shot.png   # render the window to a PNG and exit
 ```
 
@@ -18,7 +18,12 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 ## Ground rules
 
 1. **The pedal is the person's instrument. Never risk their presets or IRs.**
-   - Every write to a slot is preceded by a backup of that slot (`device::backup_slot`).
+   - Every write to a slot is preceded by a backup of that slot (`device::backup_slot`), and
+     every IR import or delete by a backup of the IR (`device::backup_ir`). If no backup can
+     be made, nothing is written.
+   - Documents go to the pedal through `DevicePreset::encode_checked`, never `encode`.
+   - Files on disk are written with `files::write_atomic`; new files that must not replace
+     an existing one get their name from `files::unique_path`.
    - Wait 750 ms after flash writes (`session::SETTLE_FLASH`); don't stack writes.
    - If a transfer fails half way, stop sending (the pedal may be mid-transfer); the
      self-test does this via `Run::lost`.

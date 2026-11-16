@@ -148,7 +148,7 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
         match s.fetch_slot(sl, i as i64) {
             Ok(Some(blob)) => {
                 let file = plan.folder.join(format!("{} {}.hxpreset", slot_label(i), sanitize(n)));
-                if std::fs::write(&file, &blob).is_ok() {
+                if crate::files::write_atomic(&file, &blob).is_ok() {
                     saved += 1;
                 } else {
                     backup_ok = false;

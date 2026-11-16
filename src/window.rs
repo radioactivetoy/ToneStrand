@@ -58,6 +58,18 @@ impl Doc {
     fn is_live(&self) -> bool {
         matches!(self.kind, DocKind::Device { origin: Origin::Live { .. }, .. })
     }
+
+    /// Closing it would lose edits. A live preset's edits are already on the pedal (its
+    /// edit buffer), so closing its tab loses nothing.
+    fn needs_save(&self) -> bool {
+        self.dirty && !self.is_live()
+    }
+}
+
+/// What is waiting for "save your changes?" to be answered.
+enum CloseAsk {
+    Tab(usize),
+    Quit,
 }
 
 // --------------------------------------------------------------------- state ---
@@ -135,6 +147,9 @@ pub struct App {
     view: View,
     lib: Library,
     pending_delete: Option<PathBuf>,
+    close_ask: Option<CloseAsk>,
+    /// The person chose to quit even with unsaved changes.
+    quit_ok: bool,
     last_error: Option<String>,
     /// The unit presets are made and converted for: detected from the pedal,
     /// or picked by the person when none is connected.
@@ -177,7 +192,7 @@ struct TestsState {
 
 impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, screenshot: Option<PathBuf>) -> App {
-        let settings = Settings::load();
+        let (settings, settings_note) = Settings::load_reporting();
         theme::set_accent(settings.accent);
         theme::apply(&cc.egui_ctx);
         let (tx, box_rx) = channel();
@@ -227,6 +242,8 @@ impl App {
             view: View::Editor,
             lib: Library::new(PathBuf::new()),
             pending_delete: None,
+            close_ask: None,
+            quit_ok: false,
             last_error: None,
             unit: 2162694,
             unit_report: None,
@@ -296,6 +313,9 @@ impl App {
         }
         app.scan_library();
         app.note(LogLevel::Info, "Ready. Plug in a pedal or pick a Helrig Box to start.");
+        if let Some(n) = settings_note {
+            app.note(LogLevel::Bad, n);
+        }
         app
     }
 
@@ -361,6 +381,9 @@ impl App {
     // ------------------------------------------------------------ background ---
 
     fn poll(&mut self, ctx: &egui::Context) {
+        if let Some(e) = boxes::take_save_error() {
+            self.note(LogLevel::Bad, e);
+        }
         if self.usb_scanned.is_none_or(|t| t.elapsed() > Duration::from_secs(3)) {
             self.usb = wire::list_usb_pedals();
             self.usb_scanned = Some(Instant::now());
@@ -533,7 +556,7 @@ impl App {
                         .add_filter("Pedal preset", &["hxpreset"])
                         .save_file()
                     {
-                        match std::fs::write(&p, &blob) {
+                        match crate::files::write_atomic(&p, &blob) {
                             Ok(_) => self.note(LogLevel::Good, format!("Saved {}", p.display())),
                             Err(e) => self.note(LogLevel::Bad, format!("Could not save: {e}")),
                         }
@@ -720,7 +743,7 @@ impl App {
             doc.path.clone()
         };
         let Some(path) = path else { return };
-        match std::fs::write(&path, bytes) {
+        match crate::files::write_atomic(&path, &bytes) {
             Ok(_) => {
                 doc.path = Some(path.clone());
                 doc.dirty = false;
@@ -1555,9 +1578,104 @@ impl App {
             }
         });
         if let Some(i) = close {
-            self.docs.remove(i);
-            if self.active >= self.docs.len() {
-                self.active = self.docs.len().saturating_sub(1);
+            if self.docs.get(i).is_some_and(Doc::needs_save) {
+                self.close_ask = Some(CloseAsk::Tab(i));
+            } else {
+                self.close_tab(i);
+            }
+        }
+    }
+
+    fn close_tab(&mut self, i: usize) {
+        if i >= self.docs.len() {
+            return;
+        }
+        self.docs.remove(i);
+        // Keep the same tab shown when one to its left closes.
+        if i < self.active {
+            self.active -= 1;
+        }
+        if self.active >= self.docs.len() {
+            self.active = self.docs.len().saturating_sub(1);
+        }
+    }
+
+    /// The window's close button: ask first when presets have unsaved changes.
+    fn guard_quit(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| i.viewport().close_requested()) && !self.quit_ok && self.docs.iter().any(Doc::needs_save) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.close_ask = Some(CloseAsk::Quit);
+        }
+    }
+
+    /// "Save your changes?" for closing a tab or quitting.
+    fn close_dialog(&mut self, ctx: &egui::Context) {
+        let Some(ask) = self.close_ask.take() else { return };
+        let unsaved: Vec<usize> = (0..self.docs.len()).filter(|&i| self.docs[i].needs_save()).collect();
+        let (text, title) = match &ask {
+            CloseAsk::Tab(i) => match self.docs.get(*i) {
+                Some(d) if d.needs_save() => (format!("\"{}\" has changes that aren't saved.", d.title), "Close preset"),
+                // Saved or gone since: nothing to ask.
+                _ => return self.close_tab(*i),
+            },
+            CloseAsk::Quit => {
+                if unsaved.is_empty() {
+                    return;
+                }
+                let names: Vec<String> = unsaved.iter().map(|&i| format!("\"{}\"", self.docs[i].title)).collect();
+                let text = if names.len() == 1 {
+                    format!("{} has changes that aren't saved.", names[0])
+                } else {
+                    format!("These presets have changes that aren't saved: {}.", names.join(", "))
+                };
+                (text, "Quit ToneStrand")
+            }
+        };
+        let mut choice = None;
+        egui::Window::new(title)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.label(&text);
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    let save = if matches!(ask, CloseAsk::Quit) && unsaved.len() > 1 { "Save all" } else { "Save" };
+                    if theme::primary_button(ui, save).clicked() {
+                        choice = Some(0);
+                    }
+                    let discard = if matches!(ask, CloseAsk::Quit) { "Quit without saving" } else { "Close without saving" };
+                    if ui.button(RichText::new(discard).color(BAD)).clicked() {
+                        choice = Some(1);
+                    }
+                    if ui.button("Cancel").clicked() {
+                        choice = Some(2);
+                    }
+                });
+            });
+        match (choice, ask) {
+            (None, ask) => self.close_ask = Some(ask),
+            (Some(2), _) => {}
+            (Some(0), CloseAsk::Tab(i)) => {
+                self.save_doc(i, false);
+                // Still unsaved means the save was cancelled or failed: keep the tab.
+                if !self.docs.get(i).is_some_and(Doc::needs_save) {
+                    self.close_tab(i);
+                }
+            }
+            (Some(_), CloseAsk::Tab(i)) => self.close_tab(i),
+            (Some(0), CloseAsk::Quit) => {
+                for &i in &unsaved {
+                    self.save_doc(i, false);
+                }
+                if !self.docs.iter().any(Doc::needs_save) {
+                    self.quit_ok = true;
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            }
+            (Some(_), CloseAsk::Quit) => {
+                self.quit_ok = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
         }
     }
@@ -2555,9 +2673,10 @@ impl App {
             let _ = std::fs::create_dir_all(&dir);
             let mut written = 0;
             for p in &s.presets {
-                let path = dir.join(format!("{} {}.hlx", slot_label(p.slot), device::sanitize(&p.name)));
-                if std::fs::write(&path, serde_json::to_vec_pretty(&p.hlx).unwrap_or_default()).is_ok() {
-                    written += 1;
+                let path = crate::files::unique_path(&dir, &format!("{} {}.hlx", slot_label(p.slot), device::sanitize(&p.name)));
+                match crate::files::write_atomic(&path, &serde_json::to_vec_pretty(&p.hlx).unwrap_or_default()) {
+                    Ok(_) => written += 1,
+                    Err(e) => lines.push(format!("✖ {}: {e}", path.display())),
                 }
             }
             n += written;
@@ -2568,7 +2687,10 @@ impl App {
             // The backup's IRs go to the IR library, in a folder named after the backup.
             let ir_dir = self.tone_dir().join(&stem);
             let _ = std::fs::create_dir_all(&ir_dir);
-            let written = irs.iter().filter(|ir| std::fs::write(ir_dir.join(crate::irs::file_name(ir.slot as i64, &ir.name)), &ir.wav).is_ok()).count();
+            let written = irs
+                .iter()
+                .filter(|ir| crate::files::write_atomic(&crate::files::unique_path(&ir_dir, &crate::irs::file_name(ir.slot as i64, &ir.name)), &ir.wav).is_ok())
+                .count();
             lines.push(format!("✔ {written} IRs -> IR library/{stem}"));
             self.scan_tones();
         }
@@ -2676,9 +2798,17 @@ impl App {
                                     }
                                     Err(e) => report.push(format!("✖ {}: {e}", f.file_name().and_then(|s| s.to_str()).unwrap_or("?"))),
                                 }
-                            } else if let Some(name) = f.file_name() {
-                                if std::fs::copy(&f, dir.join(name)).is_ok() {
-                                    n += 1;
+                            } else {
+                                let shown = f.file_name().and_then(|s| s.to_str()).unwrap_or("?").to_owned();
+                                match crate::files::copy_into(&f, &dir) {
+                                    Ok(to) => {
+                                        n += 1;
+                                        if to.file_name() != f.file_name() {
+                                            let new = to.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+                                            report.push(format!("✔ {shown} was already there; kept both (new copy: {new})"));
+                                        }
+                                    }
+                                    Err(e) => report.push(format!("✖ {shown}: {e}")),
                                 }
                             }
                         }
@@ -2828,13 +2958,8 @@ impl App {
         let base = device::sanitize(if doc.name.is_empty() { &doc.title } else { &doc.name });
         let dir = self.lib.folder();
         let _ = std::fs::create_dir_all(&dir);
-        let mut path = dir.join(format!("{base}.{ext}"));
-        let mut n = 2;
-        while path.exists() {
-            path = dir.join(format!("{base} ({n}).{ext}"));
-            n += 1;
-        }
-        match std::fs::write(&path, bytes) {
+        let path = crate::files::unique_path(&dir, &format!("{base}.{ext}"));
+        match crate::files::write_atomic(&path, &bytes) {
             Ok(_) => self.note(LogLevel::Good, format!("Saved to your library as {}", path.file_name().and_then(|s| s.to_str()).unwrap_or(""))),
             Err(e) => self.note(LogLevel::Bad, format!("Could not save to the library: {e}")),
         }
@@ -3418,6 +3543,7 @@ impl eframe::App for App {
                 ctx.request_repaint();
             }
         }
+        self.guard_quit(ctx);
         self.poll(ctx);
         self.auto_pick();
         // The hidden Tests page.
@@ -3433,6 +3559,7 @@ impl eframe::App for App {
         self.left_panel(ctx);
         self.central(ctx);
         self.dialogs(ctx);
+        self.close_dialog(ctx);
         if let Some(cat) = self.catalog.clone() {
             if let Some((st, model, cab)) = editors::picker_window(ctx, &mut self.picker, &cat) {
                 self.apply_pick(&cat, st, model, cab);

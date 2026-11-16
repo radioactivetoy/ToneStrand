@@ -125,25 +125,65 @@ fn settings_path() -> Option<std::path::PathBuf> {
     Some(dirs::config_dir()?.join("ToneStrand").join("settings.json"))
 }
 
+/// The last failed settings save, for the window to show (see [`take_save_error`]).
+static SAVE_ERROR: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
+
+/// A settings save that failed since the last call, if any.
+pub fn take_save_error() -> Option<String> {
+    SAVE_ERROR.lock().ok().and_then(|mut e| e.take())
+}
+
 impl Settings {
     pub fn load() -> Settings {
-        settings_path()
-            .and_then(|p| std::fs::read_to_string(p).ok())
-            .and_then(|s| serde_json::from_str(&s).ok())
-            .unwrap_or_default()
+        Self::load_reporting().0
     }
+
+    /// The settings, plus a note for the person when the file couldn't be used. An
+    /// unreadable file is moved aside (never silently overwritten by the next save).
+    pub fn load_reporting() -> (Settings, Option<String>) {
+        let Some(p) = settings_path() else { return (Settings::default(), None) };
+        Self::load_from(&p)
+    }
+
+    fn load_from(p: &std::path::Path) -> (Settings, Option<String>) {
+        let text = match std::fs::read_to_string(p) {
+            Ok(t) => t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return (Settings::default(), None),
+            Err(e) => return (Settings::default(), Some(set_aside(p, &format!("couldn't be read ({e})")))),
+        };
+        match serde_json::from_str(&text) {
+            Ok(s) => (s, None),
+            Err(e) => (Settings::default(), Some(set_aside(p, &format!("couldn't be understood ({e})")))),
+        }
+    }
+
     pub fn save(&self) {
-        if let Some(p) = settings_path() {
+        let Some(p) = settings_path() else { return };
+        let result = (|| {
             if let Some(dir) = p.parent() {
-                let _ = std::fs::create_dir_all(dir);
+                std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
             }
-            if let Ok(s) = serde_json::to_string_pretty(self) {
-                let _ = std::fs::write(p, s);
+            let s = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+            crate::files::write_atomic(&p, s.as_bytes()).map_err(|e| e.to_string())
+        })();
+        if let Err(e) = result {
+            if let Ok(mut slot) = SAVE_ERROR.lock() {
+                *slot = Some(format!("Could not save settings to {} ({e})", p.display()));
             }
         }
     }
     pub fn token_for(&self, b: &BoxInfo) -> Option<String> {
         self.tokens.get(&box_key(b)).cloned()
+    }
+}
+
+/// Move a settings file that can't be used out of the way, keeping it for the person.
+fn set_aside(p: &std::path::Path, why: &str) -> String {
+    let dir = p.parent().unwrap_or(std::path::Path::new("."));
+    let kept = crate::files::unique_path(dir, "settings.json.bad");
+    match std::fs::rename(p, &kept) {
+        Ok(_) => format!("Your settings file {why}; started with default settings. The old file was kept as {}", kept.display()),
+        Err(e) => format!("Your settings file {why} and couldn't be moved aside ({e}); started with default settings"),
     }
 }
 
@@ -297,4 +337,37 @@ pub fn lookup_local_names(tx: Sender<BoxInfo>) {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_broken_settings_file_is_kept_not_lost() {
+        let dir = std::env::temp_dir().join(format!("tonestrand-settings-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = dir.join("settings.json");
+
+        // Missing file: defaults, nothing to say.
+        let (s, note) = Settings::load_from(&p);
+        assert!(note.is_none() && s.confirm_pedal);
+
+        // Unreadable JSON: defaults, a note, and the old file moved aside intact.
+        std::fs::write(&p, b"{\"tokens\": {\"box\": \"secret\"}, \"ui_scale\": \"big\"}").unwrap();
+        let (s, note) = Settings::load_from(&p);
+        assert!(s.tokens.is_empty());
+        assert!(note.unwrap().contains("settings.json.bad"));
+        assert!(!p.exists());
+        assert!(std::fs::read_to_string(dir.join("settings.json.bad")).unwrap().contains("secret"));
+
+        // A good file still loads, with defaults for fields it doesn't have.
+        std::fs::write(&p, b"{\"ui_scale\": 1.25}").unwrap();
+        let (s, note) = Settings::load_from(&p);
+        assert!(note.is_none());
+        assert_eq!(s.ui_scale, 1.25);
+        assert!(s.confirm_pedal);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

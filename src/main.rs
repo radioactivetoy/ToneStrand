@@ -18,6 +18,7 @@ mod irs;
 mod selftest;
 mod modelinfo;
 mod icons;
+mod files;
 mod folders;
 mod backup;
 mod tonelib;

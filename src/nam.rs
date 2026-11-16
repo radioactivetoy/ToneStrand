@@ -439,7 +439,7 @@ pub fn convert_file(src: &Path, out_dir: &Path, opts: Options) -> Result<String,
     let c = convert(&text, opts)?;
     let stem = src.file_stem().and_then(|s| s.to_str()).unwrap_or("capture");
     let out = out_dir.join(format!("{stem} NAM.wav"));
-    std::fs::write(&out, wav_bytes(&c.samples)).map_err(|e| format!("can't write {} ({e})", out.display()))?;
+    crate::files::write_atomic(&out, &wav_bytes(&c.samples)).map_err(|e| format!("can't write {} ({e})", out.display()))?;
     let mut notes = Vec::new();
     match c.input_level_dbu {
         Some(d) => notes.push(format!("captured at {d:.1} dBu (input trimmed {:+.1} dB)", STOMP_DBU - d)),

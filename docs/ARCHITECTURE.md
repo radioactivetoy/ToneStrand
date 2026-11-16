@@ -47,6 +47,7 @@ thread. Everything else is plain data structures edited in place every frame.
 | `backup.rs` | Reading HX Edit `.hxb` backups and `.hls` setlists. |
 | `irs.rs` | WAV ↔ pedal IR (2,048 float32 samples at 48 kHz); NAM capture detection. |
 | `nam.rs` | NAM A2 Lite support: block knob mapping and the `.nam` → IR converter. |
+| `files.rs` | Safe writes: `write_atomic` (temp file + rename) and `unique_path` / `copy_into` (never replace an existing file). |
 | `library.rs`, `folders.rs`, `tonelib.rs` | Preset library and IR/NAM library as real folders on disk. |
 | `selftest.rs` | Hidden Tests page: backs up, exercises every operation on one preset slot and one IR slot, restores, verifies; stops immediately if the link drops. |
 | `theme.rs` | Palette (Studio vs Classic, switchable at run time), accent colour, cards, pills, help (?) icons, logos. |

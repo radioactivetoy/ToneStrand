@@ -512,7 +512,7 @@ impl Session {
         let parsed = crate::devpreset::DevicePreset::parse(&doc).map_err(|e| {
             SessionError::Protocol(format!("refusing to write a non-pedal preset document to the unit ({e})"))
         })?;
-        let doc = parsed.encode();
+        let doc = parsed.encode_checked().map_err(SessionError::Protocol)?;
         if doc.len() > u16::MAX as usize {
             return Err(SessionError::Protocol("the preset document is too large for a pedal slot".into()));
         }

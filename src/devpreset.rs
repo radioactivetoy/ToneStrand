@@ -100,6 +100,9 @@ pub struct DevicePreset {
     table_fmt: u8,
     table: Vec<u8>,
     pub tone: Value,
+    /// Anything after the tone (none seen so far). Kept and written back so a document
+    /// read and saved unchanged stays byte for byte the same.
+    rest: Vec<Value>,
 }
 
 impl DevicePreset {
@@ -116,19 +119,45 @@ impl DevicePreset {
             _ => return Err("the preset's offset table is missing".into()),
         };
         let tone = it.next().ok_or("the preset has no tone")?;
-        Ok(DevicePreset { magic, table_fmt, table, tone })
+        let rest: Vec<Value> = it.collect();
+        Ok(DevicePreset { magic, table_fmt, table, tone, rest })
     }
 
-    /// Serialise, rebuilding the offset table so it matches the new lengths.
+    /// Serialise, rebuilding the offset table so it matches the new lengths. When the table
+    /// can't be rebuilt the stored one is kept (right for a document saved unchanged); use
+    /// [`DevicePreset::encode_checked`] for anything that goes to the pedal.
     pub fn encode(&self) -> Vec<u8> {
         let table = self.computed_table().unwrap_or_else(|| self.table.clone());
+        self.encode_with(table)
+    }
+
+    /// Serialise for the pedal: refuses rather than send an offset table that may no
+    /// longer match the document.
+    pub fn encode_checked(&self) -> Result<Vec<u8>, String> {
+        if !self.rest.is_empty() {
+            return Err(format!("the document has {} unknown part(s) after the tone; it was not sent", self.rest.len()));
+        }
+        let table = self
+            .computed_table()
+            .ok_or("the document's offset table can't be rebuilt (a section is missing); it was not sent")?;
+        Ok(self.encode_with(table))
+    }
+
+    fn encode_with(&self, table: Vec<u8>) -> Vec<u8> {
         let mut out = self.magic.encode();
         out.extend(Value::Bin(table, self.table_fmt).encode());
         out.extend(self.tone.encode());
+        for v in &self.rest {
+            out.extend(v.encode());
+        }
         out
     }
 
     fn computed_table(&self) -> Option<Vec<u8>> {
+        // Where trailing parts would sit in the table is unknown: don't guess.
+        if !self.rest.is_empty() {
+            return None;
+        }
         let magic_len = self.magic.encode().len();
         let table_len = (1 + TABLE_ORDER.len() + 2) * 4;
         let table_hdr = Value::Bin(vec![0; table_len], self.table_fmt).encode().len() - table_len;
@@ -1213,15 +1242,40 @@ mod tests {
         for k in [0i64, 1, 2, 3, 4, 5, 6, 7, 10] {
             pairs.push((Value::int(k), Value::map(vec![(1, Value::int(k))])));
         }
-        let doc = DevicePreset { magic: Value::str("l6-helix\0"), table_fmt: 0xc4, table: Vec::new(), tone: Value::Map(pairs, 0x80) };
+        let doc = DevicePreset { magic: Value::str("l6-helix\0"), table_fmt: 0xc4, table: Vec::new(), tone: Value::Map(pairs, 0x80), rest: Vec::new() };
         let blob = doc.encode();
         let back = DevicePreset::parse(&blob).unwrap();
         assert_eq!(back.encode(), blob);
+        assert_eq!(back.encode_checked().unwrap(), blob);
         let t = &back.table;
         let tone_at = u32::from_le_bytes([t[0], t[1], t[2], t[3]]) as usize;
         assert_eq!(blob[tone_at], 0x89);
         let k0 = u32::from_le_bytes([t[4], t[5], t[6], t[7]]) as usize;
         assert_eq!(blob[k0], 0x00);
+    }
+
+    fn tiny(keys: &[i64]) -> DevicePreset {
+        let pairs = keys.iter().map(|k| (Value::int(*k), Value::map(vec![(1, Value::int(*k))]))).collect();
+        DevicePreset { magic: Value::str("l6-helix\0"), table_fmt: 0xc4, table: vec![0; 48], tone: Value::Map(pairs, 0x80), rest: Vec::new() }
+    }
+
+    /// A section the offset table points at is missing: the stale table must never go to the pedal.
+    #[test]
+    fn refuses_to_send_a_stale_offset_table() {
+        let doc = tiny(&[0, 1, 2]);
+        assert!(doc.computed_table().is_none());
+        assert!(doc.encode_checked().is_err());
+    }
+
+    /// Values after the tone are kept on a round trip, and such a document isn't sent.
+    #[test]
+    fn keeps_trailing_values() {
+        let doc = tiny(&[0, 1, 2, 3, 4, 5, 6, 7, 10]);
+        let mut blob = doc.encode();
+        blob.extend(Value::int(42).encode());
+        let back = DevicePreset::parse(&blob).unwrap();
+        assert_eq!(back.encode(), blob);
+        assert!(back.encode_checked().is_err());
     }
 
     #[test]
