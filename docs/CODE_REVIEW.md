@@ -88,6 +88,8 @@ Severity: **High** = can lose the owner's data or break a project rule;
 
 ## 5. Missing features and usability
 
+> Later, on `feature/studio-only`: F2 rename and the footswitch-label counter were added, the Classic look was removed, the accent colour picker moved to Settings, and the code was formatted with rustfmt (checked in CI). Still open: U9 (compare), restore-all from a full backup, the per-frame document clone behind undo, plain-text Box tokens.
+
 **Status (branch `feature/usability`):** done: U2, U3, U4, U5, U6, U7 (backup only; no restore-all), U8 (F2 rename added on `feature/studio-only`), U10, U11, U12, U13, U14. Not done: U9 (compare). U1 was done earlier. U3 uses the Windows shell directly (`files::delete_file`) instead of the `trash` crate; other systems delete for good after always asking. Needing a real pedal to check: U2 write-back, U7, U10.
 
 | # | Idea | Why |
