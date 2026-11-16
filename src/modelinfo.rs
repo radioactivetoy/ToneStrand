@@ -1,4 +1,4 @@
-//! Model photos and descriptions (collected by helixhelp.com from Line 6's firmware
+//! Model photos and descriptions (from Line 6's firmware
 //! release notes): what each amp, cab and effect is based on, a short
 //! description, notable players, and its picture.
 
@@ -12,7 +12,7 @@ use crate::theme::*;
 
 include!(concat!(env!("OUT_DIR"), "/photos.rs"));
 
-const DATA: &str = include_str!("../assets/helixhelp/models.json");
+const DATA: &str = include_str!("../assets/models/models.json");
 
 #[derive(Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
@@ -139,7 +139,7 @@ pub fn side(ui: &mut egui::Ui, symbol: &str, width: f32, cab: Option<&str>) {
                 ui.label(RichText::new("Notable players").small().strong().color(MUTED));
                 ui.label(RichText::new(n).small());
             }
-            ui.label(RichText::new("Source: Line 6 release notes, via helixhelp.com").small().color(MUTED));
+            ui.label(RichText::new("Source: Line 6 release notes").small().color(MUTED));
         });
     }
 }

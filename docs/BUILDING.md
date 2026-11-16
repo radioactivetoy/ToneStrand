@@ -49,11 +49,11 @@ folder.
 
 ### Assets
 
-`build.rs` packs every PNG in `assets/helixhelp/icons` into the program
+`build.rs` packs every PNG in `assets/models/icons` into the program
 (`OUT_DIR/photos.rs`), so the executable works on its own wherever it is copied. Logos, the
 effect-type icon sheet and `models.json` are included with `include_bytes!`/`include_str!`
 from `src/`. Adding a photo: drop `<name>.png` into that folder and reference it from
-`assets/helixhelp/models.json`.
+`assets/models/models.json`.
 
 ## Tests
 

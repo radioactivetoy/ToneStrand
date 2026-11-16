@@ -63,19 +63,40 @@ Used daily on an HX Stomp, over USB and through a Helrig Box (live editing, IR u
 preset writes have been exercised with the self-test). Things not yet tried on real hardware
 are listed in [AGENTS.md](AGENTS.md#known-gaps-and-unverified-areas).
 
-## Third-party material
+## Third-party material and trademarks
 
-- **Effect photos and descriptions** (`assets/helixhelp/`) come from Line 6's own firmware
-  release notes, as collected by helixhelp.com. Like the icons below, they are Line 6 material.
-- **Effect-type icons** (`assets/block Images/`) are Line 6 artwork (from HX Edit / Helix
-  Stadium). They belong to Line 6; make sure you may redistribute them before publishing the
-  repository publicly, or replace them with your own.
-- **Real gear names** are trademarks of their owners and are used only to describe the sound.
+ToneStrand is a free, non-commercial project. It is not affiliated with, endorsed by or
+supported by Line 6, Yamaha Guitar Group, or the makers of the Helrig Box.
+
+### Line 6 material
+
+- **Effect photos and descriptions** (`assets/models/`) are taken from Line 6's firmware
+  release notes.
+- **Effect-type icons** (`assets/block Images/`) are Line 6 artwork from HX Edit / Helix Stadium.
+
+This material is © Yamaha Guitar Group, Inc. (Line 6) and remains theirs. It is included free of
+charge, only to show which effect is which, and nothing in ToneStrand is sold.
+
+**Removal on request:** if you hold rights to any of this material and want it removed,
+please [open an issue](https://github.com/radioactivetoy/ToneStrand/issues) and it will be
+taken down promptly.
+
+### Trademarks and model names
+
+- Line 6, Helix, HX Stomp, HX Stomp XL, HX Effects, HX Edit, and the names of Line 6's
+  amp, cab and effect models are trademarks of Yamaha Guitar Group, Inc. They are used here
+  only to name the devices and effects ToneStrand works with.
+- **Real gear names** (an optional setting, e.g. "based on Fender® Deluxe Reverb®") are
+  trademarks of their respective owners. Those owners are not associated with Line 6 or with
+  ToneStrand and have not endorsed either. The names are used only to describe the sound each
+  model is designed to recall, and in this project's own words.
+- Helrig Box is the name of its makers' product and is used only to say ToneStrand works with it.
+
+### Other sources
+
 - The NAM converter follows the published file layout of
   [hx-stomp-nam-lite](https://github.com/nocaseguy/hx-stomp-nam-lite) (GPL-3; layout read, no
   code copied). The Helrig Box relay follows the box's public relay protocol description (MIT).
-- Line 6, Helix, HX Stomp and HX Edit are trademarks of Yamaha Guitar Group; this project is not
-  affiliated with or endorsed by Line 6 or by the makers of the Helrig Box.
 
 ## License
 
@@ -84,5 +105,5 @@ GNU General Public License as published by the Free Software Foundation, either 
 the License, or (at your option) any later version. See [LICENSE](LICENSE).
 
 The licence covers this project's own code and documentation. It does not cover the Line 6
-material listed under "Third-party material" (effect icons, photos and descriptions), which
-belongs to Line 6.
+material listed under "Third-party material and trademarks" (effect icons, photos and
+descriptions), which belongs to Line 6.

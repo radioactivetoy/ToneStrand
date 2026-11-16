@@ -257,7 +257,7 @@ impl App {
                                     names_changed = true;
                                 }
                             }
-                            theme::help(ui, "Real gear names show what each effect is modelled on, e.g. \"Klon Centaur\" instead of \"Minotaur\". Hover an effect in the picker to see the other name. Effects with no real-world model keep the pedal's name.");
+                            theme::help(ui, "Real gear names show what each effect is modelled on, e.g. \"Klon Centaur\" instead of \"Minotaur\". Hover an effect in the picker to see the other name. Effects with no real-world model keep the pedal's name. These names are trademarks of their owners, who have nothing to do with Line 6 or ToneStrand; they are used only to describe the sound.");
                         });
                         ui.horizontal(|ui| {
                             ui.label("Size");

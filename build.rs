@@ -1,11 +1,11 @@
-//! Packs the model photos in assets/helixhelp/icons into the program, so the
+//! Packs the model photos in assets/models/icons into the program, so the
 //! app works wherever it is copied.
 
 use std::fmt::Write as _;
 
 fn main() {
-    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/helixhelp/icons");
-    println!("cargo:rerun-if-changed=assets/helixhelp");
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/models/icons");
+    println!("cargo:rerun-if-changed=assets/models");
     let mut names: Vec<String> = std::fs::read_dir(&dir)
         .map(|rd| rd.flatten().filter_map(|e| e.file_name().into_string().ok()).filter(|n| n.to_ascii_lowercase().ends_with(".png")).collect())
         .unwrap_or_default();

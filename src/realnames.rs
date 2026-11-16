@@ -2,7 +2,7 @@
 //! The pedal's own names stay the default; a setting switches what is shown.
 //! Names belong to their owners and are used only to describe the sound.
 //! Cross-checked against the "based on" facts listed by hxtra's real_names
-//! (wisemandenny/hxtra, from helixhelp.com/models); written here in our own words.
+//! (wisemandenny/hxtra); written here in our own words.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 

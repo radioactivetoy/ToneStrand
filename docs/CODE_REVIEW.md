@@ -74,7 +74,13 @@ Severity: **High** = can lose the owner's data or break a project rule;
 
 ## 4. Repository and licensing
 
-- `assets/helixhelp/` (423 photos plus `models.json`) and `assets/block Images/` are **Line 6 material**, and `tests/data/` holds a third-party NAM capture and IR. README says so, and AGENTS.md rule 3 says "Don't ship Line 6 files". `build.rs` also **embeds every photo in the binary**, so a released `.exe` ships them too.
+> **Status:** the owner chose to keep the Line 6 images and descriptions. Branch
+> `docs/third-party-notice` adds a README notice (free, non-commercial; © Line 6; removed on
+> request via a GitHub issue) and a trademark disclaimer for Line 6 and real gear names. It also
+> drops the helixhelp.com reference (the folder is now `assets/models/`). The notice doesn't
+> amount to permission from Line 6; only a written yes from them would.
+
+- `assets/models/` (423 photos plus `models.json`) and `assets/block Images/` are **Line 6 material**, and `tests/data/` holds a third-party NAM capture and IR. README says so, and AGENTS.md rule 3 says "Don't ship Line 6 files". `build.rs` also **embeds every photo in the binary**, so a released `.exe` ships them too.
   The repository was therefore pushed as **private**. Before going public: replace or remove those assets (or get written permission), and make `build.rs`/`modelinfo.rs` work without them.
 - `assets/logos/` holds ~5 MB of source JPGs that the app doesn't need at run time. Keep them out of the repo or use Git LFS.
 - `vendor/webbrowser` exists only to avoid `shlwapi` on the GNU toolchain. Worth a line in BUILDING.md on when it can go away (e.g., when building with MSVC).

@@ -54,7 +54,7 @@ thread. Everything else is plain data structures edited in place every frame.
 | `selftest.rs` | Hidden Tests page: backs up, exercises every operation on one preset slot and one IR slot, restores, verifies; stops immediately if the link drops. |
 | `theme.rs` | Palette (Studio vs Classic, switchable at run time), accent colour, cards, pills, help (?) icons, logos. |
 | `icons.rs` | Effect-type icons cut from `assets/block Images/Blocks_stadium.png` (category line icons and per-kind tiles). `kind_label` names an amp carrying its cab "Amp+Cab" (a cab carrying a second cab "Dual Cab"); `paint_model` draws Amp+Cab as the amp tile with a small cab tile on its corner. |
-| `modelinfo.rs` | Effect photos and descriptions (`assets/helixhelp`, from Line 6's release notes). For an amp + cab or dual cab, `side()` shows the cab's photo under the amp's. |
+| `modelinfo.rs` | Effect photos and descriptions (`assets/models`, Line 6 material from its firmware release notes; see README). For an amp + cab or dual cab, `side()` shows the cab's photo under the amp's. |
 | `realnames.rs` | Optional real-gear names for effects. |
 
 ## Data model
