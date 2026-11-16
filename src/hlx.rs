@@ -513,13 +513,17 @@ pub fn add_split_at(doc: &mut Value, dsp: &str, at: Option<i64>, defaults: &dyn 
 }
 
 /// Take a split away again: blocks on the lower lane move to free places on the main lane.
-pub fn remove_split(doc: &mut Value, dsp: &str) {
-    for b in blocks(doc).into_iter().filter(|b| b.dsp == dsp && b.path == 1 && b.key.starts_with("block")) {
-        let taken: Vec<i64> = blocks(doc).iter().filter(|x| x.dsp == dsp && x.path == 0).map(|x| x.position).collect();
-        match (0..POSITIONS).find(|p| !taken.contains(p)) {
-            Some(free) => move_to(doc, &b, 0, free),
-            None => remove_block(doc, &b),
-        }
+/// Returns false, changing nothing, when the main lane has no room for them (the unit's
+/// `positions` is the limit, not the file format's).
+pub fn remove_split(doc: &mut Value, dsp: &str, positions: i64) -> bool {
+    let lower: Vec<HlxBlock> = blocks(doc).into_iter().filter(|b| b.dsp == dsp && b.path == 1 && b.key.starts_with("block")).collect();
+    let taken: Vec<i64> = blocks(doc).iter().filter(|x| x.dsp == dsp && x.path == 0).map(|x| x.position).collect();
+    let free: Vec<i64> = (0..positions.min(POSITIONS)).filter(|p| !taken.contains(p)).collect();
+    if free.len() < lower.len() {
+        return false;
+    }
+    for (b, to) in lower.iter().zip(free) {
+        move_to(doc, b, 0, to);
     }
     if let Some(section) = doc.pointer_mut(&format!("/data/tone/{dsp}")).and_then(Value::as_object_mut) {
         section.remove("split");
@@ -529,6 +533,7 @@ pub fn remove_split(doc: &mut Value, dsp: &str) {
     if let Some(g) = doc.pointer_mut("/data/tone/global").and_then(Value::as_object_mut) {
         g.insert(key, json!("A"));
     }
+    true
 }
 
 fn make_split(doc: &mut Value, dsp: &str, first: i64, merge_at: i64, defaults: &dyn Fn(&str) -> Vec<ParamValue>) {

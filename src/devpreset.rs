@@ -926,8 +926,15 @@ impl DevicePreset {
             // Split and merge points.
             let tone = format!("/data/tone/{dsp}");
             let pos_of = |k: &str| doc.pointer(&format!("{tone}/{k}/@position")).and_then(serde_json::Value::as_i64);
-            for (k, at, default) in [("split", split_at, 0), ("join", join_at, columns as i64)] {
-                let attach = pos_of(k).unwrap_or(default) + 1;
+            // The split sits before a main-lane slot (at most the last one), the merge before
+            // one or at the end; a file from a longer path is held to this pedal's columns.
+            let cols = columns as i64;
+            let split_attach = (pos_of("split").unwrap_or(0) + 1).clamp(1, cols);
+            let join_attach = (pos_of("join").unwrap_or(cols) + 1).clamp(split_attach, cols + 1);
+            if (pos_of("split").unwrap_or(0) + 1 > cols) || (pos_of("join").unwrap_or(cols) + 1 > cols + 1) {
+                notes.push(format!("Path {}'s split or merge sat beyond this pedal's {columns} places; moved to the end.", d + 1));
+            }
+            for (at, attach) in [(split_at, split_attach), (join_at, join_attach)] {
                 if out.attach(pk, at).is_some() {
                     out.set_attach(pk, at, attach);
                 }

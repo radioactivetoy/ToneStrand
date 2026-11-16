@@ -215,6 +215,8 @@ pub struct PickerState {
     pub hover: Option<(String, String)>,
     /// The search box has been given the focus (once, when the window opens).
     pub focused: bool,
+    /// For a .hlx file: how many FX loops its own unit has (else the connected unit's count).
+    pub fx_loops: Option<i64>,
 }
 
 /// The "Add a block" window: categories on the left, variants as tabs,
@@ -327,13 +329,13 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                     let mut row_no = 0usize;
                     egui::ScrollArea::vertical().id_salt("pick-models").max_height(340.0).auto_shrink([false, false]).show(ui, |ui| {
                         for g in groups.iter().filter(|g| !search.is_empty() || groups.len() == 1 || g.sub == st.sub) {
-                            let loops = snapshots::family_of_device(crate::nam::unit()).fx_loops;
+                            let loops = st.fx_loops.unwrap_or_else(|| snapshots::family_of_device(crate::nam::unit()).fx_loops);
                             for m in g
                                 .models
                                 .iter()
                                 .filter(|m| {
                                     // Only the sends and returns this unit has jacks for.
-                                    !(g.category == "Send/Return" && loops < 4 && (m.name.contains('3') || m.name.contains('4')))
+                                    g.category != "Send/Return" || loop_numbers(&m.name).into_iter().all(|n| n <= loops)
                                 })
                                 .filter(|m| {
                                     search.is_empty()
@@ -843,6 +845,11 @@ fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<V
 }
 
 /// What the effect list is filtered to for an FX loop (0), a send (1) or a return (2).
+/// The loop numbers a Send/Return/FX Loop name mentions ("Send 3/4" -> [3, 4]).
+fn loop_numbers(name: &str) -> Vec<i64> {
+    name.chars().filter_map(|c| c.to_digit(10)).map(i64::from).collect()
+}
+
 fn loop_search(kind: u8) -> String {
     match kind {
         1 => "Send".into(),

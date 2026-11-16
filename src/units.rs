@@ -314,3 +314,32 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+
+    fn nm(m: &'static str) -> hlx::NewModel<'static> {
+        hlx::NewModel { model: m, stereo: false, params: &[], cab: None }
+    }
+
+    #[test]
+    fn remove_split_keeps_blocks_within_the_units_positions() {
+        let mut doc = hlx::blank_for("t", 2162689);
+        let fam = snapshots::family(&doc);
+        for p in 0..fam.positions {
+            hlx::place_model(&mut doc, "dsp0", 0, p, None, &nm("HD2_DelaySimpleDelay"));
+        }
+        hlx::add_split_at(&mut doc, "dsp0", Some(2), &|_| Vec::new());
+        hlx::place_model(&mut doc, "dsp0", 1, 2, None, &nm("HD2_DelaySimpleDelay"));
+        // The main lane is full: refuse, change nothing.
+        assert!(!hlx::remove_split(&mut doc, "dsp0", fam.positions));
+        assert!(hlx::split_of(&doc, "dsp0").is_some());
+        assert!(hlx::blocks(&doc).iter().any(|b| b.path == 1));
+        // With a place free, the block folds back inside the unit's positions.
+        let b = hlx::blocks(&doc).into_iter().find(|b| b.path == 0 && b.position == 5).unwrap();
+        hlx::remove_block(&mut doc, &b);
+        assert!(hlx::remove_split(&mut doc, "dsp0", fam.positions));
+        assert!(hlx::blocks(&doc).iter().all(|b| b.path == 0 && b.position < fam.positions));
+    }
+}

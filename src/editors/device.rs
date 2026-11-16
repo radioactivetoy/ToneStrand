@@ -188,8 +188,11 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                     }
                     chain::Hit::GapAdd(col) | chain::Hit::GapSendReturn(col, _) => {
                         // The free place nearest the line that was clicked.
+                        // A return only goes at or after the line that was clicked: before it, it
+                        // could land ahead of its own send.
+                        let is_return = matches!(hit, chain::Hit::GapSendReturn(_, 2));
                         let free_at = (0..main.len())
-                            .filter(|c| main[*c].kind == Kind::Empty)
+                            .filter(|c| main[*c].kind == Kind::Empty && (!is_return || *c >= col))
                             .min_by_key(|c| (*c as i64 - col as i64).abs() * 2 + if *c < col { 1 } else { 0 });
                         match free_at.map(|c| main[c]) {
                             Some(s) => {
@@ -210,7 +213,12 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                                 });
                             }
                             None => {
-                                note(ui.ctx(), "No free place on this path: remove or move an effect first.");
+                                let msg = if is_return {
+                                    "No free place for a return after this point: put it further right, or free a place."
+                                } else {
+                                    "No free place on this path: remove or move an effect first."
+                                };
+                                note(ui.ctx(), msg);
                             }
                         }
                     }

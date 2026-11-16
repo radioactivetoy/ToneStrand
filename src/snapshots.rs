@@ -727,7 +727,7 @@ mod unit_tests {
         // An HX Stomp splits its single path too; taking the split away folds the lane back.
         set_device(&mut doc, 2162694);
         assert!(hlx::split_of(&doc, "dsp0").is_some());
-        hlx::remove_split(&mut doc, "dsp0");
+        assert!(hlx::remove_split(&mut doc, "dsp0", 8));
         assert!(hlx::split_of(&doc, "dsp0").is_none());
         assert!(hlx::blocks(&doc).iter().all(|b| b.path == 0));
     }

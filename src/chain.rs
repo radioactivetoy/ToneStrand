@@ -579,20 +579,23 @@ impl Chain<'_> {
         }
 
         // A return before its own send can't work: say so under it.
-        let named: Vec<(usize, String)> = self
-            .main
-            .iter()
-            .enumerate()
-            .filter_map(|(c, cell)| match cell {
-                Cell::Block { title, category, .. } if category == "Send/Return" => Some((c, title.trim().to_owned())),
-                _ => None,
+        // Both lanes count: the lower lane's columns line up with the main lane's.
+        let named: Vec<(usize, usize, String)> = [(0usize, Some(&self.main)), (1, self.lower.as_ref())]
+            .into_iter()
+            .flat_map(|(lane, cells)| {
+                cells.into_iter().flat_map(move |cells| {
+                    cells.iter().enumerate().filter_map(move |(c, cell)| match cell {
+                        Cell::Block { title, category, .. } if category == "Send/Return" => Some((lane, c, title.trim().to_owned())),
+                        _ => None,
+                    })
+                })
             })
             .collect();
-        for (c, t) in &named {
+        for (lane, c, t) in &named {
             if let Some(n) = t.strip_prefix("Return") {
                 let send = format!("Send{n}");
-                if named.iter().any(|(c2, t2)| c2 > c && *t2 == send) {
-                    let r = cell_rect(0, *c);
+                if named.iter().any(|(_, c2, t2)| c2 > c && *t2 == send) {
+                    let r = cell_rect(*lane, *c);
                     p.text(
                         r.center_bottom() + Vec2::new(0.0, 4.0),
                         egui::Align2::CENTER_TOP,

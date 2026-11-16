@@ -294,8 +294,11 @@ pub fn hlx_editor(
                             _ => None,
                         };
                         // The free place on the main lane nearest the line that was clicked.
+                        // A return only goes at or after the line that was clicked: before it, it
+                        // could land ahead of its own send.
+                        let is_return = send_return == Some(2);
                         let free_at = (0..main_cols.max(0) as usize)
-                            .filter(|c| index_at(0, *c).is_none())
+                            .filter(|c| index_at(0, *c).is_none() && (!is_return || *c >= col))
                             .min_by_key(|c| (*c as i64 - col as i64).abs() * 2 + if *c < col { 1 } else { 0 });
                         if let (Some(c), false) = (free_at, full) {
                             *picker = Some(PickerState {
@@ -308,7 +311,12 @@ pub fn hlx_editor(
                                 ..Default::default()
                             });
                         } else {
-                            note(ui.ctx(), "No free place on this path: remove or move an effect first.");
+                            let msg = if is_return {
+                                "No free place for a return after this point: put it further right, or free a place."
+                            } else {
+                                "No free place on this path: remove or move an effect first."
+                            };
+                            note(ui.ctx(), msg);
                         }
                     }
                     chain::Hit::Drop(from, to) => {
@@ -342,10 +350,20 @@ pub fn hlx_editor(
             }
             ui.add_space(6.0);
         }
+        if let Some(p) = picker.as_mut().filter(|p| p.hlx_dsp.is_some()) {
+            p.fx_loops = Some(unit.fx_loops);
+        }
         if let Some((dsp, free)) = extend_dsp {
             if let Some(col) = hlx::extend_lower(json, &dsp, unit.positions, unit.max_blocks, unit.shared_slots) {
                 *dirty = true;
-                *picker = Some(PickerState { path: 1, position: col, hlx_dsp: Some(dsp), free, ..Default::default() });
+                *picker = Some(PickerState {
+                    path: 1,
+                    position: col,
+                    hlx_dsp: Some(dsp),
+                    free,
+                    fx_loops: Some(unit.fx_loops),
+                    ..Default::default()
+                });
             }
         }
         if let Some(p) = drop_extend {
@@ -422,9 +440,12 @@ pub fn hlx_editor(
                         .on_hover_text("Back to a single lane; lower-lane blocks move to free places on the main lane")
                         .clicked()
                     {
-                        hlx::remove_split(json, &dsp);
-                        *dirty = true;
-                        removed = true;
+                        if hlx::remove_split(json, &dsp, unit.positions) {
+                            *dirty = true;
+                            removed = true;
+                        } else {
+                            note(ui.ctx(), "The main lane has no free places for the parallel lane's effects: remove or move some first.");
+                        }
                     }
                 });
             });
