@@ -45,6 +45,17 @@ fn main() -> eframe::Result<()> {
         .with_app_id("tonestrand")
         .with_inner_size([1320.0, 820.0])
         .with_min_inner_size([960.0, 600.0]);
+    // Back where it was left (kept sane: a window never starts tiny or far off screen).
+    if screenshot.is_none() {
+        if let Some(([x, y, w, h], _)) = boxes::saved_window() {
+            if (400.0..=8000.0).contains(&w) && (300.0..=5000.0).contains(&h) {
+                viewport = viewport.with_inner_size([w, h]);
+                if (-20.0..=6000.0).contains(&x) && (-20.0..=3000.0).contains(&y) {
+                    viewport = viewport.with_position([x, y]);
+                }
+            }
+        }
+    }
     if let Some(icon) = theme::window_icon() {
         viewport = viewport.with_icon(std::sync::Arc::new(icon));
     }

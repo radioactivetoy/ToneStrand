@@ -173,6 +173,8 @@ pub struct App {
     pending_delete: Option<PathBuf>,
     /// Where the preset list on the left was drawn last frame (F2 renames what the pointer is over).
     left_rect: egui::Rect,
+    /// The window as last seen, to keep for next time: (x, y, width, height), maximized.
+    window_seen: Option<([f32; 4], bool)>,
     close_ask: Option<CloseAsk>,
     /// The person chose to quit even with unsaved changes.
     quit_ok: bool,
@@ -279,6 +281,7 @@ impl App {
             lib: Library::new(PathBuf::new()),
             pending_delete: None,
             left_rect: egui::Rect::NOTHING,
+            window_seen: None,
             close_ask: None,
             quit_ok: false,
             last_error: None,
@@ -1624,8 +1627,10 @@ fn dsp_warning(cat: &Catalog, json: &serde_json::Value) -> Option<String> {
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Fill the monitor on start (asking at window creation isn't always honoured on Windows).
-        if self.screenshot.is_none() {
+        // Fill the monitor on start (asking at window creation isn't always honoured on Windows),
+        // unless the window was left smaller last time: then it comes back as it was.
+        let fill = self.settings.window.is_none() || self.settings.window_maximized;
+        if self.screenshot.is_none() && fill {
             let pass = ctx.cumulative_pass_nr();
             if pass == 3 {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
@@ -1647,6 +1652,19 @@ impl eframe::App for App {
             }
             if pass < 25 {
                 ctx.request_repaint();
+            }
+        }
+        // Remember the window for next time (written when the program closes).
+        if self.screenshot.is_none() {
+            let (maximized, outer, inner) =
+                ctx.input(|i| (i.viewport().maximized == Some(true), i.viewport().outer_rect, i.viewport().inner_rect));
+            match (maximized, outer, inner) {
+                (false, Some(o), Some(n)) => self.window_seen = Some(([o.min.x, o.min.y, n.width(), n.height()], false)),
+                (true, ..) => {
+                    let rect = self.window_seen.map(|(r, _)| r);
+                    self.window_seen = rect.map(|r| (r, true)).or(Some(([0.0, 0.0, 1320.0, 820.0], true)));
+                }
+                _ => {}
             }
         }
         self.guard_quit(ctx);
@@ -1673,6 +1691,11 @@ impl eframe::App for App {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+        if let Some((rect, maximized)) = self.window_seen.filter(|_| self.screenshot.is_none()) {
+            self.settings.window = Some(rect);
+            self.settings.window_maximized = maximized;
+            self.settings.save();
+        }
         if self.screenshot.is_none() {
             let tabs = self.open_file_paths();
             if tabs != self.settings.last_tabs {

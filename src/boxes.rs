@@ -66,6 +66,10 @@ pub struct Settings {
     pub tone_library: Option<String>,
     /// The accent colour (0xRRGGBB).
     pub accent: u32,
+    /// The window as it was left: position and size (points), when not maximized.
+    pub window: Option<[f32; 4]>,
+    /// The window was maximized when it was closed (the usual: also the start-up default).
+    pub window_maximized: bool,
     /// The last preset files opened, newest first (at most 10).
     pub recent: Vec<String>,
     /// Open the files that were open when the app last closed.
@@ -98,6 +102,8 @@ impl Default for Settings {
             nam_out_dir: None,
             tone_library: None,
             accent: 0x2ec4b6,
+            window: None,
+            window_maximized: true,
             recent: Vec::new(),
             reopen_tabs: false,
             last_tabs: Vec::new(),
@@ -368,4 +374,16 @@ mod url_tests {
         let a: std::net::SocketAddr = format!("{}:80", url_host("fe80::1")).parse().unwrap();
         assert_eq!(a.port(), 80);
     }
+}
+
+/// The window as it was left last time (position and size, maximized), read without any side
+/// effect: a damaged settings file is dealt with when the app loads its settings.
+pub fn saved_window() -> Option<([f32; 4], bool)> {
+    let text = std::fs::read_to_string(settings_path()?).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let a = v.get("window")?.as_array()?;
+    let n: Vec<f32> = a.iter().filter_map(|x| x.as_f64()).map(|x| x as f32).collect();
+    let rect: [f32; 4] = n.try_into().ok()?;
+    let maximized = v.get("window_maximized").and_then(|m| m.as_bool()).unwrap_or(true);
+    Some((rect, maximized))
 }
