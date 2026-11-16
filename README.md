@@ -26,7 +26,7 @@ program; no account, no cloud, nothing leaves your computer.
 - **NAM A2 Lite** (optional community firmware for HX Stomp / XL / HX Effects): the block's
   knobs and capture picker, and a converter from `.nam` captures to the `.wav` the block loads.
 - Effect photos and descriptions, real-gear names (optional), effect-type icons, DSP estimate
-  per path, a "Studio" look (default) and the earlier "Classic" look.
+  per path, and a choice of accent colour in Settings.
 - A hidden **self-test** page (Ctrl+Shift+T) that exercises every pedal operation on one slot
   and one IR slot, with backups and automatic restore.
 

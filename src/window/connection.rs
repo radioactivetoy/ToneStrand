@@ -336,13 +336,12 @@ impl App {
     }
 
     pub(super) fn devices_card(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        side_section(ui, "Connect", "CONNECT", |ui| {
+        side_section(ui, "CONNECT", |ui| {
 
             ui.add_space(2.0);
             let locked = self.link.is_some();
-            let studio = crate::chain::studio();
-            // Studio look, connected: one line, the rest is in the DEVICE box above.
-            if studio && locked {
+            // Connected: one line, the rest is in the DEVICE box above.
+            if locked {
                 ui.horizontal(|ui| {
                     if ui.button("Disconnect").clicked() {
                         self.disconnect();
@@ -353,11 +352,8 @@ impl App {
                 });
                 return;
             }
-            if !(studio && self.usb.is_empty()) {
+            if !self.usb.is_empty() {
                 ui.label(RichText::new("USB").small().color(MUTED));
-            }
-            if self.usb.is_empty() && !studio {
-                ui.label(RichText::new("No pedal plugged in").color(MUTED).italics());
             }
             for (i, p) in self.usb.clone().iter().enumerate() {
                 let sel = self.pick == Some(Pick::Usb(i));
@@ -386,9 +382,9 @@ impl App {
                     }
                 });
             }
-            // Adding a box by its address: tucked behind a small link in the Studio look.
+            // Adding a box by its address: tucked behind a small link.
             let addr_id = egui::Id::new("show-box-address");
-            let show_addr = !studio || ui.data(|d| d.get_temp::<bool>(addr_id)).unwrap_or(false) || self.boxes.is_empty();
+            let show_addr = ui.data(|d| d.get_temp::<bool>(addr_id)).unwrap_or(false) || self.boxes.is_empty();
             if !show_addr && ui.small_button("+ Add a box by address").clicked() {
                 ui.data_mut(|d| d.insert_temp(addr_id, true));
             }
@@ -416,16 +412,12 @@ impl App {
             if let Some(Pick::Box(i)) = self.pick.clone() {
                 if let Some(b) = self.boxes.get(i).cloned() {
                     ui.add_space(4.0);
-                    if studio {
-                        // The box's details (pedal attached, relay mode, pairing) folded away.
-                        let paired = self.settings.token_for(&b).is_some();
-                        egui::CollapsingHeader::new(RichText::new("Box details").small())
-                            .id_salt(("box-details", b.host.clone()))
-                            .default_open(!paired)
-                            .show(ui, |ui| self.box_details(ui, &b, locked));
-                    } else {
-                        self.box_details(ui, &b, locked);
-                    }
+                    // The box's details (pedal attached, relay mode, pairing) folded away.
+                    let paired = self.settings.token_for(&b).is_some();
+                    egui::CollapsingHeader::new(RichText::new("Box details").small())
+                        .id_salt(("box-details", b.host.clone()))
+                        .default_open(!paired)
+                        .show(ui, |ui| self.box_details(ui, &b, locked));
                 }
             }
 
@@ -536,7 +528,7 @@ impl App {
     }
 
     pub(super) fn pedal_card(&mut self, ui: &mut egui::Ui) {
-        side_section(ui, "Presets on the pedal", "PRESETS", |ui| {
+        side_section(ui, "PRESETS", |ui| {
 
             if self.connected.is_none() {
                 ui.label(RichText::new("Connect to a pedal to see and edit its presets.").color(MUTED));
@@ -587,7 +579,7 @@ impl App {
             let row_h = 24.0;
             let presets = self.presets.clone();
             let sl = self.setlist;
-            egui::ScrollArea::vertical().id_salt("presets").max_height(if crate::chain::studio() { (ui.available_height() - 10.0).max(240.0) } else { 360.0 }).auto_shrink([false, true]).show(ui, |ui| {
+            egui::ScrollArea::vertical().id_salt("presets").max_height((ui.available_height() - 10.0).max(240.0)).auto_shrink([false, true]).show(ui, |ui| {
                 for (i, name) in presets.iter().enumerate() {
                     if !filter.is_empty() && !name.to_lowercase().contains(&filter) {
                         continue;

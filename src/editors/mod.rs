@@ -20,29 +20,9 @@ mod studio;
 
 pub use device::{device_controllers, device_editor};
 pub use doc::PresetDoc;
-use doc::{slots_dsp, tempo_box};
+use doc::slots_dsp;
 pub use hlx_file::hlx_editor;
 pub use studio::{studio_strip_device, studio_strip_hlx};
-
-/// A small ring that fills as the path's DSP fills.
-fn dsp_ring(ui: &mut egui::Ui, percent: f64) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::splat(16.0), egui::Sense::hover());
-    let c = rect.center();
-    let p = ui.painter();
-    p.circle_stroke(c, 6.5, Stroke::new(2.5_f32, line()));
-    let frac = (percent / 100.0).clamp(0.0, 1.0) as f32;
-    let col = if percent > 90.0 { BAD } else if percent > 70.0 { ORANGE } else { GOOD };
-    let n = (frac * 40.0).ceil() as usize;
-    let pts: Vec<egui::Pos2> = (0..=n)
-        .map(|i| {
-            let a = -std::f32::consts::FRAC_PI_2 + std::f32::consts::TAU * frac * i as f32 / n.max(1) as f32;
-            c + Vec2::new(a.cos(), a.sin()) * 6.5
-        })
-        .collect();
-    if pts.len() > 1 {
-        p.add(egui::Shape::line(pts, Stroke::new(2.5_f32, col)));
-    }
-}
 
 /// Names and ranges of the input's and output's knobs, in the pedal's order
 /// (input: noise gate, threshold, decay; output: level, pan).
@@ -798,7 +778,7 @@ pub fn current_note(ctx: &egui::Context) -> Option<String> {
 }
 
 /// Which part of an editor to draw: 0 everything, 1 only the chain (and what's above it),
-/// 2 only the selected block's panel. The Studio look draws the panel docked at the bottom.
+/// 2 only the selected block's panel. The panel is docked at the bottom.
 static PART: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 pub fn set_part(p: u8) {
     PART.store(p, std::sync::atomic::Ordering::Relaxed);

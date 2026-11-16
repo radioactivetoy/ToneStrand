@@ -30,7 +30,7 @@ thread. Everything else is plain data structures edited in place every frame.
 |---|---|
 | `main.rs` | Entry point: window options, `--screenshot`; hands command-line tools to `cli.rs`. |
 | `cli.rs` | The command-line tools (`--help` lists them; see BUILDING.md). |
-| `window/` | `App` (`mod.rs`: tabs, the Studio layout, dialogs, saving/loading, undo/redo) and one file per part: `bars.rs` (top bars, status bar, left panel), `connection.rs` (device thread events, pairing, pedal cards), `library_page.rs`, `irs.rs`, `settings.rs`, `tests_page.rs`. Pages (Editor, Library, IRs, Settings, hidden Tests), dialogs, the Studio layout, connection handling, saving/loading, undo/redo. |
+| `window/` | `App` (`mod.rs`: tabs, the layout, dialogs, saving/loading, undo/redo) and one file per part: `bars.rs` (top bars, status bar, left panel), `connection.rs` (device thread events, pairing, pedal cards), `library_page.rs`, `irs.rs`, `settings.rs`, `tests_page.rs`. Pages (Editor, Library, IRs, Settings, hidden Tests), dialogs, the Studio layout, connection handling, saving/loading, undo/redo. |
 | `editors/` | The editor for both document kinds (`mod.rs`: shared widgets and the effect picker; `device.rs`: pedal documents and their controllers card; `hlx_file.rs`: `.hlx`; `studio.rs`: Studio top-bar strips): chain per path, block panel (photo, knobs, cab, footswitch), value widgets (knobs, typed values, IR/NAM slot pickers), effect picker window, controllers card for pedal documents, Studio top-bar strips (snapshot chips, BPM, path meters). |
 | `chain.rs` | The diagram: `Chain { main, lower, split, merge, selected, ... }` → `show()` returns `Vec<Hit>` (click, drop, toggle, gap menu actions...). Draws effect boxes, loop markers for sends/returns, IN/OUT terminals, split/merge dots, keyboard shortcuts. |
 | `controllers.rs` | Controllers panel for `.hlx` (footswitches, expression, snapshots, MIDI, Command Center). |
@@ -52,7 +52,7 @@ thread. Everything else is plain data structures edited in place every frame.
 | `library.rs`, `folders.rs`, `tonelib.rs` | Preset library and IR/NAM library as real folders on disk. |
 | `fakepedal.rs` | Tests only: a fake pedal behind `Wire` for testing `Session` without hardware. |
 | `selftest.rs` | Hidden Tests page: backs up, exercises every operation on one preset slot and one IR slot, restores, verifies; stops immediately if the link drops. |
-| `theme.rs` | Palette (Studio vs Classic, switchable at run time), accent colour, cards, pills, help (?) icons, logos. |
+| `theme.rs` | Palette, accent colour (picked in Settings), cards, pills, help (?) icons, logos. |
 | `icons.rs` | Effect-type icons cut from `assets/block Images/Blocks_stadium.png` (category line icons and per-kind tiles). `kind_label` names an amp carrying its cab "Amp+Cab" (a cab carrying a second cab "Dual Cab"); `paint_model` draws Amp+Cab as the amp tile with a small cab tile on its corner. |
 | `modelinfo.rs` | Effect photos and descriptions (`assets/models`, Line 6 material from its firmware release notes; see README). For an amp + cab or dual cab, `side()` shows the cab's photo under the amp's. |
 | `realnames.rs` | Optional real-gear names for effects. |
@@ -86,11 +86,11 @@ thread. Everything else is plain data structures edited in place every frame.
 5. The effect picker (`editors::picker_window`) is a separate window; its pick comes back to
    `App::apply_pick`, which places the model in the document (and sends `SetModel` live).
 
-### Editor parts (Studio layout)
+### Editor parts
 
 `editors::set_part(p)` makes an editor draw only part of itself:
-`0` everything (Classic look), `1` chain only, `2` selected block's panel only,
-`3` controllers only (window-side). The Studio layout (`App::studio_central`) draws the chain
+`0` everything (the reset state), `1` chain only, `2` selected block's panel only,
+`3` controllers only (window-side). The layout (`App::studio_central`) draws the chain
 in a top panel sized to its measured height and the block/controllers panel below it, filling
 the rest.
 
@@ -119,10 +119,10 @@ rx: Receiver<Event> }`. The loop:
 
 ## Look and feel
 
-- Two looks, switched in Settings: **Studio** (default; mockup-style top bar, flat effect
-  boxes with icons, docked block panel, round IN/OUT terminals) and **Classic**.
-  `chain::studio()` is the global switch; `theme::bg()/panel()/card_bg()/card_hi()/line()`
-  return the palette for the current look; `theme::accent()` is the chosen accent colour.
+- One look: a mockup-style top bar, flat effect boxes with icons, a docked block panel and
+  round IN/OUT terminals. (Function names with `studio` in them date from when there was also
+  a "Classic" look, which has been removed.) `theme::bg()/panel()/card_bg()/card_hi()/line()` are the
+  palette; `theme::accent()` is the accent colour chosen in Settings.
 - egui's default fonts lack some symbols (`●`, `→`, `▾`, `↶`); they render as squares. Paint
   dots/arrows with the painter, or use plain text.
 - Tips go behind `theme::help(ui, text)` (a "?" icon), not as visible small text.

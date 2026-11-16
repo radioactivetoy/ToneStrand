@@ -235,7 +235,6 @@ impl App {
         let mdns = if settings.discover_boxes { boxes::start_discovery(tx) } else { None };
         cc.egui_ctx.set_zoom_factor(settings.ui_scale.clamp(0.75, 1.5));
         crate::realnames::set(settings.real_names || std::env::var("TONESTRAND_REAL_NAMES").is_ok_and(|v| v == "1"));
-        crate::chain::set_studio(settings.studio);
         let library_dir = std::env::var_os("TONESTRAND_LIBRARY")
             .map(PathBuf::from)
             .or_else(|| settings.library.clone().map(PathBuf::from))
@@ -982,42 +981,21 @@ impl App {
         }
 
         self.catalog_card(ctx);
-        if crate::chain::studio() && !self.docs.is_empty() {
+        if !self.docs.is_empty() {
             return self.studio_central(ctx);
         }
         egui::CentralPanel::default()
             .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin::same(14)))
             .show(ctx, |ui| {
-                if self.docs.is_empty() {
-                    ui.vertical_centered(|ui| {
-                        ui.add_space(80.0);
-                        if let Some(t) = theme::logo(ui.ctx(), theme::Logo::WithName) {
-                            ui.add(egui::Image::new(&t).fit_to_exact_size(Vec2::new(360.0, 145.0)).tint(Color32::from_white_alpha(150)));
-                            ui.add_space(16.0);
-                        }
-                        ui.label(RichText::new("No preset open").size(22.0).strong());
-                        ui.label(RichText::new("Open a file, start a new preset, or edit one from the pedal.").color(MUTED));
-                    });
-                    return;
-                }
-                self.tabs(ui);
-                // The last tab may have just been closed: the empty screen shows next frame.
-                if self.docs.is_empty() {
-                    ui.ctx().request_repaint();
-                    return;
-                }
-                let i = self.active.min(self.docs.len() - 1);
-                egui::Frame::new()
-                    .fill(card_bg())
-                    .stroke(Stroke::new(1.0_f32, line()))
-                    .corner_radius(CornerRadius { nw: 0, ne: 10, sw: 10, se: 10 })
-                    .inner_margin(egui::Margin::same(16))
-                    .show(ui, |ui| {
-                        ui.set_min_size(ui.available_size());
-                        egui::ScrollArea::vertical().id_salt("editor").auto_shrink([false, false]).show(ui, |ui| {
-                            self.editor(ui, i, 0);
-                        });
-                    });
+                ui.vertical_centered(|ui| {
+                    ui.add_space(80.0);
+                    if let Some(t) = theme::logo(ui.ctx(), theme::Logo::WithName) {
+                        ui.add(egui::Image::new(&t).fit_to_exact_size(Vec2::new(360.0, 145.0)).tint(Color32::from_white_alpha(150)));
+                        ui.add_space(16.0);
+                    }
+                    ui.label(RichText::new("No preset open").size(22.0).strong());
+                    ui.label(RichText::new("Open a file, start a new preset, or edit one from the pedal.").color(MUTED));
+                });
             });
     }
 
@@ -1077,7 +1055,7 @@ impl App {
         }
     }
 
-    /// The Studio look's editor: the open presets' tabs, the chain on a large canvas with
+    /// The editor: the open presets' tabs, the chain on a large canvas with
     /// the controllers under it, and the selected block's panel docked at the bottom.
     fn studio_central(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin::ZERO)).show(ctx, |ui| {
@@ -1149,8 +1127,8 @@ impl App {
     }
     /// The preset's own controls: its name and kind, save / save as / library, undo / redo,
     /// and the pedal actions (save on pedal, write back, send to a slot).
-    /// mode 0: the classic look (two lines inside the page); 1: Studio top bar (name, undo,
-    /// save); 2: Studio second row (library and pedal actions).
+    /// mode 1: the preset bar's first row (name, undo,
+    /// save); 2: its second row (library and pedal actions).
     fn doc_bar(&mut self, ui: &mut egui::Ui, i: usize, mode: u8) {
         if i >= self.docs.len() {
             return;
@@ -1325,28 +1303,11 @@ impl App {
                 undo_buttons(ui, doc, true, &mut history);
                 save_buttons(ui, true, &mut save);
             }
-            2 => {
+            _ => {
                 if ui.button("📚 Save to library").on_hover_text("Keep a copy in your preset library on this computer").clicked() {
                     to_library = true;
                 }
                 pedal_row(ui, doc, &mut cmds, &mut confirm);
-            }
-            _ => {
-                ui.horizontal(|ui| header(ui, doc, false));
-                if let Some(p) = &doc.path {
-                    ui.label(RichText::new(p.to_string_lossy()).small().color(MUTED));
-                }
-                ui.add_space(6.0);
-                ui.horizontal_wrapped(|ui| {
-                    save_buttons(ui, false, &mut save);
-                    if ui.button("📚 Save to library").on_hover_text("Keep a copy in your preset library on this computer").clicked() {
-                        to_library = true;
-                    }
-                    ui.add(egui::Separator::default().vertical().spacing(10.0));
-                    undo_buttons(ui, doc, false, &mut history);
-                    ui.add(egui::Separator::default().vertical().spacing(10.0));
-                    pedal_row(ui, doc, &mut cmds, &mut confirm);
-                });
             }
         }
         if save.is_none() && mode != 2 && ui.input_mut(|inp| inp.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
@@ -1367,13 +1328,9 @@ impl App {
         }
     }
 
-    /// The preset's chain and knobs. part 0: everything; 1: the chain and the controllers;
-    /// 2: only the selected block's panel (the Studio look docks it at the bottom).
+    /// The preset's chain and knobs. part 1: the chain and the controllers; 2: only the
+    /// selected block's panel (docked at the bottom).
     fn editor(&mut self, ui: &mut egui::Ui, i: usize, part: u8) {
-        if part == 0 && !crate::chain::studio() {
-            self.doc_bar(ui, i, 0);
-            ui.add_space(10.0);
-        }
         if i >= self.docs.len() {
             return;
         }
@@ -1390,10 +1347,7 @@ impl App {
                 if part != 3 {
                     editors::hlx_editor(ui, json, &mut doc.selected, &mut doc.dirty, cat.as_deref(), picker);
                 }
-                if part == 0 || part == 3 {
-                    if part == 0 {
-                        ui.add_space(10.0);
-                    }
+                if part == 3 {
                     crate::controllers::panel(ui, json, cat.as_deref(), &mut doc.dirty);
                 }
             }
@@ -1407,10 +1361,7 @@ impl App {
                         picker,
                     );
                 }
-                if part == 0 || part == 3 {
-                    if part == 0 {
-                        ui.add_space(10.0);
-                    }
+                if part == 3 {
                     editors::device_controllers(ui, preset, live, &mut cmds, cat.as_deref(), &mut doc.dirty);
                 }
             }
@@ -1615,11 +1566,7 @@ impl eframe::App for App {
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::T)) {
             self.view = if self.view == View::Tests { View::Editor } else { View::Tests };
         }
-        if crate::chain::studio() {
-            self.studio_top_bar(ctx);
-        } else {
-            self.top_bar(ctx);
-        }
+        self.studio_top_bar(ctx);
         self.status_bar(ctx);
         self.left_panel(ctx);
         self.central(ctx);
@@ -1667,29 +1614,21 @@ struct IrPlan {
     /// The person says their pedal runs the NAM A2 Lite firmware (needed for captures).
     firmware_ok: bool,
 }
-/// A sidebar section: a card with a title in the classic look; in the Studio look a flat
-/// section under a small capital heading (as in the mockup).
-fn side_section<R>(ui: &mut egui::Ui, title: &str, studio_title: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
-    if crate::chain::studio() {
-        ui.add_space(4.0);
-        ui.label(RichText::new(studio_title).small().strong().color(MUTED));
-        ui.add_space(4.0);
-        let r = egui::Frame::new()
-            .fill(card_bg())
-            .corner_radius(CornerRadius::same(8))
-            .stroke(Stroke::new(1.0_f32, line()))
-            .inner_margin(egui::Margin::same(10))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                add(ui)
-            })
-            .inner;
-        ui.add_space(6.0);
-        r
-    } else {
-        theme::card(ui, |ui| {
-            theme::section(ui, title);
+/// A sidebar section: a card under a small capital heading.
+fn side_section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    ui.add_space(4.0);
+    ui.label(RichText::new(title).small().strong().color(MUTED));
+    ui.add_space(4.0);
+    let r = egui::Frame::new()
+        .fill(card_bg())
+        .corner_radius(CornerRadius::same(8))
+        .stroke(Stroke::new(1.0_f32, line()))
+        .inner_margin(egui::Margin::same(10))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
             add(ui)
         })
-    }
+        .inner;
+    ui.add_space(6.0);
+    r
 }

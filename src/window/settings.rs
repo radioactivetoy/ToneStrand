@@ -246,15 +246,22 @@ impl App {
                     theme::card(ui, |ui| {
                         theme::section(ui, "Display");
                         ui.horizontal(|ui| {
-                            ui.label("Look");
-                            for (label, studio) in [("Studio (new)", true), ("Classic", false)] {
-                                if ui.selectable_label(self.settings.studio == studio, label).clicked() && self.settings.studio != studio {
-                                    self.settings.studio = studio;
-                                    crate::chain::set_studio(studio);
+                            ui.label("Accent colour");
+                            for (rgb, name) in theme::ACCENTS.iter() {
+                                let col = egui::Color32::from_rgb((rgb >> 16) as u8, (rgb >> 8) as u8, *rgb as u8);
+                                let (rect, r) = ui.allocate_exact_size(egui::Vec2::splat(20.0), egui::Sense::click());
+                                ui.painter().circle_filled(rect.center(), 8.0, col);
+                                if theme::accent_rgb() == *rgb {
+                                    ui.painter().circle_stroke(rect.center(), 10.0, egui::Stroke::new(1.5_f32, theme::TEXT));
+                                }
+                                if r.on_hover_text(*name).clicked() && theme::accent_rgb() != *rgb {
+                                    theme::set_accent(*rgb);
+                                    theme::apply(ui.ctx());
+                                    self.settings.accent = *rgb;
                                     changed = true;
                                 }
                             }
-                            theme::help(ui, "Studio is the new look: bigger, more colourful effect boxes with their icons. Classic goes back to the look before the redesign.");
+                            theme::help(ui, "The colour of selected items, buttons and the signal chain's highlights.");
                         });
                         ui.horizontal(|ui| {
                             ui.label("Effect names");

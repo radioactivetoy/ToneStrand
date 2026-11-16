@@ -10,114 +10,6 @@ struct HlxDrag {
     dsp: String,
     key: String,
 }
-/// The snapshot buttons: pick one to hear and edit it; its name; add another.
-/// Knobs moved and blocks switched while a snapshot is picked are kept in it.
-fn snapshot_bar(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mut bool) {
-    let list = snapshots::list(json);
-    let cur = snapshots::current(json);
-    let fam = snapshots::family(json);
-    theme::card(ui, |ui| {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("SNAPSHOTS").small().strong().color(MUTED));
-            theme::help(ui, "Each snapshot is a variation of this preset. Knobs you turn now are stored in the picked snapshot (they get a SNAP tag), and every block's on/off is stored too.");
-            let clip_id = egui::Id::new("tonestrand-snapshot-clipboard");
-            let clip: Option<(String, serde_json::Value)> = ui.data(|d| d.get_temp(clip_id));
-            let mut action: Option<(&str, usize)> = None;
-            for (i, name) in &list {
-                let on = *i == cur;
-                let label = if name.is_empty() { format!("Snapshot {}", i + 1) } else { name.clone() };
-                let text = RichText::new(&label).strong().color(if on { Color32::from_rgb(8, 26, 24) } else { TEXT });
-                let b = egui::Button::new(text).fill(if on { accent() } else { card_hi() }).min_size(Vec2::new(96.0, 28.0));
-                let r = ui.add(b);
-                r.context_menu(|ui| {
-                    if ui.button("Copy").clicked() {
-                        action = Some(("copy", *i));
-                        ui.close_menu();
-                    }
-                    let paste = match &clip {
-                        Some((from, _)) => format!("Paste {from} here"),
-                        None => "Paste".to_owned(),
-                    };
-                    if ui.add_enabled(clip.is_some(), egui::Button::new(paste)).clicked() {
-                        action = Some(("paste", *i));
-                        ui.close_menu();
-                    }
-                    if ui.add_enabled(list.len() < fam.snapshot_count, egui::Button::new("Duplicate")).clicked() {
-                        action = Some(("duplicate", *i));
-                        ui.close_menu();
-                    }
-                    ui.separator();
-                    if ui.add_enabled(list.len() > 1, egui::Button::new(RichText::new("Delete").color(BAD))).clicked() {
-                        action = Some(("delete", *i));
-                        ui.close_menu();
-                    }
-                });
-                if r.on_hover_text("Recall this snapshot; changes you make now are kept in it. Right-click to copy, paste, duplicate or delete.").clicked() && !on {
-                    snapshots::select(json, *i);
-                    *dirty = true;
-                }
-            }
-            if list.len() < fam.snapshot_count && ui.button("+ Snapshot").on_hover_text("Add a snapshot that starts as a copy of this one").clicked() {
-                if let Some(n) = snapshots::add(json) {
-                    snapshots::select(json, n);
-                    *dirty = true;
-                }
-            }
-            if let Some((_, name)) = list.iter().find(|(i, _)| *i == cur) {
-                let mut n = name.clone();
-                ui.add_space(12.0);
-                ui.label(RichText::new("Name").color(MUTED));
-                let r = ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(crate::session::SNAPSHOT_NAME_MAX));
-                if r.has_focus() {
-                    theme::name_hint(ui, &n, crate::session::SNAPSHOT_NAME_MAX);
-                }
-                if r.changed() {
-                    snapshots::rename(json, cur, &n);
-                    *dirty = true;
-                }
-                if ui.small_button("Copy").on_hover_text("Copy this snapshot's settings, to paste into another").clicked() {
-                    action = Some(("copy", cur));
-                }
-                if let Some((from, _)) = &clip {
-                    if ui.small_button("Paste").on_hover_text(format!("Put {from}'s settings into this snapshot")).clicked() {
-                        action = Some(("paste", cur));
-                    }
-                }
-                if list.len() > 1 && ui.small_button(RichText::new("Delete").color(BAD)).on_hover_text("Take this snapshot out").clicked() {
-                    action = Some(("delete", cur));
-                }
-            }
-            match action {
-                Some(("copy", i)) => {
-                    if let Some(v) = snapshots::copy(json, i) {
-                        let name = list.iter().find(|(x, _)| *x == i).map(|(_, n)| n.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| format!("Snapshot {}", i + 1));
-                        ui.data_mut(|d| d.insert_temp(clip_id, (name, v)));
-                    }
-                }
-                Some(("paste", i)) => {
-                    if let Some((_, v)) = &clip {
-                        snapshots::paste(json, i, v);
-                        *dirty = true;
-                    }
-                }
-                Some(("duplicate", i)) => {
-                    if i != cur {
-                        snapshots::select(json, i);
-                    }
-                    if let Some(n) = snapshots::add(json) {
-                        snapshots::select(json, n);
-                    }
-                    *dirty = true;
-                }
-                Some(("delete", i)) if snapshots::delete(json, i) => {
-                    *dirty = true;
-                }
-                _ => {}
-            }
-        });
-    });
-}
-
 /// The menu that puts a knob on a controller: snapshots, an expression pedal,
 /// a footswitch or MIDI CC, with its low and high ends.
 fn assign_menu(ui: &mut egui::Ui, json: &mut serde_json::Value, b: &hlx::HlxBlock, knob: &str, meta: Option<&Param>, dirty: &mut bool) {
@@ -221,31 +113,7 @@ pub fn hlx_editor(
     cat: Option<&Catalog>,
     picker: &mut Option<PickerState>,
 ) {
-    // Tempo, unit and snapshots (in the Studio look they sit in the top bar).
-    if chain_part() && !crate::chain::studio() {
-    ui.horizontal_wrapped(|ui| {
-        if PresetDoc::tempo(json).is_some() {
-            if tempo_box(ui, json) {
-                *dirty = true;
-            }
-            ui.add_space(12.0);
-        }
-        // Which unit the preset is for; it decides lanes, paths, snapshots and switches.
-        // Shown here, chosen with Unit at the top (where presets are converted and checked).
-        let device = snapshots::device(json);
-        theme::pill(ui, &format!("for {}", crate::units::unit_name(device)), MUTED);
-        let _ = dirty;
-    });
-    ui.add_space(8.0);
-    snapshot_bar(ui, json, dirty);
-    ui.add_space(10.0);
-    theme::section_help(
-        ui,
-        "Signal chain",
-        "Click a block to edit its knobs, double-click to switch it on or off, and drag it onto another position to move it. Click + to add an effect.",
-    );
-    ui.add_space(2.0);
-    }
+    // Unit and block counts; tempo and snapshots sit in the top bar.
 
     let name_of = |model: &str| -> (String, String, Color32) {
         let fam = hlx::family(model);
@@ -316,17 +184,6 @@ pub fn hlx_editor(
         let main_cols = hlx::main_cols_for(json, dsp, unit.positions, unit.max_blocks, unit.shared_slots);
         ui.horizontal(|ui| {
             ui.label(RichText::new(format!("PATH {}", di + 1)).small().strong().color(MUTED));
-            // In the Studio look the path's DSP and block count sit in the preset bar.
-            if crate::chain::studio() {
-                return;
-            }
-            if cat.is_some() {
-                dsp_ring(ui, used);
-                let col = if used > 90.0 { BAD } else if used > 70.0 { ORANGE } else { GOOD };
-                ui.label(RichText::new(format!("DSP {:.0}%", used.abs())).small().strong().color(col));
-            }
-            let bcol = if full { ORANGE } else { MUTED };
-            ui.label(RichText::new(format!("·  {count}/{} blocks", unit.max_blocks)).small().color(bcol));
         });
         // The path as a diagram: main line, and when it splits the lower lane
         // starting at the split dot.
@@ -464,12 +321,6 @@ pub fn hlx_editor(
                 chain::Hit::Merge => *selected = Some(50_000 + di),
             }
         }
-        if unit.lanes && split.is_none() && (!unit.shared_slots || main_blocks < unit.max_blocks) && !crate::chain::studio() && ui.small_button("+ Split into two lanes").on_hover_text("Add a split and a merge; the lower lane appears under the main one").clicked() {
-            let defaults = |m: &str| cat.and_then(|c| c.number_for_hlx(m, false).map(|n| c.default_values(n))).unwrap_or_default();
-            hlx::add_split(json, dsp, &defaults);
-            *selected = Some(40_000 + di);
-            *dirty = true;
-        }
         ui.add_space(6.0);
     }
     if let Some((dsp, free)) = extend_dsp {
@@ -542,9 +393,6 @@ pub fn hlx_editor(
         return;
     }
 
-    if !crate::chain::studio() {
-        ui.add_space(8.0);
-    }
     // Split or merge settings.
     if let Some(code) = selected.filter(|s| (40_000..60_000).contains(s)) {
         let merge = code >= 50_000;

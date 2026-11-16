@@ -15,17 +15,9 @@ fn bw() -> f32 {
     BW.with(|c| c.get())
 }
 const IO_W: f32 = 56.0;
-/// Block height: taller in the Studio look.
+/// Block height.
 fn bh() -> f32 {
-    if studio() { 96.0 } else { 78.0 }
-}
-static STUDIO: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
-/// Switch between the Studio look and the classic one (Settings).
-pub fn set_studio(on: bool) {
-    STUDIO.store(on, std::sync::atomic::Ordering::Relaxed);
-}
-pub fn studio() -> bool {
-    STUDIO.load(std::sync::atomic::Ordering::Relaxed)
+    96.0
 }
 const GAP: f32 = 16.0;
 const ROW_GAP: f32 = 26.0;
@@ -113,7 +105,6 @@ fn col_x(left: f32, col: usize) -> f32 {
 
 fn draw_block(ui: &egui::Ui, rect: Rect, cell: &Cell, selected: bool, hovered: bool, can_add: bool) {
     let p = ui.painter();
-    let r = CornerRadius::same(10);
     match cell {
         Cell::Empty => {
             let small = Rect::from_center_size(rect.center(), Vec2::new(46.0, bh()));
@@ -124,72 +115,9 @@ fn draw_block(ui: &egui::Ui, rect: Rect, cell: &Cell, selected: bool, hovered: b
                 p.text(small.center(), egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(20.0), col);
             }
         }
-        Cell::Block { title, subtitle, colour, on, detail, category, symbol } if studio() => {
+        Cell::Block { title, subtitle, colour, on, detail, category, symbol } => {
             let look = StudioBlock { title, subtitle, colour: *colour, on: *on, detail: detail.as_deref(), category, symbol, selected, hovered };
             draw_studio_block(ui, rect, look);
-        }
-        Cell::Block { title, subtitle, colour, on, detail, category, symbol } => {
-            // A soft shadow; a little lift while hovered.
-            let rect = if hovered && !selected { rect.translate(Vec2::new(0.0, -1.5)) } else { rect };
-            p.rect_filled(rect.translate(Vec2::new(0.0, 3.0)).expand(1.0), r, Color32::from_black_alpha(70));
-            if selected {
-                p.rect_stroke(rect.expand(3.5), CornerRadius::same(13), Stroke::new(3.0_f32, accent().gamma_multiply(0.35)), egui::StrokeKind::Outside);
-            }
-            // Two tones: the colour on top fading darker below.
-            let top = if *on { mix(card_hi(), *colour, 0.55) } else { panel() };
-            let bottom = if *on { mix(bg(), *colour, 0.35) } else { mix(bg(), panel(), 0.5) };
-            p.rect_filled(rect, r, bottom);
-            let upper = Rect::from_min_max(rect.min, Pos2::new(rect.max.x, rect.center().y + 6.0));
-            p.with_clip_rect(upper).rect_filled(rect, r, top);
-            let band = Rect::from_min_size(rect.min, Vec2::new(rect.width(), 5.0));
-            p.with_clip_rect(band).rect_filled(rect, r, if *on { *colour } else { colour.linear_multiply(0.3) });
-            let stroke = if selected {
-                Stroke::new(2.0_f32, accent())
-            } else if hovered {
-                Stroke::new(1.5_f32, colour.linear_multiply(0.9))
-            } else {
-                Stroke::new(1.0_f32, crate::theme::line())
-            };
-            p.rect_stroke(rect, r, stroke, egui::StrokeKind::Inside);
-            // The on/off light (clickable), with a glow while on.
-            let light = rect.right_top() + Vec2::new(-12.0, 18.0);
-            if *on {
-                p.circle_filled(light, 7.0, GOOD.gamma_multiply(0.25));
-            }
-            p.circle_filled(light, 4.5, if *on { GOOD } else { Color32::from_gray(70) });
-            let tc = if *on { TEXT } else { MUTED };
-            // At most two lines, so long real-gear names never cover the type label.
-            let rows = if detail.is_some() { 1 } else { 2 };
-            let mut job = egui::text::LayoutJob::simple(title.clone(), egui::FontId::proportional(13.0), tc, bw() - 30.0);
-            job.wrap.max_rows = rows;
-            job.wrap.break_anywhere = false;
-            let galley = p.layout_job(job);
-            p.galley(rect.left_top() + Vec2::new(9.0, 13.0), galley, tc);
-            if let Some(d) = detail {
-                let mut job = egui::text::LayoutJob::simple(d.clone(), egui::FontId::proportional(11.0), PINK, bw() - 18.0);
-                job.wrap.max_rows = 1;
-                let galley = p.layout_job(job);
-                p.galley(rect.left_top() + Vec2::new(9.0, 33.0), galley, PINK);
-            }
-            // The effect type's icon beside its name.
-            let mut sub_x = 9.0;
-            let icon = Rect::from_min_size(rect.left_bottom() + Vec2::new(6.0, -33.0), Vec2::splat(28.0));
-            let tint = if *on { Color32::WHITE } else { Color32::from_white_alpha(110) };
-            if crate::icons::paint_model(p, ui.ctx(), icon, category, symbol, title, tint) {
-                sub_x = 39.0;
-            }
-            p.text(
-                rect.left_bottom() + Vec2::new(sub_x, -12.0),
-                egui::Align2::LEFT_BOTTOM,
-                subtitle,
-                egui::FontId::proportional(11.0),
-                if *on { TEXT.linear_multiply(0.75) } else { colour.linear_multiply(0.8) },
-            );
-            if !*on {
-                let pill = Rect::from_min_size(rect.right_bottom() + Vec2::new(-36.0, -22.0), Vec2::new(28.0, 15.0));
-                p.rect_filled(pill, CornerRadius::same(4), Color32::from_gray(55));
-                p.text(pill.center(), egui::Align2::CENTER_CENTER, "OFF", egui::FontId::proportional(9.5), MUTED);
-            }
         }
     }
 }
@@ -207,7 +135,7 @@ struct StudioBlock<'a> {
     hovered: bool,
 }
 
-/// The Studio look's effect box: a colourful gradient in the effect type's colour, its icon
+/// The effect box: a colourful gradient in the effect type's colour, its icon
 /// tile with the type beside it, the name in bold at the bottom, and the on/off light.
 fn draw_studio_block(ui: &egui::Ui, rect: Rect, look: StudioBlock) {
     let StudioBlock { title, subtitle, colour, on, detail, category, symbol, selected, hovered } = look;
@@ -373,28 +301,16 @@ fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
     Color32::from_rgb(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()))
 }
 
-/// Radius of the round IN / OUT terminals of the Studio look.
+/// Radius of the round IN / OUT terminals.
 const TERMINAL_R: f32 = 21.0;
 
 fn io_box(ui: &egui::Ui, rect: Rect, text: &str, selected: bool, hovered: bool) {
     let p = ui.painter();
-    if studio() {
-        // A small round terminal, as in the mockup; click it for the input or output settings.
+    // A small round terminal; click it for the input or output settings.
         let c = rect.center();
         p.circle_filled(c, TERMINAL_R, if hovered { card_hi() } else { panel() });
         p.circle_stroke(c, TERMINAL_R, Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, if selected { accent() } else { crate::theme::line() }));
         p.text(c, egui::Align2::CENTER_CENTER, text, egui::FontId::monospace(11.5), if hovered || selected { TEXT } else { MUTED });
-        return;
-    }
-    p.rect_filled(rect, CornerRadius::same(10), if hovered { card_hi() } else { panel() });
-    p.rect_stroke(
-        rect,
-        CornerRadius::same(10),
-        Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, if selected { accent() } else { crate::theme::line() }),
-        egui::StrokeKind::Inside,
-    );
-    p.text(rect.center() - Vec2::new(0.0, 6.0), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(14.0), TEXT);
-    p.text(rect.center() + Vec2::new(0.0, 14.0), egui::Align2::CENTER_CENTER, "settings", egui::FontId::proportional(10.0), MUTED);
 }
 
 impl Chain<'_> {
@@ -422,11 +338,7 @@ impl Chain<'_> {
 
         // The main line, cleanly connecting the right edge of IN to the left edge of OUT.
         let p = ui.painter().clone();
-        let (line_from, line_to) = if studio() {
-            (in_rect.center().x + TERMINAL_R, out_rect.center().x - TERMINAL_R)
-        } else {
-            (in_rect.right(), out_rect.left())
-        };
+        let (line_from, line_to) = (in_rect.center().x + TERMINAL_R, out_rect.center().x - TERMINAL_R);
         p.line_segment([Pos2::new(line_from, main_y), Pos2::new(line_to, main_y)], line);
 
         // The lower lane and its connections.

@@ -513,10 +513,6 @@ pub fn split_active(doc: &Value, dsp: &str) -> bool {
     doc.pointer(&format!("/data/tone/global/@topology{}", dsp_index(dsp))).and_then(Value::as_str).unwrap_or("A") != "A"
 }
 
-pub fn add_split(doc: &mut Value, dsp: &str, defaults: &dyn Fn(&str) -> Vec<ParamValue>) {
-    add_split_at(doc, dsp, None, defaults);
-}
-
 /// Split the path before position `at` (the first free place when None), merging one place later.
 pub fn add_split_at(doc: &mut Value, dsp: &str, at: Option<i64>, defaults: &dyn Fn(&str) -> Vec<ParamValue>) {
     // A split and merge left in the file from a single-lane path start over where they're needed.

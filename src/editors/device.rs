@@ -7,70 +7,6 @@ use super::*;
 pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<usize>, picker: &mut Option<PickerState>) {
     let DeviceEdit { preset, live, cmds, cat, dirty } = ed;
     if chain_part() {
-    // Tempo and snapshots (in the Studio look they sit in the top bar).
-    if !crate::chain::studio() {
-    ui.horizontal_wrapped(|ui| {
-        if let Some(fw) = preset.firmware() {
-            theme::pill(ui, &format!("firmware {fw}"), MUTED);
-        }
-        if tempo_box(ui, preset) {
-            *dirty = true;
-        }
-        let snaps = preset.snapshot_names();
-        if !snaps.is_empty() {
-            ui.add_space(12.0);
-            ui.label(RichText::new("Snapshots").color(MUTED));
-            let count = snaps.len();
-            let names = snaps.clone();
-            for (i, mut n) in snaps.into_iter().enumerate() {
-                let num = ui.add(egui::Button::new(format!("{}", i + 1)).small());
-                let num = if live { num.on_hover_text("Switch to this snapshot. Right-click to copy another snapshot into it.") } else { num.on_hover_text("Right-click to copy another snapshot into this one") };
-                if live && num.clicked() {
-                    cmds.push(Cmd::Snapshot(i as i64));
-                }
-                num.context_menu(|ui| {
-                    if live {
-                        ui.label(RichText::new("Copying works on the offline copy.\nSave a copy of this preset first.").small().color(MUTED));
-                        return;
-                    }
-                    ui.label(RichText::new(format!("Make snapshot {} the same as", i + 1)).small().color(MUTED));
-                    for j in (0..count).filter(|j| *j != i) {
-                        let from = names.get(j).filter(|s| !s.trim().is_empty()).cloned().unwrap_or_else(|| format!("Snapshot {}", j + 1));
-                        if ui.button(format!("{}: {from}", j + 1)).clicked() {
-                            if preset.copy_snapshot_states(j, i) {
-                                *dirty = true;
-                            }
-                            ui.close_menu();
-                        }
-                    }
-                });
-                let r = ui.add(egui::TextEdit::singleline(&mut n).desired_width(80.0).char_limit(crate::session::SNAPSHOT_NAME_MAX));
-                if r.has_focus() {
-                    theme::name_hint(ui, &n, crate::session::SNAPSHOT_NAME_MAX);
-                }
-                if r.changed() {
-                    preset.set_snapshot_name(i, &n);
-                    *dirty = true;
-                }
-                if live && (r.lost_focus() || (r.changed() && ui.input(|inp| inp.key_pressed(egui::Key::Enter)))) {
-                    cmds.push(Cmd::RenameSnapshot { index: i as i64, name: n.clone() });
-                }
-            }
-        }
-    });
-    ui.horizontal(|ui| {
-        if live {
-            theme::pill(ui, "LIVE", GOOD);
-            theme::help(ui, "Changes are heard on the pedal at once. \"Save on pedal\" keeps them in the preset.");
-        } else {
-            theme::pill(ui, "OFFLINE COPY", MUTED);
-            theme::help(ui, "Edit knobs and switches here, then save or send it. To swap effects, edit the live preset.");
-        }
-    });
-    ui.add_space(10.0);
-    theme::section(ui, "Signal chain");
-    ui.add_space(4.0);
-    }
 
     let slots = preset.slots();
     let mut toggle = None;
@@ -143,13 +79,6 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
 
         ui.horizontal(|ui| {
             ui.label(RichText::new(format!("PATH {}", path + 1)).small().strong().color(MUTED));
-            // In the Studio look the path's DSP sits in the preset bar.
-            if cat.is_some() && !crate::chain::studio() {
-                dsp_ring(ui, used);
-                let col = if used > 90.0 { BAD } else if used > 70.0 { ORANGE } else { GOOD };
-                ui.label(RichText::new(format!("DSP {used:.0}%")).small().strong().color(col))
-                    .on_hover_text("How much of the pedal's processing this path uses (estimated from HX Edit's figures)");
-            }
         });
         let in_global = in_path.iter().find(|s| s.kind == Kind::Input).map(|s| s.global);
         let out_global = in_path.iter().find(|s| s.kind == Kind::Output).map(|s| s.global);
@@ -338,23 +267,6 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                 chain::Hit::Merge => *selected = join_slot.map(|s| s.global),
             }
         }
-        if !show_lower && !lower.is_empty() && cat.is_some() && !crate::chain::studio() && ui.small_button("+ Split into two lanes").on_hover_text("Show the lower lane to add effects to it").clicked() {
-            // Place the split before the first free main position and the merge two later.
-            let first_free = main.iter().position(|s| s.kind == Kind::Empty).unwrap_or(0);
-            if let (Some(sp), Some(jp)) = (split_slot, join_slot) {
-                let attach_at = |col: usize| main.get(col).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
-                let sa = attach_at(first_free);
-                let ja = attach_at(first_free + 2);
-                preset.set_attach(sp.path, sp.position, sa);
-                preset.set_attach(jp.path, jp.position, ja);
-                if live {
-                    cmds.push(Cmd::MoveSplit { block: 20 * sp.path + sa });
-                    cmds.push(Cmd::MoveJoin { block: 20 * jp.path + ja });
-                }
-                *dirty = true;
-            }
-            *selected = split_slot.map(|s| s.global);
-        }
         ui.add_space(6.0);
     }
     // A block dropped on another position of its path moves there.
@@ -398,9 +310,6 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
     }
     let slots = preset.slots();
 
-    if !crate::chain::studio() {
-        ui.add_space(8.0);
-    }
     let Some(sel) = selected.filter(|s| *s < slots.len()) else {
         ui.add_space(20.0);
         ui.vertical_centered(|ui| ui.label(RichText::new("Pick a block in the chain to see its knobs.").color(MUTED)));

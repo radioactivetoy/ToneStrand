@@ -2,25 +2,21 @@
 
 use eframe::egui::{self, Color32, CornerRadius, Stroke};
 
-/// The base colours. The Studio look uses the mockup's darker, neutral greys with thin
-/// borders; the classic look keeps the bluer greys it had.
-fn studio_palette() -> bool {
-    crate::chain::studio()
-}
+/// The base colours: dark, neutral greys with thin borders.
 pub fn bg() -> Color32 {
-    if studio_palette() { Color32::from_rgb(0x10, 0x11, 0x14) } else { Color32::from_rgb(0x12, 0x14, 0x1a) }
+    Color32::from_rgb(0x10, 0x11, 0x14)
 }
 pub fn panel() -> Color32 {
-    if studio_palette() { Color32::from_rgb(0x15, 0x16, 0x1a) } else { Color32::from_rgb(0x19, 0x1c, 0x24) }
+    Color32::from_rgb(0x15, 0x16, 0x1a)
 }
 pub fn card_bg() -> Color32 {
-    if studio_palette() { Color32::from_rgb(0x1b, 0x1d, 0x22) } else { Color32::from_rgb(0x21, 0x25, 0x30) }
+    Color32::from_rgb(0x1b, 0x1d, 0x22)
 }
 pub fn card_hi() -> Color32 {
-    if studio_palette() { Color32::from_rgb(0x25, 0x28, 0x2f) } else { Color32::from_rgb(0x2a, 0x2f, 0x3c) }
+    Color32::from_rgb(0x25, 0x28, 0x2f)
 }
 pub fn line() -> Color32 {
-    if studio_palette() { Color32::from_rgb(0x2a, 0x2d, 0x34) } else { Color32::from_rgb(0x30, 0x35, 0x44) }
+    Color32::from_rgb(0x2a, 0x2d, 0x34)
 }
 pub const TEXT: Color32 = Color32::from_rgb(0xe6, 0xe9, 0xef);
 pub const MUTED: Color32 = Color32::from_rgb(0x8b, 0x93, 0xa7);

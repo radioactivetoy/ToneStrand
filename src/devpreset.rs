@@ -8,7 +8,6 @@ pub const MAGIC: &str = "l6-helix";
 
 /// Keys inside the tone.
 pub mod key {
-    pub const META: i64 = 7;
     pub const PATH0: i64 = 0;
     pub const SLOTS: i64 = 22;
     pub const KIND: i64 = 19;
@@ -24,7 +23,6 @@ pub mod key {
     pub const SPLIT_BODY: i64 = 15;
     pub const JOIN_BODY: i64 = 17;
     pub const ARRAY_VALUES: i64 = 4;
-    pub const FIRMWARE: i64 = 35;
     pub const SETTINGS: i64 = 5;
     pub const TEMPO: i64 = 16;
     pub const SNAPSHOT_SECTION: i64 = 10;
@@ -201,11 +199,6 @@ impl DevicePreset {
         out.extend_from_slice(&(total as u32).to_le_bytes());
         out.extend_from_slice(&(total as u32).to_le_bytes());
         Some(out)
-    }
-
-    pub fn firmware(&self) -> Option<String> {
-        let raw = self.tone.at(&[key::META, key::FIRMWARE])?.as_i64()? as u32;
-        Some(format!("{}.{:02x}", raw >> 24, (raw >> 16) & 0xff))
     }
 
     pub fn tempo(&self) -> Option<f64> {

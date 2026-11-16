@@ -43,9 +43,9 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
    a `theme::help` "?" icon, not as visible small text.
 5. **Font gaps:** egui's default fonts lack `●`, `→`, `▾`, `↶`, `↷` (they draw as squares). Paint
    shapes or use words.
-6. **Two looks.** Studio (default) and Classic must both keep working; check
-   `chain::studio()` where layout differs. Use `theme::bg()/panel()/card_bg()/card_hi()/line()`
-   and `theme::accent()`, never fixed greys or teal.
+6. **One look.** Use `theme::bg()/panel()/card_bg()/card_hi()/line()` and `theme::accent()`,
+   never fixed greys or teal. (There used to be a second, "Classic" look; it is gone, so
+   don't add a switch for it.)
 7. **Settings stay compatible:** `Settings` has a struct-level `#[serde(default)]`; give a new
    field its value in `impl Default for Settings` (older files then load with it).
 8. **Units differ.** Use `snapshots::family_of_device(unit)` for paths, lanes, slot limits
@@ -100,4 +100,4 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 ## Ideas queued by the owner
 
 - Send/return representation: refine the loop drawing (jack numbers per unit, stereo loops).
-- Polish of the Studio look (spacing, colours) as the owner reviews screenshots.
+- Polish of the look (spacing, colours) as the owner reviews screenshots.

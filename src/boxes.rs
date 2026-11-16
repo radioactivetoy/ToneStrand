@@ -62,8 +62,6 @@ pub struct Settings {
     pub nam_out_dir: Option<String>,
     /// The IR and NAM library folder (default: "IRs and NAM" in the preset library).
     pub tone_library: Option<String>,
-    /// The new "Studio" look (bigger, colourful chain); off goes back to the classic look.
-    pub studio: bool,
     /// The accent colour (0xRRGGBB).
     pub accent: u32,
     /// The last preset files opened, newest first (at most 10).
@@ -96,7 +94,6 @@ impl Default for Settings {
             nam_use_loudness: true,
             nam_out_dir: None,
             tone_library: None,
-            studio: true,
             accent: 0x2ec4b6,
             recent: Vec::new(),
             reopen_tabs: false,

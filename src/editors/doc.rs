@@ -85,17 +85,6 @@ pub(super) fn slots_dsp(cat: &Catalog, slots: &[&SlotView]) -> f64 {
     slots.iter().map(|s| s.model.map(|m| dsp_percent(cat, m)).unwrap_or(0.0) + s.paired.map(|m| dsp_percent(cat, m)).unwrap_or(0.0)).sum()
 }
 
-/// The classic look's tempo box, for either kind of document. `true` when it changed.
-pub(super) fn tempo_box(ui: &mut egui::Ui, doc: &mut dyn PresetDoc) -> bool {
-    let Some(mut t) = doc.tempo() else { return false };
-    ui.label(RichText::new("Tempo").color(MUTED));
-    let changed = ui.add(egui::DragValue::new(&mut t).range(30.0..=240.0).speed(0.5).suffix(" bpm")).changed();
-    if changed {
-        doc.set_tempo(t);
-    }
-    changed
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

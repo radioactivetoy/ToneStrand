@@ -1,4 +1,4 @@
-//! The Studio look's top-bar strips: snapshot chips, BPM and path meters.
+//! The top-bar strips: snapshot chips, BPM and path meters.
 
 use super::*;
 
@@ -9,7 +9,7 @@ fn snap_chip(ui: &mut egui::Ui, n: usize, name: &str, on: bool) -> egui::Respons
     ui.add(egui::Button::new(text).fill(if on { accent() } else { Color32::TRANSPARENT }).stroke(Stroke::NONE).min_size(Vec2::new(0.0, 24.0)))
 }
 
-/// The Studio top bar's preset strip for a .hlx preset: BPM and the snapshot chips
+/// The top bar's preset strip for a .hlx preset: BPM and the snapshot chips
 /// (click to recall; right-click to rename, copy, paste, duplicate or delete; + adds one).
 pub fn studio_strip_hlx(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mut bool) {
     let list = snapshots::list(json);
@@ -96,7 +96,7 @@ pub fn studio_strip_hlx(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: 
     }
 }
 
-/// The Studio top bar's snapshot chips for a pedal preset: on the live preset a click
+/// The top bar's snapshot chips for a pedal preset: on the live preset a click
 /// switches the pedal; right-click renames it or copies another snapshot into it.
 pub fn studio_strip_device(ui: &mut egui::Ui, preset: &mut DevicePreset, dirty: &mut bool, live: bool, cmds: &mut Vec<Cmd>) {
     let names = preset.snapshot_names();
