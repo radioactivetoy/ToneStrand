@@ -175,6 +175,10 @@ pub struct App {
     left_rect: egui::Rect,
     /// The window as last seen, to keep for next time: (x, y, width, height), maximized.
     window_seen: Option<([f32; 4], bool)>,
+    /// Problems logged since the Activity log was last opened (marks the button red).
+    errors_unseen: usize,
+    /// The keyboard shortcuts window is open (F1).
+    show_shortcuts: bool,
     close_ask: Option<CloseAsk>,
     /// The person chose to quit even with unsaved changes.
     quit_ok: bool,
@@ -282,6 +286,8 @@ impl App {
             pending_delete: None,
             left_rect: egui::Rect::NOTHING,
             window_seen: None,
+            errors_unseen: 0,
+            show_shortcuts: false,
             close_ask: None,
             quit_ok: false,
             last_error: None,
@@ -379,6 +385,9 @@ impl App {
     }
 
     fn note(&mut self, level: LogLevel, text: impl Into<String>) {
+        if level == LogLevel::Bad {
+            self.errors_unseen += 1;
+        }
         self.log.push_back((level, text.into()));
         while self.log.len() > 200 {
             self.log.pop_front();
@@ -635,6 +644,9 @@ impl App {
             return;
         }
         let ctrl = egui::Modifiers::COMMAND;
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F1)) {
+            self.show_shortcuts = !self.show_shortcuts;
+        }
         if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F2)) {
             self.rename_here(ctx);
         }
@@ -667,6 +679,59 @@ impl App {
             self.active = (here + n - 1) % n;
         } else if next {
             self.active = (here + 1) % n;
+        }
+    }
+
+    /// The list of keyboard shortcuts (F1, or the Shortcuts button in the status bar).
+    fn shortcuts_window(&mut self, ctx: &egui::Context) {
+        if !self.show_shortcuts {
+            return;
+        }
+        let mut open = true;
+        egui::Window::new("Keyboard shortcuts")
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                let sections: [(&str, &[(&str, &str)]); 3] = [
+                    (
+                        "Presets",
+                        &[
+                            ("Ctrl+O", "Open a preset file"),
+                            ("Ctrl+N", "New preset"),
+                            ("Ctrl+S", "Save"),
+                            ("Ctrl+W", "Close the tab"),
+                            ("Ctrl+Tab / Ctrl+Shift+Tab", "Next / previous tab"),
+                            ("Ctrl+Z / Ctrl+Y", "Undo / redo (not on the live preset)"),
+                            ("F2", "Rename: the preset, or the pedal preset or IR you point at"),
+                        ],
+                    ),
+                    (
+                        "The chain (click a block first)",
+                        &[
+                            ("Arrow keys", "Pick the next block"),
+                            ("Space", "Switch the block on or off"),
+                            ("Enter", "Change the effect"),
+                            ("Delete", "Remove the block"),
+                        ],
+                    ),
+                    ("Anywhere", &[("F1", "This list"), ("Ctrl+Shift+T", "The hidden Tests page")]),
+                ];
+                for (title, rows) in sections {
+                    ui.label(RichText::new(title).small().strong().color(MUTED));
+                    egui::Grid::new(("shortcuts", title)).num_columns(2).spacing([18.0, 4.0]).show(ui, |ui| {
+                        for (keys, what) in rows {
+                            ui.label(RichText::new(*keys).monospace().color(accent()));
+                            ui.label(*what);
+                            ui.end_row();
+                        }
+                    });
+                    ui.add_space(8.0);
+                }
+            });
+        if !open {
+            self.show_shortcuts = false;
         }
     }
 
@@ -1682,6 +1747,7 @@ impl eframe::App for App {
         self.central(ctx);
         self.dialogs(ctx);
         self.close_dialog(ctx);
+        self.shortcuts_window(ctx);
         if let Some(cat) = self.catalog.clone() {
             if let Some((st, model, cab)) = editors::picker_window(ctx, &mut self.picker, &cat) {
                 self.apply_pick(&cat, st, model, cab);

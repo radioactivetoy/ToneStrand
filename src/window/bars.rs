@@ -295,6 +295,9 @@ impl App {
     pub(super) fn status_bar(&mut self, ctx: &egui::Context) {
         let mut copied = false;
         let mut save = false;
+        let mut seen = false;
+        let mut help = false;
+        let unseen = self.errors_unseen;
         egui::TopBottomPanel::bottom("status").frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin::symmetric(14, 6))).show(
             ctx,
             |ui| {
@@ -308,7 +311,14 @@ impl App {
                         ui.label(RichText::new(msg).color(level_colour(*lvl, MUTED)));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.menu_button("Activity", |ui| {
+                        // Problems since the log was last opened turn the button red, so they are not missed.
+                        let label = if unseen > 0 {
+                            RichText::new(format!("Activity ({unseen} problem{})", if unseen == 1 { "" } else { "s" })).color(BAD)
+                        } else {
+                            RichText::new("Activity")
+                        };
+                        ui.menu_button(label, |ui| {
+                            seen = true;
                             ui.set_min_width(440.0);
                             ui.horizontal(|ui| {
                                 if ui.small_button("Copy").on_hover_text("Copy the log, for a bug report").clicked() {
@@ -327,10 +337,19 @@ impl App {
                                 }
                             });
                         });
+                        if ui.button("Shortcuts").on_hover_text("The keyboard shortcuts (F1)").clicked() {
+                            help = true;
+                        }
                     });
                 });
             },
         );
+        if seen {
+            self.errors_unseen = 0;
+        }
+        if help {
+            self.show_shortcuts = !self.show_shortcuts;
+        }
         if copied {
             self.note(LogLevel::Good, "Log copied");
         }
