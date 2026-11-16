@@ -269,6 +269,8 @@ fn draw_loop_marker(ui: &egui::Ui, rect: Rect, title: &str, on: bool, selected: 
         p.add(egui::Shape::convex_polygon(vec![tip, tip + Vec2::new(-5.0, -7.0 * d), tip + Vec2::new(5.0, -7.0 * d)], col, Stroke::NONE));
     };
     let t = title.trim();
+    // "Send 1/2" and "Loop 3/4" carry two jacks.
+    let stereo = t.contains('/');
     let (kind, label) = if let Some(rest) = t.strip_prefix("FX Loop") {
         (0, format!("Loop{rest}"))
     } else if t.starts_with("Send") {
@@ -285,32 +287,44 @@ fn draw_loop_marker(ui: &egui::Ui, rect: Rect, title: &str, on: bool, selected: 
     };
     match kind {
         0 => {
-            let (l, r) = (rect.left() + 18.0, rect.right() - 18.0);
-            p.line_segment([Pos2::new(l, cy), Pos2::new(l, top)], stroke);
-            p.line_segment([Pos2::new(l, top), Pos2::new(r, top)], stroke);
-            p.line_segment([Pos2::new(r, top), Pos2::new(r, cy)], stroke);
-            arrow(Pos2::new(l, top + 14.0), true);
-            arrow(Pos2::new(r, cy - 10.0), false);
+            // A stereo loop (1/2, 3/4) is two loops side by side, one inside the other.
+            let insets: &[f32] = if stereo { &[0.0, 7.0] } else { &[0.0] };
+            for inset in insets {
+                let (l, r) = (rect.left() + 18.0 + inset, rect.right() - 18.0 - inset);
+                let top = top + inset * 0.6;
+                p.line_segment([Pos2::new(l, cy), Pos2::new(l, top)], stroke);
+                p.line_segment([Pos2::new(l, top), Pos2::new(r, top)], stroke);
+                p.line_segment([Pos2::new(r, top), Pos2::new(r, cy)], stroke);
+                arrow(Pos2::new(l, top + 14.0), true);
+                arrow(Pos2::new(r, cy - 10.0), false);
+            }
             tag(Pos2::new(rect.center().x, top));
             // The dry line under the loop is cut: everything goes out and back. A loop that is
             // off passes the signal straight through, so the line stays.
             if on {
-                p.line_segment([Pos2::new(l + 2.0, cy), Pos2::new(r - 2.0, cy)], Stroke::new(4.0_f32, bg()));
+                p.line_segment([Pos2::new(rect.left() + 20.0, cy), Pos2::new(rect.right() - 20.0, cy)], Stroke::new(4.0_f32, bg()));
             }
         }
         1 => {
-            let x = rect.center().x;
-            p.line_segment([Pos2::new(x, cy), Pos2::new(x, top + 10.0)], stroke);
-            arrow(Pos2::new(x, top + 8.0), true);
-            tag(Pos2::new(x, top - 4.0));
-            p.circle_filled(Pos2::new(x, cy), 4.0, col);
+            // A stereo send leaves on two lines.
+            let xs: &[f32] = if stereo { &[-6.0, 6.0] } else { &[0.0] };
+            for dx in xs {
+                let x = rect.center().x + dx;
+                p.line_segment([Pos2::new(x, cy), Pos2::new(x, top + 10.0)], stroke);
+                arrow(Pos2::new(x, top + 8.0), true);
+                p.circle_filled(Pos2::new(x, cy), 4.0, col);
+            }
+            tag(Pos2::new(rect.center().x, top - 4.0));
         }
         _ => {
-            let x = rect.center().x;
-            p.line_segment([Pos2::new(x, top + 4.0), Pos2::new(x, cy - 6.0)], stroke);
-            arrow(Pos2::new(x, cy - 4.0), false);
-            tag(Pos2::new(x, top - 4.0));
-            p.circle_filled(Pos2::new(x, cy), 4.0, col);
+            let xs: &[f32] = if stereo { &[-6.0, 6.0] } else { &[0.0] };
+            for dx in xs {
+                let x = rect.center().x + dx;
+                p.line_segment([Pos2::new(x, top + 4.0), Pos2::new(x, cy - 6.0)], stroke);
+                arrow(Pos2::new(x, cy - 4.0), false);
+                p.circle_filled(Pos2::new(x, cy), 4.0, col);
+            }
+            tag(Pos2::new(rect.center().x, top - 4.0));
         }
     }
     // The on/off light where the effect boxes have it.
