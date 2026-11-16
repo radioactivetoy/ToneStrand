@@ -254,6 +254,7 @@ pub fn hlx_editor(
                 cols: main_cols as usize,
                 width: ui.available_width(),
                 can_split: !full,
+                unit: unit.name,
             };
             let hits = egui::ScrollArea::horizontal().id_salt(format!("chain-{dsp}")).show(ui, |ui| diagram.show(ui)).inner;
             for hit in hits {

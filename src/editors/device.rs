@@ -126,6 +126,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                 cols,
                 width: ui.available_width(),
                 can_split: !path_full,
+                unit: dev_fam.name,
             };
             let hits = egui::ScrollArea::horizontal().id_salt(format!("dchain-{path}")).show(ui, |ui| diagram.show(ui)).inner;
             let slot_at = |lane: usize, col: usize| -> Option<&SlotView> {

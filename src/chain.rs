@@ -94,6 +94,8 @@ pub struct Chain<'a> {
     pub width: f32,
     /// A split can be added (the path has a free slot for the lower lane).
     pub can_split: bool,
+    /// The unit's name, for the jack hints on sends and returns.
+    pub unit: &'static str,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -574,7 +576,8 @@ impl Chain<'_> {
                     }
                 });
                 if let Cell::Block { title, .. } = &cell {
-                    r.on_hover_text(format!("{title}\nClick to edit · light or Space: on/off · right-click for more · drag to move\nSelected: Delete removes, Enter changes the effect, arrows pick the next block"));
+                    let jacks = loop_jacks(self.unit, title).map(|j| format!("\n{j}")).unwrap_or_default();
+                    r.on_hover_text(format!("{title}{jacks}\nClick to edit · light or Space: on/off · right-click for more · drag to move\nSelected: Delete removes, Enter changes the effect, arrows pick the next block"));
                 } else if self.can_add {
                     r.on_hover_text("Empty - click to add an effect, or drop a block here");
                 }
@@ -762,4 +765,60 @@ fn fit_name(
         }
     }
     last.expect("at least one size was tried")
+}
+
+/// Where a Send, Return or FX Loop block's signal goes on the unit's jacks, from the
+/// units' rear and side panels. None for a unit whose panel isn't described here.
+pub fn loop_jacks(unit: &str, title: &str) -> Option<String> {
+    let t = title.trim();
+    let is_send = t.starts_with("Send");
+    let is_return = t.starts_with("Return");
+    let is_loop = t.starts_with("FX Loop");
+    if !(is_send || is_return || is_loop) {
+        return None;
+    }
+    let nums: Vec<char> = t.chars().filter(char::is_ascii_digit).collect();
+    let pair = nums.len() > 1;
+    let n = nums.iter().map(char::to_string).collect::<Vec<_>>().join(" and ");
+    let what = if is_send {
+        "send"
+    } else if is_return {
+        "return"
+    } else {
+        "send and return"
+    };
+    match unit {
+        "Helix Floor" | "Helix Rack" => {
+            let kind = if pair { "a stereo pair: two adjacent jack pairs" } else { "one jack pair" };
+            Some(format!("Jacks: SENDS/RETURNS {n} on the rear panel ({what}; {kind})"))
+        }
+        "Helix LT" => Some(format!(
+            "Jacks: {} {n} on the rear panel{}",
+            if is_return {
+                "RETURN"
+            } else if is_send {
+                "SEND"
+            } else {
+                "SEND and RETURN"
+            },
+            if pair { " (the stereo pair)" } else { "" }
+        )),
+        "HX Stomp" => Some("Jacks: the stereo SEND jack and the RETURN / AUX IN jacks (L/MONO, RIGHT) on the sides".to_owned()),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod jack_tests {
+    use super::loop_jacks;
+
+    #[test]
+    fn jack_hints_follow_the_units_panels() {
+        assert!(loop_jacks("Helix Floor", "Send 3").unwrap().contains("SENDS/RETURNS 3"));
+        assert!(loop_jacks("Helix Rack", "Return 3/4").unwrap().contains("3 and 4"));
+        assert!(loop_jacks("Helix LT", "Return 2").unwrap().contains("RETURN 2"));
+        assert!(loop_jacks("HX Stomp", "FX Loop 1").unwrap().contains("SEND"));
+        assert!(loop_jacks("HX Effects", "Send 1").is_none());
+        assert!(loop_jacks("Helix LT", "Delay").is_none());
+    }
 }
