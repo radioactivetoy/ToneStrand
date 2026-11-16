@@ -478,11 +478,12 @@ impl App {
 
     fn tabs(&mut self, ui: &mut egui::Ui) {
         let mut close = None;
+        let middle = ui.input(|i| i.pointer.button_clicked(egui::PointerButton::Middle));
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
             for (i, d) in self.docs.iter().enumerate() {
                 let active = i == self.active;
-                egui::Frame::new()
+                let tab = egui::Frame::new()
                     .fill(if active { card_bg() } else { panel() })
                     .stroke(Stroke::new(1.0_f32, if active { accent().linear_multiply(0.6) } else { line() }))
                     .corner_radius(CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 })
@@ -494,22 +495,28 @@ impl App {
                             if ui.add(egui::Label::new(text).sense(egui::Sense::click())).clicked() {
                                 self.active = i;
                             }
-                            if ui
-                                .add(egui::Label::new(RichText::new("x").small().color(MUTED)).sense(egui::Sense::click()))
-                                .clicked()
-                            {
+                            if close_button(ui).on_hover_text("Close").clicked() {
                                 close = Some(i);
                             }
                         });
                     });
+                // A middle click anywhere on the tab closes it.
+                if middle && tab.response.hovered() {
+                    close = Some(i);
+                }
             }
         });
         if let Some(i) = close {
-            if self.docs.get(i).is_some_and(Doc::needs_save) {
-                self.close_ask = Some(CloseAsk::Tab(i));
-            } else {
-                self.close_tab(i);
-            }
+            self.request_close_tab(i);
+        }
+    }
+
+    /// Close a tab, asking first when it has changes that aren't saved.
+    fn request_close_tab(&mut self, i: usize) {
+        if self.docs.get(i).is_some_and(Doc::needs_save) {
+            self.close_ask = Some(CloseAsk::Tab(i));
+        } else {
+            self.close_tab(i);
         }
     }
 
@@ -1293,6 +1300,24 @@ impl App {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
+}
+
+/// A small "x" button for closing a tab: lights up under the pointer. Painted, since the
+/// font has no multiplication sign.
+fn close_button(ui: &mut egui::Ui) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(16.0), egui::Sense::click());
+    let hot = resp.hovered();
+    let p = ui.painter();
+    if hot {
+        p.rect_filled(rect, CornerRadius::same(4), card_hi());
+    }
+    let c = if hot { TEXT } else { MUTED };
+    let m = rect.center();
+    let d = 3.5;
+    let stroke = Stroke::new(1.4_f32, c);
+    p.line_segment([m + Vec2::new(-d, -d), m + Vec2::new(d, d)], stroke);
+    p.line_segment([m + Vec2::new(-d, d), m + Vec2::new(d, -d)], stroke);
+    resp
 }
 
 fn level_colour(l: LogLevel, info: Color32) -> Color32 {
