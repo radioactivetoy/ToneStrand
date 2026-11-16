@@ -422,3 +422,22 @@ fn an_empty_source_or_the_same_slot_is_refused_without_writing() {
     assert!(kept(&dir).is_empty());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_snapshot_copy_uses_the_pedals_copy_and_paste_on_the_current_snapshot() {
+    let (mut s, shared) = open(friendly);
+    s.copy_snapshot(0, 2, "LEAD").unwrap();
+    let reqs: Vec<(i64, i64)> = shared
+        .lock()
+        .unwrap()
+        .requests
+        .iter()
+        .filter(|(o, _)| [op::SELECT_SNAPSHOT, op::COPY_SNAPSHOT, op::PASTE_SNAPSHOT, op::RENAME_SNAPSHOT].contains(o))
+        .map(|(o, a)| (*o, a.get(key::SNAPSHOT).and_then(Value::as_i64).unwrap_or(-1)))
+        .collect();
+    // Switch to the source, copy, switch to the destination, paste, then put its name back.
+    assert_eq!(
+        reqs,
+        vec![(op::SELECT_SNAPSHOT, 0), (op::COPY_SNAPSHOT, 0), (op::SELECT_SNAPSHOT, 2), (op::PASTE_SNAPSHOT, 2), (op::RENAME_SNAPSHOT, 2)]
+    );
+}

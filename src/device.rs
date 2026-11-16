@@ -101,6 +101,13 @@ pub enum Cmd {
         index: i64,
         name: String,
     },
+    /// Make a snapshot of the loaded preset the same as another (the pedal's own copy and paste).
+    CopySnapshot {
+        from: i64,
+        to: i64,
+        /// The destination's name, kept.
+        keep_name: String,
+    },
     Backup {
         setlist: i64,
         count: usize,
@@ -509,6 +516,12 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                 Cmd::RenameSnapshot { index, name } => {
                     s.rename_snapshot(index, &name).map_err(|e| e.to_string())?;
                     note_name(send, &name, SNAPSHOT_NAME_MAX);
+                }
+                Cmd::CopySnapshot { from, to, keep_name } => {
+                    send(Event::Busy("Copying the snapshot...".into()));
+                    s.copy_snapshot(from, to, &keep_name).map_err(|e| e.to_string())?;
+                    read_live(s, send)?;
+                    send(Event::Done(format!("Snapshot {} is now the same as snapshot {}", to + 1, from + 1)));
                 }
                 Cmd::Backup { setlist: sl, count, folder, names } => {
                     std::fs::create_dir_all(&folder).map_err(|e| format!("can't make {} ({e})", folder.display()))?;

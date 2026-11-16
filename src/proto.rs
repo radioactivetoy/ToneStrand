@@ -175,6 +175,10 @@ pub mod op {
     pub const SAVE_PRESET: i64 = 71;
     pub const SELECT_SNAPSHOT: i64 = 88;
     pub const RENAME_SNAPSHOT: i64 = 89;
+    /// Copy the current snapshot, and paste what was copied into the current snapshot (name, block
+    /// on/offs and knob values). The `{92}` argument is accepted but not used (tried on an HX Stomp).
+    pub const COPY_SNAPSHOT: i64 = 90;
+    pub const PASTE_SNAPSHOT: i64 = 91;
     pub const BROWSE_OPEN: i64 = 254;
     pub const BEGIN: i64 = 255;
     // User IRs (listIrs 13, irInfo 12, irAudio 11,

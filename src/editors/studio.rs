@@ -122,7 +122,7 @@ pub fn studio_strip_device(ui: &mut egui::Ui, preset: &mut DevicePreset, dirty: 
             ui.spacing_mut().item_spacing.x = 2.0;
             for (i, name) in names.iter().enumerate() {
                 let tip = if live {
-                    "Switch the pedal to this snapshot. Right-click to rename it."
+                    "Switch the pedal to this snapshot. Right-click to rename it or copy another snapshot into it."
                 } else {
                     "Right-click to rename it or copy another snapshot into it."
                 };
@@ -145,18 +145,19 @@ pub fn studio_strip_device(ui: &mut egui::Ui, preset: &mut DevicePreset, dirty: 
                             cmds.push(Cmd::RenameSnapshot { index: i as i64, name: n.clone() });
                         }
                     });
-                    if !live {
-                        ui.separator();
-                        ui.label(RichText::new(format!("Make snapshot {} the same as", i + 1)).small().color(muted()));
-                        for j in (0..names.len()).filter(|j| *j != i) {
-                            let from =
-                                names.get(j).filter(|s| !s.trim().is_empty()).cloned().unwrap_or_else(|| format!("Snapshot {}", j + 1));
-                            if ui.button(format!("{}: {from}", j + 1)).clicked() {
-                                if preset.copy_snapshot_states(j, i) {
-                                    *dirty = true;
-                                }
-                                ui.close_menu();
+                    ui.separator();
+                    ui.label(RichText::new(format!("Make snapshot {} the same as", i + 1)).small().color(muted()));
+                    for j in (0..names.len()).filter(|j| *j != i) {
+                        let from = names.get(j).filter(|s| !s.trim().is_empty()).cloned().unwrap_or_else(|| format!("Snapshot {}", j + 1));
+                        if ui.button(format!("{}: {from}", j + 1)).clicked() {
+                            if preset.copy_snapshot_states(j, i) {
+                                *dirty = true;
                             }
+                            // On the live preset the pedal does the copy (its own copy and paste), keeping this name.
+                            if live {
+                                cmds.push(Cmd::CopySnapshot { from: j as i64, to: i as i64, keep_name: name.clone() });
+                            }
+                            ui.close_menu();
                         }
                     }
                 });

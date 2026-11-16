@@ -84,9 +84,8 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 ## Known gaps and unverified areas
 
 - Some live operations haven't been tried on a pedal: knob changes on a paired cab
-  (`26: 1`), controller min/max/CC live edits, snapshot copy/paste on the live preset (the
-  pedal's own copy/paste ops 90/91 exist but their arguments are unknown, so copying works on
-  offline copies only).
+  (`26: 1`) and controller min/max/CC live edits. Snapshot copy on the live preset uses the
+  pedal's own ops 90/91 (checked on an HX Stomp only).
 - Sends/returns: drawn as loop markers; placing them uses the nearest free slot. A return
   placed before its send is flagged, not prevented.
 - macOS and Linux builds haven't been tried.

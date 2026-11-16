@@ -152,7 +152,13 @@ Keys used in arguments: `107` setlist, `108` preset index, `109` name, `110` doc
 | 78 | select block | `{98}` |
 | 88 | select snapshot | `{92}` |
 | 89 | rename snapshot | `{92, 109}` |
+| 90 | copy snapshot | `{92}` (ignored: copies the *current* snapshot) |
+| 91 | paste snapshot | `{92}` (ignored: pastes into the *current* snapshot) |
 
+Ops 90 and 91 (tried on an HX Stomp): copy takes the current snapshot, paste writes what was copied
+into the current snapshot, so select the source, copy, select the destination, paste. The paste
+carries the snapshot's name, block on/offs and knob values; only the loaded preset's edit buffer
+changes (the stored slot stays as it was until saved). Renaming a snapshot to an empty name gives "New Preset".
 Split and merge: the pedal refuses a split that would sit after the merge, even for a moment;
 move whichever one keeps the split before the merge first.
 

@@ -833,6 +833,21 @@ impl Session {
         )?;
         Ok(())
     }
+
+    /// Make snapshot `to` the same as snapshot `from` on the loaded preset: ops 90 and 91 work on the
+    /// current snapshot, so the pedal is switched to `from`, copies, switches to `to` and pastes.
+    /// The pedal pastes the name too; `keep_name` puts the destination's own name back.
+    pub fn copy_snapshot(&mut self, from: i64, to: i64, keep_name: &str) -> Result<()> {
+        self.select_snapshot(from)?;
+        self.request(op::COPY_SNAPSHOT, Value::map(vec![(key::SNAPSHOT, Value::int(from))]))?;
+        self.select_snapshot(to)?;
+        self.request(op::PASTE_SNAPSHOT, Value::map(vec![(key::SNAPSHOT, Value::int(to))]))?;
+        // An empty name can't be put back: the pedal turns it into "New Preset", so the pasted name stays.
+        if keep_name.trim().is_empty() {
+            return Ok(());
+        }
+        self.rename_snapshot(to, keep_name)
+    }
 }
 
 /// Longest preset and snapshot names the pedal keeps (IRs: [`IR_NAME_MAX`]).
