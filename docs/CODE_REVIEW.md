@@ -134,3 +134,12 @@ Severity: **High** = can lose the owner's data or break a project rule;
 > F1 shortcuts window; the Activity button turns red when something went wrong; a Getting
 > started card; a Revert button and a brief "sent" label on the live preset. Not done (bigger
 > features): compare presets, light theme, accessibility work, Box token storage.
+
+> **Second UX pass (branch `feature/ux-polish-2`), from a review of screens not seen before:**
+> one File menu for a live preset's file/library saves (Save on pedal is the one prominent save);
+> picker with "Path 1, slot 3", keyboard flow (cursor in search, Enter takes the first match, Esc
+> closes), a details pane, aligned counts and tooltips; framed search boxes; a "Sort" label;
+> painted folder icons; the pedal list panel hidden on Library / IRs / Settings without a pedal;
+> one name size per chain row (floor 12.5); the Controllers header count matches its tabs;
+> drag a preset onto another slot to copy, swap or move it (tested against a fake pedal only);
+> a footswitch strip on the Controllers tab.

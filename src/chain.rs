@@ -484,7 +484,9 @@ impl Chain<'_> {
                     }
                     _ => None,
                 })
-                .fold(14.5_f32, f32::min);
+                .fold(14.5_f32, f32::min)
+                // A floor: short names stay readable; only a long one goes smaller on its own.
+                .max(12.5);
             NAME_SIZE.with(|c| c.set(Some(lane_size)));
             let range = if lane == 0 { 0..cols } else { self.split..lower_end };
             // The lower lane shows its effects and one free place after them; past that the

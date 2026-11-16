@@ -211,8 +211,8 @@ pub struct PickerState {
     pub category: String,
     pub sub: String,
     pub search: String,
-    /// The effect the pointer was last over (its description shows under the list).
-    pub hover: Option<String>,
+    /// The effect the pointer was last over (symbol and names; its description shows under the list).
+    pub hover: Option<(String, String)>,
     /// The search box has been given the focus (once, when the window opens).
     pub focused: bool,
 }
@@ -255,6 +255,9 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                         r.request_focus();
                         st.focused = true;
                     }
+                    if r.changed() {
+                        st.hover = None;
+                    }
                 });
             });
             ui.separator();
@@ -277,6 +280,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                     st.category = name.clone();
                                     st.sub.clear();
                                     st.search.clear();
+                                    st.hover = None;
                                 }
                                 // The counts line up on the right.
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -319,6 +323,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                     }
                     // The first effect that fits: Enter takes it while searching.
                     let mut first: Option<(i64, Option<i64>)> = None;
+                    let mut first_pane: Option<(String, String)> = None;
                     let mut row_no = 0usize;
                     egui::ScrollArea::vertical().id_salt("pick-models").max_height(340.0).auto_shrink([false, false]).show(ui, |ui| {
                         for g in groups.iter().filter(|g| !search.is_empty() || groups.len() == 1 || g.sub == st.sub) {
@@ -360,8 +365,14 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                 if resp.hovered() && fits {
                                     p.rect_filled(rect, CornerRadius::same(6), card_hi());
                                 }
+                                // The names for the details pane: the one in the list and its other name.
+                                let pane_names = match crate::realnames::other(&m.name) {
+                                    Some(o) => format!("{}  ·  {o}", crate::realnames::show(&m.name)),
+                                    None => crate::realnames::show(&m.name),
+                                };
                                 if first.is_none() && fits {
                                     first = Some((m.number, paired));
+                                    first_pane = cat.symbol(m.number).map(|s| (s.to_owned(), pane_names.clone()));
                                     if !search.is_empty() {
                                         p.rect_stroke(
                                             rect,
@@ -372,7 +383,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                     }
                                 }
                                 if resp.hovered() {
-                                    st.hover = cat.symbol(m.number).map(str::to_owned);
+                                    st.hover = cat.symbol(m.number).map(|s| (s.to_owned(), pane_names.clone()));
                                 }
                                 // The effect's own kind (Fuzz, Tape, Plate, Chorus...) from the Stadium icons;
                                 // a colour square only when its type has none.
@@ -431,11 +442,11 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                     }
                     // What the effect under the pointer is, in a few lines.
                     ui.separator();
-                    let shown = st.hover.clone().or_else(|| first.and_then(|(n, _)| cat.symbol(n).map(str::to_owned)));
+                    let shown = st.hover.clone().or(first_pane);
                     ui.allocate_ui(Vec2::new(ui.available_width(), 84.0), |ui| {
                         ui.set_min_height(84.0);
-                        match shown.as_deref() {
-                            Some(sym) => crate::modelinfo::summary(ui, sym),
+                        match shown.as_ref() {
+                            Some((sym, names)) => crate::modelinfo::summary(ui, sym, names),
                             None => {
                                 ui.label(RichText::new("Point at an effect to see what it is.").small().color(MUTED));
                             }
@@ -1060,23 +1071,26 @@ pub fn footswitch_strip(ui: &mut egui::Ui, count: usize, items: &[FootswitchItem
                     .show(ui, |ui| {
                         ui.set_width(w - 18.0);
                         ui.set_min_height(48.0);
-                        ui.label(RichText::new(format!("FS {n}")).strong().color(if mine.is_empty() { MUTED } else { ORANGE }));
-                        if mine.is_empty() {
-                            ui.label(RichText::new("free").small().color(MUTED));
-                        }
-                        for (_, text, on) in mine {
-                            ui.horizontal(|ui| {
-                                if let Some(on) = on {
-                                    let (r, _) = ui.allocate_exact_size(Vec2::splat(8.0), egui::Sense::hover());
-                                    if *on {
-                                        ui.painter().circle_filled(r.center(), 3.5, GOOD);
-                                    } else {
-                                        ui.painter().circle_stroke(r.center(), 3.0, Stroke::new(1.0_f32, MUTED));
+                        // (the strip itself is a row, so each cell stacks its own lines)
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new(format!("FS {n}")).strong().color(if mine.is_empty() { MUTED } else { ORANGE }));
+                            if mine.is_empty() {
+                                ui.label(RichText::new("free").small().color(MUTED));
+                            }
+                            for (_, text, on) in mine {
+                                ui.horizontal(|ui| {
+                                    if let Some(on) = on {
+                                        let (r, _) = ui.allocate_exact_size(Vec2::splat(8.0), egui::Sense::hover());
+                                        if *on {
+                                            ui.painter().circle_filled(r.center(), 3.5, GOOD);
+                                        } else {
+                                            ui.painter().circle_stroke(r.center(), 3.0, Stroke::new(1.0_f32, MUTED));
+                                        }
                                     }
-                                }
-                                ui.add(egui::Label::new(RichText::new(text).small()).truncate());
-                            });
-                        }
+                                    ui.add(egui::Label::new(RichText::new(text).small()).truncate());
+                                });
+                            }
+                        });
                     });
             });
         }

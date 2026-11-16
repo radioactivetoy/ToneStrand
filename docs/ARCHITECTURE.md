@@ -39,7 +39,7 @@ thread. Everything else is plain data structures edited in place every frame.
 | `units.rs` | Converting a `.hlx` to another unit with a report of everything that doesn't fit. |
 | `devpreset.rs` | `DevicePreset`: the pedal's own document (parse/encode byte-for-byte), slots, values, snapshots, controllers, footswitches, split/merge attach, `.hlx` → pedal conversion. |
 | `catalog.rs` | Effect catalog read from HX Edit's installed files: model numbers ↔ symbols, names, categories, colours, parameters with display formatting, DSP loads, picker groups. |
-| `device.rs` | The pedal thread: `Cmd` (UI → thread) and `Event` (thread → UI); heartbeat, recovery after failures, IR kind sorting. |
+| `device.rs` | The pedal thread: `Cmd` (UI → thread) and `Event` (thread → UI); heartbeat, recovery after failures, IR kind sorting; `slot_op` copies, moves and swaps preset slots (backup first, read-back check, tested in `fakepedal.rs`). |
 | `session.rs` | One conversation with the pedal over any `Wire`: handshake, services, chunked sends, acks, request/reply matching, high-level operations (presets, slots, live edits, IRs, controllers). |
 | `proto.rs` | Frame and channel header encoding, opcode and key constants, slot labels. |
 | `msgpack.rs` | MessagePack codec that remembers each value's original format byte so documents re-encode identically. |
