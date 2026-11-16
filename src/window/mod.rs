@@ -509,29 +509,52 @@ impl App {
     fn tabs(&mut self, ui: &mut egui::Ui) {
         let mut close = None;
         let middle = ui.input(|i| i.pointer.button_clicked(egui::PointerButton::Middle));
+        let font = egui::TextStyle::Body.resolve(ui.style());
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing.x = 4.0;
+            ui.spacing_mut().item_spacing = Vec2::new(3.0, 3.0);
             for (i, d) in self.docs.iter().enumerate() {
                 let active = i == self.active;
-                let tab = egui::Frame::new()
-                    .fill(if active { card_bg() } else { panel() })
-                    .stroke(Stroke::new(1.0_f32, if active { accent().linear_multiply(0.6) } else { line() }))
-                    .corner_radius(CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 })
-                    .inner_margin(egui::Margin::symmetric(10, 5))
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            let star = if d.dirty { " •" } else { "" };
-                            let text = RichText::new(format!("{}{star}", d.title)).color(if active { TEXT } else { MUTED });
-                            if ui.add(egui::Label::new(text).sense(egui::Sense::click())).clicked() {
-                                self.active = i;
-                            }
-                            if close_button(ui).on_hover_text("Close").clicked() {
-                                close = Some(i);
-                            }
-                        });
-                    });
+                let galley = ui.painter().layout_no_wrap(d.title.clone(), font.clone(), TEXT);
+                let dot = if d.dirty { 12.0 } else { 0.0 };
+                let (rect, resp) = ui.allocate_exact_size(Vec2::new(10.0 + dot + galley.size().x + 6.0 + 16.0 + 5.0, 26.0), egui::Sense::click());
+                // The close cross sits at the right end; it is its own target.
+                let x_rect = egui::Rect::from_center_size(egui::pos2(rect.right() - 5.0 - 8.0, rect.center().y), Vec2::splat(16.0));
+                let x_resp = ui.interact(x_rect, resp.id.with("close"), egui::Sense::click());
+                let hot = resp.hovered() || x_resp.hovered();
+                let p = ui.painter();
+                let fill = if active { card_hi() } else if hot { card_bg() } else { Color32::TRANSPARENT };
+                p.rect_filled(rect, CornerRadius::same(7), fill);
+                if active {
+                    // A thin accent underline, inside the pill's lower edge.
+                    let under = egui::Rect::from_min_max(egui::pos2(rect.left() + 8.0, rect.bottom() - 2.0), egui::pos2(rect.right() - 8.0, rect.bottom() - 1.0));
+                    p.rect_filled(under, CornerRadius::same(1), accent());
+                }
+                let mut x = rect.left() + 10.0;
+                if d.dirty {
+                    // Unsaved changes: a small painted dot.
+                    p.circle_filled(egui::pos2(x + 3.0, rect.center().y), 3.0, ORANGE);
+                    x += dot;
+                }
+                let col = if active { accent() } else if hot { TEXT } else { MUTED };
+                p.galley(egui::pos2(x, rect.center().y - galley.size().y / 2.0), galley, col);
+                if active || hot {
+                    if x_resp.hovered() {
+                        p.rect_filled(x_rect, CornerRadius::same(4), line());
+                    }
+                    let c = if x_resp.hovered() { TEXT } else { MUTED };
+                    let m = x_rect.center();
+                    let s = Stroke::new(1.4_f32, c);
+                    p.line_segment([m + Vec2::new(-3.0, -3.0), m + Vec2::new(3.0, 3.0)], s);
+                    p.line_segment([m + Vec2::new(-3.0, 3.0), m + Vec2::new(3.0, -3.0)], s);
+                }
+                let x_resp = x_resp.on_hover_text("Close");
+                if x_resp.clicked() {
+                    close = Some(i);
+                } else if resp.clicked() && !x_resp.hovered() {
+                    self.active = i;
+                }
                 // A middle click anywhere on the tab closes it.
-                if middle && tab.response.hovered() {
+                if middle && hot {
                     close = Some(i);
                 }
             }
@@ -1036,7 +1059,7 @@ impl App {
         egui::CentralPanel::default().frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin::ZERO)).show(ctx, |ui| {
             egui::TopBottomPanel::top("studio-tabs")
                 .show_separator_line(false)
-                .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin { left: 14, right: 14, top: 8, bottom: 0 }))
+                .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin { left: 14, right: 14, top: 6, bottom: 4 }))
                 .show_inside(ui, |ui| self.tabs(ui));
             if self.docs.is_empty() {
                 ui.ctx().request_repaint();
@@ -1492,23 +1515,6 @@ impl App {
     }
 }
 
-/// A small "x" button for closing a tab: lights up under the pointer. Painted, since the
-/// font has no multiplication sign.
-fn close_button(ui: &mut egui::Ui) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::splat(16.0), egui::Sense::click());
-    let hot = resp.hovered();
-    let p = ui.painter();
-    if hot {
-        p.rect_filled(rect, CornerRadius::same(4), card_hi());
-    }
-    let c = if hot { TEXT } else { MUTED };
-    let m = rect.center();
-    let d = 3.5;
-    let stroke = Stroke::new(1.4_f32, c);
-    p.line_segment([m + Vec2::new(-d, -d), m + Vec2::new(d, d)], stroke);
-    p.line_segment([m + Vec2::new(-d, d), m + Vec2::new(d, -d)], stroke);
-    resp
-}
 
 fn level_colour(l: LogLevel, info: Color32) -> Color32 {
     match l {
