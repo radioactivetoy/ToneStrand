@@ -182,6 +182,13 @@ pub struct App {
     tones_list_asked: bool,
     /// The "Restore from a backup" window, when open.
     restore: Option<backups::RestoreState>,
+    /// The USB pedal the current (or last) link was made to; None for a Helrig Box.
+    last_usb: Option<u16>,
+    /// A USB pedal that dropped out: its product id, and whether it has left the USB list
+    /// since (so it coming back means it was plugged in again). Reconnected once.
+    reconnect: Option<(u16, bool)>,
+    /// The person pressed Disconnect: never reconnect by itself after that.
+    user_disconnected: bool,
     /// "Not now" was clicked on the card that explains HX Edit is missing.
     catalog_card_hidden: bool,
 }
@@ -269,6 +276,9 @@ impl App {
             irs_local: false,
             tones_list_asked: false,
             restore: None,
+            last_usb: None,
+            reconnect: None,
+            user_disconnected: false,
             catalog_card_hidden: false,
         };
         app.catalog = crate::catalog::find_dir(app.settings.hx_edit.as_deref())

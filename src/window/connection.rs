@@ -10,6 +10,7 @@ impl App {
         if self.usb_scanned.is_none_or(|t| t.elapsed() > Duration::from_secs(3)) {
             self.usb = wire::list_usb_pedals();
             self.usb_scanned = Some(Instant::now());
+            self.maybe_reconnect(ctx);
         }
         while let Ok(b) = self.box_rx.try_recv() {
             if let Some(existing) =
@@ -75,6 +76,25 @@ impl App {
         }
     }
 
+    /// After a USB pedal dropped out: once it has left the USB list and shows up again (it
+    /// was unplugged and plugged back in), connect to it once more. Never for a Helrig Box,
+    /// and never after the person pressed Disconnect.
+    fn maybe_reconnect(&mut self, ctx: &egui::Context) {
+        let Some((pid, gone)) = self.reconnect else { return };
+        if self.link.is_some() || !self.settings.auto_reconnect {
+            self.reconnect = None;
+            return;
+        }
+        let present = self.usb.iter().any(|p| p.pid == pid);
+        if !present {
+            self.reconnect = Some((pid, true));
+        } else if gone {
+            self.reconnect = None;
+            self.note(LogLevel::Info, "The pedal is back; connecting again");
+            self.start_link(Target::Usb { pid }, ctx);
+        }
+    }
+
     pub(super) fn on_event(&mut self, e: Event) {
         match e {
             Event::Connected(name) => {
@@ -96,6 +116,7 @@ impl App {
                 self.connecting = false;
                 self.busy = None;
                 self.link = None;
+                self.reconnect = None;
                 self.last_error = Some(why.clone());
                 self.note(LogLevel::Bad, format!("Could not connect: {why}"));
             }
@@ -119,6 +140,12 @@ impl App {
                     }
                 }
                 self.note(LogLevel::Info, why);
+                if self.settings.auto_reconnect && !self.user_disconnected {
+                    if let Some(pid) = self.last_usb {
+                        self.reconnect = Some((pid, false));
+                        self.note(LogLevel::Info, "It will connect again when the pedal is plugged back in");
+                    }
+                }
             }
             Event::Busy(m) => self.busy = Some(m),
             Event::Info(m) => self.note(LogLevel::Info, m),
@@ -251,12 +278,25 @@ impl App {
                 Target::Box { host: b.host.clone(), token, label: b.name.clone() }
             }
         };
+        // A connection the person asked for: forget any automatic one pending.
+        self.reconnect = None;
+        self.user_disconnected = false;
+        self.start_link(target, ctx);
+    }
+
+    fn start_link(&mut self, target: Target, ctx: &egui::Context) {
+        self.last_usb = match &target {
+            Target::Usb { pid } => Some(*pid),
+            Target::Box { .. } => None,
+        };
         let c = ctx.clone();
         self.link = Some(device::connect(target, move || c.request_repaint()));
         self.connecting = true;
     }
 
     pub(super) fn disconnect(&mut self) {
+        self.user_disconnected = true;
+        self.reconnect = None;
         if let Some(l) = &self.link {
             let _ = l.tx.send(Cmd::Disconnect);
         }
