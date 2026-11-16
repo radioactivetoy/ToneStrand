@@ -1328,7 +1328,9 @@ impl App {
                 .frame(egui::Frame::new().fill(panel()).inner_margin(egui::Margin::symmetric(14, 8)))
                 .show_inside(ui, |ui| {
                     let tab_id = egui::Id::new("studio-dock-tab");
-                    let mut tab: usize = ui.data(|d| d.get_temp(tab_id)).unwrap_or(0);
+                    // TONESTRAND_DOCK_TAB=1 starts on Controllers (for pictures).
+                    let mut tab: usize =
+                        ui.data(|d| d.get_temp(tab_id)).unwrap_or_else(|| std::env::var("TONESTRAND_DOCK_TAB").ok().and_then(|v| v.parse().ok()).unwrap_or(0));
                     ui.horizontal(|ui| {
                         if let Some(t) = theme::segmented(ui, &["Block", "Controllers"], tab) {
                             tab = t;

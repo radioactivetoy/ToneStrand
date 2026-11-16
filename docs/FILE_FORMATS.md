@@ -66,6 +66,17 @@ One entry per controller number; each holds records
 6: LED colour, 7: on, 8: wire number, 2: 0, 9: knob target}, 12: momentary, 13/14: custom
 label, 15/16: custom colour}`.
 
+### Command Center (`tone[2]`)
+
+`{0: [command id per slot], 1: [[id, arg1 .. arg6] per slot]}`, one slot per trigger. The HX Stomp has 13,
+in this order: Instant 1-6, FS 4, FS 5, FS 1-3, EXP 1, EXP 2 (FS 4 and FS 5 are confirmed from real
+presets; the rest follow the order of the Command Center rows). The ids are the ones `.hlx` files
+use (14 HX Preset, 15 HX Snapshot, 16/17 HX Looper, 18 MIDI CC ...) and the arguments follow the
+command's fields in order: HX Preset `[preset]` (0 Next, 1 Prev, 2+ the slot), HX Snapshot
+`[behaviour, press, release/hold]`. Only those two are confirmed; other commands' argument order is
+not. `snapshot[n]` entry 1 holds the per-snapshot command values `[13, false, [7 values]]` per slot (all
+defaults in the presets read). Written to a slot, the pedal keeps them as sent.
+
 ### `.hlx` → pedal document
 
 `DevicePreset::from_hlx` starts from a document read from the same pedal (so the firmware

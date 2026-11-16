@@ -28,6 +28,8 @@ pub mod key {
     pub const SNAPSHOT_SECTION: i64 = 10;
     pub const SNAPSHOTS: i64 = 10;
     pub const SNAPSHOT_NAME: i64 = 4;
+    /// Command Center: `{0: [command id per slot], 1: [[id, arg1..arg6] per slot]}`.
+    pub const COMMANDS: i64 = 2;
 }
 
 /// Which top-level tone keys the offset table points at, in table order.
@@ -475,6 +477,44 @@ impl DevicePreset {
     /// How many slots each path has: the shape that tells which unit a document is for.
     pub fn layout(&self) -> Vec<usize> {
         (0..8).map_while(|d| self.tone.at(&[key::PATH0 + d, key::SLOTS]).and_then(Value::as_array).map(|a| a.len())).collect()
+    }
+
+    // ------------------------------------------------------------ Command Center ---
+
+    /// How many Command Center slots the document has (13 on an HX Stomp: Instant 1-6, FS 4, FS 5,
+    /// FS 1-3, EXP 1, EXP 2), or 0 when it has none.
+    pub fn command_count(&self) -> usize {
+        self.tone.at(&[key::COMMANDS, 0]).and_then(Value::as_array).map_or(0, |a| a.len())
+    }
+
+    /// The command in a slot as (command id, its six arguments), or None when the slot is empty.
+    /// The ids are the ones `.hlx` files use (14 HX Preset, 15 HX Snapshot, 18 MIDI CC ...).
+    pub fn command(&self, slot: usize) -> Option<(i64, Vec<i64>)> {
+        let row = self.tone.at(&[key::COMMANDS, 1])?.as_array()?.get(slot)?.as_array()?;
+        let id = row.first()?.as_i64()?;
+        if id <= 0 {
+            return None;
+        }
+        Some((id, row.iter().skip(1).map(|v| v.as_i64().unwrap_or(0)).collect()))
+    }
+
+    /// Put a command in a slot (id 0 empties it). The arguments follow the command's fields in the
+    /// order `.hlx` files list them; missing ones are 0. False when the slot doesn't exist.
+    pub fn set_command(&mut self, slot: usize, id: i64, args: &[i64]) -> bool {
+        let id = id.max(0);
+        let mut row = vec![Value::int(id)];
+        row.extend((0..6).map(|i| Value::int(if id == 0 { 0 } else { args.get(i).copied().unwrap_or(0) })));
+        let Some(Value::Array(ids, _)) = self.tone.at_mut(&[key::COMMANDS, 0]) else { return false };
+        let Some(cell) = ids.get_mut(slot) else { return false };
+        *cell = Value::int(id);
+        let Some(Value::Array(rows, _)) = self.tone.at_mut(&[key::COMMANDS, 1]) else { return false };
+        match rows.get_mut(slot) {
+            Some(Value::Array(items, _)) => {
+                *items = row;
+                true
+            }
+            _ => false,
+        }
     }
 
     /// Whether a path is split (the split's own "active" flag, set when it's placed).
@@ -1466,5 +1506,72 @@ impl DevicePreset {
             tone: Value::Map(pairs, 0x80),
             rest: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod command_tests {
+    use super::*;
+
+    /// A tiny document with a Command Center of 13 empty slots, as the HX Stomp keeps it.
+    fn with_commands() -> DevicePreset {
+        let zeros = || Value::Array((0..7).map(|_| Value::int(0)).collect(), crate::msgpack::AUTO);
+        let cc = Value::map(vec![
+            (0, Value::Array((0..13).map(|_| Value::int(0)).collect(), crate::msgpack::AUTO)),
+            (1, Value::Array((0..13).map(|_| zeros()).collect(), crate::msgpack::AUTO)),
+        ]);
+        let mut pairs: Vec<(Value, Value)> =
+            [0i64, 1, 3, 4, 5, 6, 7, 10].iter().map(|k| (Value::int(*k), Value::map(vec![(1, Value::int(*k))]))).collect();
+        pairs.insert(4, (Value::int(2), cc));
+        DevicePreset {
+            magic: Value::str("l6-helix\0"),
+            table_fmt: 0xc4,
+            table: vec![0; 48],
+            tone: Value::Map(pairs, 0x80),
+            rest: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_command_is_set_read_and_survives_a_round_trip() {
+        let mut d = with_commands();
+        assert_eq!(d.command_count(), 13);
+        assert_eq!(d.command(6), None);
+        // FS 4 (slot 6): HX Preset, preset value 39.
+        assert!(d.set_command(6, 14, &[39]));
+        // FS 5 (slot 7): HX Snapshot, Press/Release, press = snapshot 3 (value 5).
+        assert!(d.set_command(7, 15, &[0, 5, 0]));
+        assert_eq!(d.command(6), Some((14, vec![39, 0, 0, 0, 0, 0])));
+        assert_eq!(d.command(7), Some((15, vec![0, 5, 0, 0, 0, 0])));
+        let back = DevicePreset::parse(&d.encode()).unwrap();
+        assert_eq!(back.command(6), Some((14, vec![39, 0, 0, 0, 0, 0])));
+        assert_eq!(back.command(7), Some((15, vec![0, 5, 0, 0, 0, 0])));
+        // Emptying a slot clears its arguments too.
+        assert!(d.set_command(6, 0, &[39]));
+        assert_eq!(d.command(6), None);
+        assert!(!d.set_command(13, 14, &[]), "there is no slot 13");
+    }
+
+    /// The presets read from a real HX Stomp: "Shine on 2" has HX Preset on FS 4 and FS 5.
+    /// `HX_COMMANDS_FIXTURE` is such a pedal document.
+    #[test]
+    fn a_real_presets_commands_are_read() {
+        let Ok(path) = std::env::var("HX_COMMANDS_FIXTURE") else { return };
+        let d = DevicePreset::parse(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(d.command_count(), 13);
+        assert_eq!(d.command(6), Some((14, vec![1, 0, 0, 0, 0, 0])), "FS 4: previous preset");
+        assert_eq!(d.command(7), Some((14, vec![0, 0, 0, 0, 0, 0])), "FS 5: next preset");
+        assert_eq!(d.command(0), None);
+        // Editing one slot and re-encoding keeps the rest: the other command, the blocks, the names.
+        let mut e = d.clone();
+        assert!(e.set_command(6, 15, &[0, 4, 0]));
+        let back = DevicePreset::parse(&e.encode()).unwrap();
+        assert_eq!(back.command(6), Some((15, vec![0, 4, 0, 0, 0, 0])));
+        assert_eq!(back.command(7), d.command(7));
+        assert_eq!(back.snapshot_names(), d.snapshot_names());
+        assert_eq!(
+            back.slots().iter().map(|s| (s.kind, s.model)).collect::<Vec<_>>(),
+            d.slots().iter().map(|s| (s.kind, s.model)).collect::<Vec<_>>()
+        );
     }
 }

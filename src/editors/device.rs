@@ -839,4 +839,5 @@ pub fn device_controllers(
         preset.set_controllers(&list);
         *dirty = true;
     }
+    crate::controllers::device_command_center(ui, preset, live, dirty);
 }

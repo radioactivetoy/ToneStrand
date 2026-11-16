@@ -982,6 +982,118 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
         });
 }
 
+// ------------------------------------------------ Command Center on the pedal ---
+
+/// The slots whose place in the pedal's document has been checked against real presets: FS 4 and
+/// FS 5 (the others follow the same order but haven't been confirmed).
+const DEVICE_EDITABLE: [&str; 2] = ["commandFS4", "commandFS5"];
+/// The commands whose arguments have been checked: HX Preset and HX Snapshot.
+const DEVICE_COMMANDS: [i64; 2] = [14, 15];
+
+/// The Command Center of a pedal document: what each trigger does. FS 4 and FS 5 can be set to HX
+/// Preset or HX Snapshot on a preset that isn't the loaded one (it is written to its slot after);
+/// everything else is shown as it is.
+pub fn device_command_center(ui: &mut egui::Ui, preset: &mut crate::devpreset::DevicePreset, live: bool, dirty: &mut bool) {
+    let fam = snapshots::family_of_device(crate::nam::unit());
+    let device = crate::nam::unit();
+    let count = preset.command_count();
+    let slots: Vec<CmdSlot> = slots_for_family(fam).into_iter().flatten().collect();
+    ui.add_space(10.0);
+    theme::card(ui, |ui| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("Command Center").size(17.0).strong());
+            theme::help(
+                ui,
+                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed.\nFS 4 and FS 5 can be set to HX Preset or HX Snapshot here; other commands (MIDI, hotkeys, looper) are shown and kept as they are. Change the rest in HX Edit.",
+            );
+        });
+        if count == 0 {
+            ui.label(RichText::new("This preset has no Command Center.").color(muted()));
+            return;
+        }
+        if count != slots.len() || fam.cc_switches != 5 {
+            ui.label(RichText::new("The Command Center of this unit isn't read here yet.").color(muted()));
+            return;
+        }
+        if live {
+            ui.label(
+                RichText::new("The loaded preset's Command Center is shown, not changed live. To change it, open the preset from its slot (or a file), edit it and write it back.")
+                    .small()
+                    .color(muted()),
+            );
+        }
+        let snap_count = fam.snapshot_count;
+        for (i, slot) in slots.iter().enumerate() {
+            let editable = !live && DEVICE_EDITABLE.contains(&slot.key.as_str());
+            let cmd = preset.command(i);
+            if cmd.is_none() && !editable {
+                continue;
+            }
+            let specs = specs_for(slot.kind, device, snap_count);
+            let name_of = |id: i64| specs.iter().find(|s| s.id == id).map(|s| s.name.to_owned()).unwrap_or_else(|| format!("Command {id}"));
+            ui.horizontal_wrapped(|ui| {
+                ui.add_sized([70.0, 20.0], egui::Label::new(RichText::new(&slot.title).strong()));
+                let (id, mut args) = cmd.clone().unwrap_or((0, vec![0; 6]));
+                if !editable {
+                    let kept = if DEVICE_COMMANDS.contains(&id) { "" } else { "  (kept as it is)" };
+                    ui.label(format!("{}{kept}", name_of(id)));
+                    return;
+                }
+                let shown = if id == 0 { "None".to_owned() } else { name_of(id) };
+                let mut new_id = id;
+                egui::ComboBox::from_id_salt(("dev-cc-type", i)).selected_text(shown).width(150.0).show_ui(ui, |ui| {
+                    if ui.selectable_label(id == 0, "None").clicked() {
+                        new_id = 0;
+                    }
+                    for want in DEVICE_COMMANDS {
+                        if ui.selectable_label(id == want, name_of(want)).clicked() {
+                            new_id = want;
+                        }
+                    }
+                });
+                if new_id != id {
+                    // A new command starts from its first choices (Next preset, or snapshot press "Next").
+                    let start: &[i64] = match new_id {
+                        14 => &[0],
+                        15 => &[0, 1, 0],
+                        _ => &[],
+                    };
+                    if preset.set_command(i, new_id, start) {
+                        *dirty = true;
+                    }
+                    return;
+                }
+                let Some(spec) = specs.iter().find(|s| s.id == id && DEVICE_COMMANDS.contains(&id)) else {
+                    if id != 0 {
+                        ui.label(RichText::new("kept as it is").small().color(muted()));
+                    }
+                    return;
+                };
+                let mut changed = false;
+                for (f, field) in spec.fields.iter().enumerate() {
+                    let FieldSpec::Choice { label, options, .. } = field else { continue };
+                    ui.label(RichText::new(*label).color(muted()));
+                    let cur = args.get(f).copied().unwrap_or(0);
+                    let text = options.iter().find(|(v, _)| *v == cur).map(|(_, n)| n.clone()).unwrap_or_else(|| format!("{cur}"));
+                    egui::ComboBox::from_id_salt(("dev-cc-field", i, f)).selected_text(text).width(130.0).show_ui(ui, |ui| {
+                        for (v, n) in options {
+                            if ui.selectable_label(cur == *v, n).clicked() && cur != *v {
+                                if args.len() <= f {
+                                    args.resize(f + 1, 0);
+                                }
+                                args[f] = *v;
+                                changed = true;
+                            }
+                        }
+                    });
+                }
+                if changed && preset.set_command(i, id, &args) {
+                    *dirty = true;
+                }
+            });
+        }
+    });
+}
 #[cfg(test)]
 mod tests {
     use super::*;
