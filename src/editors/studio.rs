@@ -142,36 +142,3 @@ pub fn studio_strip_device(ui: &mut egui::Ui, preset: &mut DevicePreset, dirty: 
         });
     });
 }
-
-/// Each path of a .hlx preset: (blocks used, blocks it can hold, estimated DSP %).
-pub fn hlx_path_meters(cat: Option<&Catalog>, json: &serde_json::Value) -> Vec<(usize, usize, Option<f64>)> {
-    let unit = snapshots::family(json);
-    let dsp = cat.map(|c| hlx_dsp_use(c, json));
-    hlx::dsps(json)
-        .into_iter()
-        .take(unit.paths)
-        .map(|d| {
-            let used = dsp.as_ref().and_then(|v| v.iter().find(|(k, _)| *k == d).map(|(_, u)| *u));
-            (hlx::block_count(json, &d) as usize, unit.max_blocks as usize, used)
-        })
-        .collect()
-}
-
-/// Each path of a pedal preset that holds blocks: (blocks used, blocks it can hold, DSP %).
-pub fn device_path_meters(cat: Option<&Catalog>, preset: &DevicePreset) -> Vec<(usize, usize, Option<f64>)> {
-    let fam = snapshots::family_of_device(crate::nam::unit());
-    let slots = preset.slots();
-    (0..fam.paths as i64)
-        .map(|p| {
-            let in_path: Vec<&SlotView> = slots.iter().filter(|s| s.path == p).collect();
-            let count = in_path.iter().filter(|s| s.kind == Kind::Block).count();
-            let used = cat.map(|c| {
-                in_path
-                    .iter()
-                    .map(|s| s.model.map(|m| dsp_percent(c, m)).unwrap_or(0.0) + s.paired.map(|m| dsp_percent(c, m)).unwrap_or(0.0))
-                    .sum::<f64>()
-            });
-            (count, fam.max_blocks as usize, used)
-        })
-        .collect()
-}

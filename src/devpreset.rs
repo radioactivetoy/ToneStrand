@@ -1361,3 +1361,12 @@ mod editing_tests {
         assert!(crate::hlx::blocks(&doc).is_empty());
     }
 }
+
+#[cfg(test)]
+impl DevicePreset {
+    /// A tiny made-up document for tests in other modules.
+    pub(crate) fn tiny_for_tests() -> DevicePreset {
+        let pairs = [0i64, 1, 2].iter().map(|k| (Value::int(*k), Value::map(vec![(1, Value::int(*k))]))).collect();
+        DevicePreset { magic: Value::str("l6-helix\0"), table_fmt: 0xc4, table: Vec::new(), tone: Value::Map(pairs, 0x80), rest: Vec::new() }
+    }
+}

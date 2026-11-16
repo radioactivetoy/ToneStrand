@@ -13,12 +13,8 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
         if let Some(fw) = preset.firmware() {
             theme::pill(ui, &format!("firmware {fw}"), MUTED);
         }
-        if let Some(mut t) = preset.tempo() {
-            ui.label(RichText::new("Tempo").color(MUTED));
-            if ui.add(egui::DragValue::new(&mut t).range(30.0..=240.0).speed(0.5).suffix(" bpm")).changed() {
-                preset.set_tempo(t);
-                *dirty = true;
-            }
+        if tempo_box(ui, preset) {
+            *dirty = true;
         }
         let snaps = preset.snapshot_names();
         if !snaps.is_empty() {
@@ -110,14 +106,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
             .collect();
         let lower_used = lower.iter().any(|s| s.kind != Kind::Empty);
         // How much of this path's DSP the blocks use.
-        let used = cat
-            .map(|c| {
-                in_path
-                    .iter()
-                    .map(|s| s.model.map(|m| dsp_percent(c, m)).unwrap_or(0.0) + s.paired.map(|m| dsp_percent(c, m)).unwrap_or(0.0))
-                    .sum::<f64>()
-            })
-            .unwrap_or(0.0);
+        let used = cat.map(|c| slots_dsp(c, &in_path)).unwrap_or(0.0);
         let free = 100.0 - used;
         // Split and merge columns, from the main-lane slot each attaches before.
         let cols = main.len().clamp(1, chain::COLS);

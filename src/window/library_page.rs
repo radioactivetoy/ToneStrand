@@ -210,10 +210,7 @@ impl App {
     /// Keep a copy of an open preset in the library (in the setlist being shown there).
     pub(super) fn save_to_library(&mut self, i: usize) {
         let Some(doc) = self.docs.get(i) else { return };
-        let (ext, bytes) = match &doc.kind {
-            DocKind::Hlx { json } => ("hlx", serde_json::to_vec_pretty(json).unwrap_or_default()),
-            DocKind::Device { preset, .. } => ("hxpreset", preset.encode()),
-        };
+        let (ext, bytes) = (doc.kind.doc().file_ext(), doc.kind.doc().encode());
         let base = device::sanitize(if doc.name.is_empty() { &doc.title } else { &doc.name });
         let dir = self.lib.folder();
         let _ = std::fs::create_dir_all(&dir);

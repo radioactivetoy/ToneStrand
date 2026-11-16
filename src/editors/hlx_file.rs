@@ -220,10 +220,8 @@ pub fn hlx_editor(
     // Tempo, unit and snapshots (in the Studio look they sit in the top bar).
     if chain_part() && !crate::chain::studio() {
     ui.horizontal_wrapped(|ui| {
-        if let Some(mut t) = hlx::tempo(json) {
-            ui.label(RichText::new("Tempo").color(MUTED));
-            if ui.add(egui::DragValue::new(&mut t).range(30.0..=240.0).speed(0.5).suffix(" bpm")).changed() {
-                hlx::set_tempo(json, t);
+        if PresetDoc::tempo(json).is_some() {
+            if tempo_box(ui, json) {
                 *dirty = true;
             }
             ui.add_space(12.0);

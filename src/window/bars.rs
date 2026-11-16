@@ -289,10 +289,7 @@ impl App {
         let Some(doc) = self.docs.get_mut(i) else { return };
         let before = doc.kind.clone();
         // Each path: blocks used and its DSP, stacked one above the other when there are two.
-        let mut paths = match &doc.kind {
-            DocKind::Hlx { json } => editors::hlx_path_meters(cat.as_deref(), json),
-            DocKind::Device { preset, .. } => editors::device_path_meters(cat.as_deref(), preset),
-        };
+        let mut paths = doc.kind.doc().path_meters(cat.as_deref());
         // A second pedal path with nothing in it isn't shown.
         if paths.len() > 1 && matches!(doc.kind, DocKind::Device { .. }) {
             paths.retain(|p| p.0 > 0 || p.2.is_some_and(|d| d > 0.5));
@@ -300,17 +297,11 @@ impl App {
                 paths.push((0, 8, None));
             }
         }
-        let bpm = match &doc.kind {
-            DocKind::Hlx { json } => hlx::tempo(json),
-            DocKind::Device { preset, .. } => preset.tempo(),
-        };
+        let bpm = doc.kind.doc().tempo();
         if let Some(mut t) = bpm {
             ui.label(RichText::new("BPM").color(MUTED));
             if ui.add(egui::DragValue::new(&mut t).range(30.0..=240.0).speed(0.5).fixed_decimals(1)).changed() {
-                match &mut doc.kind {
-                    DocKind::Hlx { json } => hlx::set_tempo(json, t),
-                    DocKind::Device { preset, .. } => preset.set_tempo(t),
-                }
+                doc.kind.doc_mut().set_tempo(t);
                 doc.dirty = true;
             }
             ui.add_space(10.0);

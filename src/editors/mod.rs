@@ -14,12 +14,15 @@ use crate::msgpack::Value;
 use crate::theme::{self, *};
 
 mod device;
+mod doc;
 mod hlx_file;
 mod studio;
 
 pub use device::{device_controllers, device_editor};
+pub use doc::PresetDoc;
+use doc::{slots_dsp, tempo_box};
 pub use hlx_file::hlx_editor;
-pub use studio::{device_path_meters, hlx_path_meters, studio_strip_device, studio_strip_hlx};
+pub use studio::{studio_strip_device, studio_strip_hlx};
 
 /// A small ring that fills as the path's DSP fills.
 fn dsp_ring(ui: &mut egui::Ui, percent: f64) {
