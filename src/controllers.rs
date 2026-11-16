@@ -177,6 +177,16 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
         match tab {
             Tab::Footswitches => {
                 let switches = snapshots::all_footswitches(json);
+                // The unit's switches at a glance: each one with what it does.
+                let shown = fam.fs_count.min(if fam.name.starts_with("Helix") { 11 } else { fam.fs_count });
+                let mut items: Vec<crate::editors::FootswitchItem> =
+                    switches.iter().map(|(b, n, _)| (*n as usize, format!("{}: on/off", block_name(cat, b)), None)).collect();
+                for a in &assignments {
+                    if let Source::Footswitch(n) = a.src {
+                        items.push((n as usize, format!("{} › {}", block_name(cat, &a.block), knob_meta(cat, &a.block, &a.knob).0), None));
+                    }
+                }
+                crate::editors::footswitch_strip(ui, shown.max(0) as usize, &items);
                 for n in 1..=fam.fs_count.min(if fam.name.starts_with("Helix") { 11 } else { fam.fs_count }) {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(format!("FS {n}")).strong().color(accent()));

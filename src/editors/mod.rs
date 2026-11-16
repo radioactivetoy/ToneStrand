@@ -1035,3 +1035,51 @@ struct SlotDrag {
     position: usize,
     global: usize,
 }
+
+/// What one footswitch does, for [`footswitch_strip`]: (switch number from 1, text, on now).
+pub type FootswitchItem = (usize, String, Option<bool>);
+
+/// A row of footswitch cells, "FS 1" to "FS n", each listing what it switches (an effect's
+/// on/off, with its state, or a knob it moves); a free switch says so.
+pub fn footswitch_strip(ui: &mut egui::Ui, count: usize, items: &[FootswitchItem]) {
+    if count == 0 {
+        return;
+    }
+    let gap = 6.0;
+    let w = ((ui.available_width() - gap * (count as f32 - 1.0)) / count as f32).max(84.0);
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = gap;
+        for n in 1..=count {
+            let mine: Vec<&FootswitchItem> = items.iter().filter(|i| i.0 == n).collect();
+            ui.allocate_ui(Vec2::new(w, 0.0), |ui| {
+                egui::Frame::new()
+                    .fill(card_bg())
+                    .stroke(Stroke::new(1.0_f32, if mine.is_empty() { line() } else { ORANGE.gamma_multiply(0.5) }))
+                    .corner_radius(CornerRadius::same(8))
+                    .inner_margin(egui::Margin::symmetric(8, 6))
+                    .show(ui, |ui| {
+                        ui.set_width(w - 18.0);
+                        ui.set_min_height(48.0);
+                        ui.label(RichText::new(format!("FS {n}")).strong().color(if mine.is_empty() { MUTED } else { ORANGE }));
+                        if mine.is_empty() {
+                            ui.label(RichText::new("free").small().color(MUTED));
+                        }
+                        for (_, text, on) in mine {
+                            ui.horizontal(|ui| {
+                                if let Some(on) = on {
+                                    let (r, _) = ui.allocate_exact_size(Vec2::splat(8.0), egui::Sense::hover());
+                                    if *on {
+                                        ui.painter().circle_filled(r.center(), 3.5, GOOD);
+                                    } else {
+                                        ui.painter().circle_stroke(r.center(), 3.0, Stroke::new(1.0_f32, MUTED));
+                                    }
+                                }
+                                ui.add(egui::Label::new(RichText::new(text).small()).truncate());
+                            });
+                        }
+                    });
+            });
+        }
+    });
+    ui.add_space(6.0);
+}

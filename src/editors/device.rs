@@ -624,6 +624,24 @@ pub fn device_controllers(
                 .color(MUTED),
             );
         }
+        // The pedal's switches at a glance: each one with what it does.
+        if tab == 0 {
+            let mut items: Vec<FootswitchItem> =
+                fs_blocks.iter().map(|(fs, _, name, on)| (*fs, format!("{name}: on/off"), Some(*on))).collect();
+            for c in list.iter().filter(|c| tab_of(c.controller) == 0) {
+                let Some(snapshots::Source::Footswitch(n)) = snapshots::Source::from_code(c.controller, fam) else { continue };
+                let slot = slots.iter().find(|s| s.wire_block() == c.wire);
+                let model = slot.and_then(|s| if c.cab { s.paired } else { s.model });
+                let block = model.map(|m| describe(cat, m).0).unwrap_or_else(|| format!("Position {}", c.wire));
+                let knob = match (model, cat) {
+                    (Some(m), Some(cat)) => cat.param(m, c.index).0,
+                    _ => format!("setting {}", c.index + 1),
+                };
+                items.push((n as usize, format!("{block} › {knob}"), None));
+            }
+            let shown = if fam.name.starts_with("Helix") { fam.fs_count.min(11) } else { fam.fs_count };
+            footswitch_strip(ui, shown.max(0) as usize, &items);
+        }
         // Footswitches: which effects they switch on and off.
         if tab == 0 && !fs_blocks.is_empty() {
             let mut sorted = fs_blocks.clone();
