@@ -52,19 +52,25 @@ pub const UNITS: [(i64, &str); 6] = [
 
 /// The device number for a pedal's USB product name ("HX Stomp", "HELIX LT"...).
 pub fn unit_for_product(product: &str) -> Option<i64> {
-    let p = product.to_ascii_lowercase();
-    let p = p.trim();
-    if p.contains("stomp") && p.contains("xl") {
+    // "HX Stomp (USB)" or "Helix LT via Stage box": only the pedal's own name counts, not the
+    // connection note or the name given to a Helrig Box.
+    let lower = product.to_ascii_lowercase();
+    let name = lower.split(" via ").next().unwrap_or(&lower);
+    let words: Vec<&str> = name.split(|c: char| !c.is_ascii_alphanumeric()).filter(|w| !w.is_empty()).collect();
+    let has = |w: &str| words.contains(&w);
+    if has("stadium") {
+        None // another product with another protocol
+    } else if has("stomp") && has("xl") {
         Some(2162699)
-    } else if p.contains("stomp") {
+    } else if has("stomp") {
         Some(2162694)
-    } else if p.contains("effects") {
+    } else if has("effects") {
         Some(2162693)
-    } else if p.contains("lt") {
+    } else if has("lt") {
         Some(2162692)
-    } else if p.contains("rack") {
+    } else if has("rack") {
         Some(2162690)
-    } else if p.contains("helix") {
+    } else if has("helix") {
         Some(2162689)
     } else {
         None
@@ -710,6 +716,11 @@ mod unit_tests {
         assert!(delete(&mut s, 0));
         assert!(!delete(&mut s, 0), "the last snapshot stays");
         assert_eq!(unit_for_product("HX Stomp XL"), Some(2162699));
+        assert_eq!(unit_for_product("HX Stomp XL (USB)"), Some(2162699));
+        assert_eq!(unit_for_product("Helix Floor via Alt box"), Some(2162689), "the box name is not the pedal");
+        assert_eq!(unit_for_product("HX Stomp via Rack room"), Some(2162694));
+        assert_eq!(unit_for_product("Helix LT (USB)"), Some(2162692));
+        assert_eq!(unit_for_product("Helix Stadium"), None);
 
         // A Helix preset with a block on the lower lane gets a split and a merge.
         let mut doc = helix;

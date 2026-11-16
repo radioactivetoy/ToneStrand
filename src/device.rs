@@ -412,6 +412,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     let sent = s.write_slot(sl, index, &name, doc).map_err(|e| e.to_string())?;
                     note_name(send, &name, PRESET_NAME_MAX);
                     let same = reads_back_same(s, sl, index, &sent)?;
+                    follow_write(s, send, sl, index, &mut last_index);
                     let p = s.presets(sl).map_err(|e| e.to_string())?;
                     send(Event::Presets(sl, p));
                     if same {
@@ -619,6 +620,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     let sent = s.write_slot(sl, index, &name, bytes).map_err(|e| e.to_string())?;
                     note_name(send, &name, PRESET_NAME_MAX);
                     let same = reads_back_same(s, sl, index, &sent)?;
+                    follow_write(s, send, sl, index, &mut last_index);
                     for n in notes {
                         send(Event::Info(n));
                     }
@@ -714,7 +716,13 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     }
                     for (i, slot) in slots.iter().enumerate() {
                         send(Event::Busy(format!("Removing IR {}/{}...", i + 1, slots.len())));
-                        s.delete_ir(*slot).map_err(|e| e.to_string())?;
+                        if let Err(e) = s.delete_ir(*slot) {
+                            // Some were already removed: show the list as it is now.
+                            if let Ok(l) = s.list_irs() {
+                                send(Event::Irs(l));
+                            }
+                            return Err(format!("Removed {i} of {} IRs; slot {} failed: {e}", slots.len(), slot + 1));
+                        }
                     }
                     send(Event::Irs(s.list_irs().map_err(|e| e.to_string())?));
                     send(Event::Done(format!("Removed {} IR{}", slots.len(), if slots.len() == 1 { "" } else { "s" })));
@@ -732,6 +740,18 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                 last_index = i;
             }
             last_beat = std::time::Instant::now();
+        }
+    }
+}
+
+/// After a write into a slot: when that slot is the one loaded on the pedal, the live tab
+/// has to show what is there now, not what was loaded before.
+fn follow_write(s: &mut Session, send: &dyn Fn(Event), setlist: i64, index: i64, last_index: &mut i64) {
+    if let Ok((sl, idx, _)) = s.preset_info() {
+        if sl.max(0) == setlist && idx == index {
+            if let Ok(i) = read_live(s, send) {
+                *last_index = i;
+            }
         }
     }
 }
