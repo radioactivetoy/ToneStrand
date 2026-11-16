@@ -104,7 +104,13 @@ pub fn pane(
     let row = |ui: &mut egui::Ui, label: String, selected: bool, depth: usize| -> egui::Response {
         ui.horizontal(|ui| {
             ui.add_space(depth as f32 * 14.0);
-            ui.selectable_label(selected, label)
+            match label.strip_prefix("📁 ") {
+                Some(rest) => {
+                    theme::folder_icon(ui, MUTED);
+                    ui.selectable_label(selected, rest.to_owned())
+                }
+                None => ui.selectable_label(selected, label),
+            }
         })
         .inner
     };

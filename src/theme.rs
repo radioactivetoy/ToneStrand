@@ -268,3 +268,22 @@ pub fn primary_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
             .corner_radius(CornerRadius::same(6)),
     )
 }
+
+/// A one-line search box with a visible frame (egui's own frame vanishes on this background).
+pub fn search_box(ui: &mut egui::Ui, text: &mut String, hint: &str, width: f32) -> egui::Response {
+    egui::Frame::new()
+        .fill(bg())
+        .stroke(Stroke::new(1.0_f32, line()))
+        .corner_radius(CornerRadius::same(6))
+        .inner_margin(egui::Margin::symmetric(8, 3))
+        .show(ui, |ui| ui.add(egui::TextEdit::singleline(text).frame(false).hint_text(hint).desired_width(width)))
+        .inner
+}
+
+/// A small painted folder (the font's folder symbol draws as an unclear speck).
+pub fn folder_icon(ui: &mut egui::Ui, colour: Color32) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(14.0, 11.0), egui::Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(egui::Rect::from_min_size(rect.min, egui::vec2(6.0, 4.0)), CornerRadius::same(1), colour);
+    p.rect_filled(egui::Rect::from_min_max(rect.min + egui::vec2(0.0, 2.0), rect.max), CornerRadius::same(2), colour);
+}

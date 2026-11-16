@@ -559,6 +559,16 @@ pub fn device_controllers(
     let name_of_ctl = |c: i64| snapshots::Source::from_code(c, fam).map(|s| s.label()).unwrap_or_else(|| format!("Controller {c}"));
     let snap_names: Vec<String> =
         preset.snapshot_names().into_iter().enumerate().map(|(i, n)| if n.trim().is_empty() { format!("{}", i + 1) } else { n }).collect();
+    // Effects whose on/off sits on a footswitch (kept apart from knob assignments).
+    let fs_blocks: Vec<(usize, i64, String, bool)> = slots
+        .iter()
+        .filter(|s| s.kind == Kind::Block)
+        .filter_map(|s| {
+            let fs = preset.block_footswitch(s.wire_block())?;
+            let name = s.model.map(|m| describe(cat, m).0).unwrap_or_else(|| "Block".into());
+            Some((fs, s.wire_block(), name, s.enabled.unwrap_or(true)))
+        })
+        .collect();
     let mut changed = false;
     let mut remove: Option<usize> = None;
     theme::card(ui, |ui| {
@@ -569,7 +579,8 @@ pub fn device_controllers(
                 "Knobs moved by an expression pedal, a footswitch, snapshots or MIDI CC, with the range each sweeps. \
                  Changes are kept in the preset and written when you save or send it; on the live preset they go to the pedal at once.",
             );
-            ui.label(RichText::new(format!("{} assignment{}", list.len(), if list.len() == 1 { "" } else { "s" })).color(MUTED));
+            let total = list.len() + fs_blocks.len();
+            ui.label(RichText::new(format!("{} assignment{}", total, if total == 1 { "" } else { "s" })).color(MUTED));
         });
         ui.add_space(4.0);
         // The same tabs as a .hlx preset's Controllers card.
@@ -584,16 +595,6 @@ pub fn device_controllers(
         };
         let tab_id = egui::Id::new("dev-ctl-tab");
         let mut tab: usize = ui.data(|d| d.get_temp(tab_id)).unwrap_or(0);
-        // Effects whose on/off sits on a footswitch (kept apart from knob assignments).
-        let fs_blocks: Vec<(usize, i64, String, bool)> = slots
-            .iter()
-            .filter(|s| s.kind == Kind::Block)
-            .filter_map(|s| {
-                let fs = preset.block_footswitch(s.wire_block())?;
-                let name = s.model.map(|m| describe(cat, m).0).unwrap_or_else(|| "Block".into());
-                Some((fs, s.wire_block(), name, s.enabled.unwrap_or(true)))
-            })
-            .collect();
         let count = |t: usize| list.iter().filter(|c| tab_of(c.controller) == t).count() + if t == 0 { fs_blocks.len() } else { 0 };
         let mut labels = vec![
             format!("Footswitches ({})", count(0)),

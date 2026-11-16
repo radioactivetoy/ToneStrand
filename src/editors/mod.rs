@@ -250,15 +250,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // A visible box, and the cursor in it from the start: type to search,
                     // Enter takes the first match, Esc closes.
-                    let r = egui::Frame::new()
-                        .fill(bg())
-                        .stroke(Stroke::new(1.0_f32, line()))
-                        .corner_radius(CornerRadius::same(6))
-                        .inner_margin(egui::Margin::symmetric(6, 2))
-                        .show(ui, |ui| {
-                            ui.add(egui::TextEdit::singleline(&mut st.search).frame(false).hint_text("Search effects").desired_width(210.0))
-                        })
-                        .inner;
+                    let r = theme::search_box(ui, &mut st.search, "Search effects", 210.0);
                     if !st.focused {
                         r.request_focus();
                         st.focused = true;

@@ -386,6 +386,12 @@ impl App {
     }
 
     pub(super) fn left_panel(&mut self, ctx: &egui::Context) {
+        // The pedal's preset list is for the editor, or whenever a pedal is connected. Library,
+        // IRs and Settings without a pedal have no use for a panel that only says "connect".
+        if self.connected.is_none() && self.view != View::Editor {
+            self.left_rect = egui::Rect::NOTHING;
+            return;
+        }
         let shown = egui::SidePanel::left("left")
             .resizable(true)
             .default_width(330.0)

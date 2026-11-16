@@ -228,7 +228,7 @@ impl ToneLib {
                 });
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
-                    ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("🔍 Search IRs and captures").desired_width(220.0));
+                    theme::search_box(ui, &mut self.search, "Search IRs and captures", 220.0);
                     if ui.button("Import files...").on_hover_text("Copy .wav IRs and .nam captures into the selected folder").clicked() {
                         if let Some(files) = rfd::FileDialog::new().add_filter("IRs and NAM captures", &["wav", "nam"]).pick_files() {
                             let dir = self.folder();

@@ -165,11 +165,8 @@ impl Library {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             let w = ui.available_width() - 580.0;
-            ui.add(
-                egui::TextEdit::singleline(&mut self.search)
-                    .hint_text("🔍 Search names, folders or effects...")
-                    .desired_width(w.max(200.0)),
-            );
+            theme::search_box(ui, &mut self.search, "Search names, folders or effects...", w.max(200.0));
+            ui.label(RichText::new("Sort").small().color(MUTED));
             if let Some(s) = theme::segmented(ui, &["Name", "Newest"], self.sort) {
                 self.sort = s;
             }
@@ -215,7 +212,7 @@ impl Library {
                 }
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
-                    if ui.small_button("📁 Show library folder").clicked() {
+                    if ui.small_button("Show library folder").clicked() {
                         crate::folders::open_in_explorer(&self.root);
                     }
                     theme::help(ui, &format!("{}\n\nChange it in Settings.", self.root.to_string_lossy()));
@@ -334,8 +331,10 @@ impl Library {
                     });
                     if !e.setlist.is_empty() {
                         let leaf = e.setlist.rsplit('/').next().unwrap_or(&e.setlist);
-                        ui.add(egui::Label::new(RichText::new(format!("📁 {leaf}")).small().color(accent())).truncate())
-                            .on_hover_text(&e.setlist);
+                        ui.horizontal(|ui| {
+                            theme::folder_icon(ui, accent());
+                            ui.add(egui::Label::new(RichText::new(leaf).small().color(accent())).truncate()).on_hover_text(&e.setlist);
+                        });
                     }
                     ui.add_space(4.0);
                     // A strip of the effects, in their colours.
