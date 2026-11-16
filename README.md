@@ -35,7 +35,7 @@ The effect pictures and names come from Line 6; see "Third-party material" below
 - **Signal chain** drawn as a diagram: drag to move, click the line between effects to split
   there or add an effect / FX loop / send / return, right-click menus, keyboard shortcuts
   (Space on/off, Enter change, Delete remove, arrows to select); Ctrl+O / N / W, Ctrl+Tab for
-  presets, F2 to rename, Ctrl+S to save, Ctrl+Z / Y for undo and redo.
+  presets, F2 to rename, Ctrl+S to save, Ctrl+Z / Y for undo and redo; F1 lists them all.
 - **Snapshots**: recall, rename, copy/paste, duplicate, delete; per-snapshot knob values.
 - **Controllers**: footswitches, expression pedals, snapshots, MIDI CC and (for `.hlx`) Command
   Center, both on files and live on the pedal.

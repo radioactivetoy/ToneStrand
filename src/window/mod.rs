@@ -736,7 +736,7 @@ impl App {
                 ];
                 for (title, rows) in sections {
                     ui.label(RichText::new(title).small().strong().color(MUTED));
-                    egui::Grid::new(("shortcuts", title)).num_columns(2).spacing([18.0, 4.0]).show(ui, |ui| {
+                    egui::Grid::new(("shortcuts", title)).num_columns(2).min_col_width(210.0).spacing([18.0, 4.0]).show(ui, |ui| {
                         for (keys, what) in rows {
                             ui.label(RichText::new(*keys).monospace().color(accent()));
                             ui.label(*what);

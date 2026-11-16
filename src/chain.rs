@@ -235,9 +235,10 @@ fn draw_studio_block(ui: &egui::Ui, rect: Rect, look: StudioBlock) {
     // A long name steps down in size until it fits whole (the hover tip always has it in full).
     let rows = if detail.is_some() && !wide { 1 } else { 2 };
     let mut g = None;
-    for size in [14.5_f32, 13.5, 12.5, 11.5] {
+    // (the smallest step may use a third line when there is room under the icon).
+    for (size, extra) in [(14.5_f32, 0), (13.5, 0), (12.5, 0), (11.5, 0), (10.5, usize::from(rows == 2))] {
         let mut job = egui::text::LayoutJob::simple(title.to_owned(), egui::FontId::proportional(size), tc, rect.width() - 20.0);
-        job.wrap.max_rows = rows;
+        job.wrap.max_rows = rows + extra;
         job.wrap.break_anywhere = false;
         let laid = p.layout_job(job);
         let fits = !laid.elided;

@@ -85,6 +85,7 @@ page or file.
 
 | Variable | Effect |
 |---|---|
+| (none) | `--screenshot` always opens the sample preset and changes nothing in your settings file |
 | `TONESTRAND_PAGE` | Start on `settings`, `irs`, `tones`, `tests`, `library` or `open` |
 | `TONESTRAND_OPEN` | With `TONESTRAND_PAGE=open`: open this preset file at start |
 | `TONESTRAND_UNIT` | Start for this unit's device number (e.g. `2162694` HX Stomp) |

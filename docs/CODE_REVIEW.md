@@ -126,3 +126,11 @@ Severity: **High** = can lose the owner's data or break a project rule;
 2. H4, H6, M1–M3, M6.
 3. Enable clippy and add CI; add a `FakeWire` test for the session.
 4. U2, U3, U5, U6, then the refactors in section 3.
+
+> **UX polish (branch `feature/ux-polish`):** effect names step down in size before being cut;
+> one Backups menu; a block is selected automatically; the sample preset opens on the first start
+> only; Unit shows as text when connected; Open + Recent are one menu; slightly lighter muted
+> text and empty slots; Settings "Jump to" row; the window remembers its size and position;
+> F1 shortcuts window; the Activity button turns red when something went wrong; a Getting
+> started card; a Revert button and a brief "sent" label on the live preset. Not done (bigger
+> features): compare presets, light theme, accessibility work, Box token storage.
