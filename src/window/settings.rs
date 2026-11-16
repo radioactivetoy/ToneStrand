@@ -11,10 +11,19 @@ impl App {
                     ui.set_max_width(760.0);
                     ui.label(RichText::new("Settings").size(22.0).strong());
                     ui.label(RichText::new("Changes are saved right away.").color(MUTED));
+                    ui.horizontal_wrapped(|ui| {
+                        ui.label(RichText::new("Jump to").small().color(MUTED));
+                        for name in ["Libraries", "Effects", "Unit", "NAM", "Boxes", "Behaviour", "Display"] {
+                            if ui.small_button(name).clicked() {
+                                ui.data_mut(|d| d.insert_temp(egui::Id::new("settings-jump"), name.to_owned()));
+                            }
+                        }
+                    });
                     ui.add_space(12.0);
 
                     // ---- Library folder.
                     let mut new_dir: Option<Option<PathBuf>> = None;
+                    settings_anchor(ui, "Libraries");
                     theme::card(ui, |ui| {
                         theme::section_help(ui, "Preset library", "The folder where your presets and setlists are kept on this computer.");
                         ui.add_space(4.0);
@@ -81,6 +90,7 @@ impl App {
 
                     // ---- Effects list.
                     let mut reload = false;
+                    settings_anchor(ui, "Effects");
                     theme::card(ui, |ui| {
                         theme::section_help(ui, "Effects list", "Effect and amp names, knob ranges and colours are read from HX Edit's resource folder.");
                         ui.add_space(4.0);
@@ -117,6 +127,7 @@ impl App {
 
                     // ---- Unit.
                     let mut pick = None;
+                    settings_anchor(ui, "Unit");
                     theme::card(ui, |ui| {
                         theme::section_help(ui, "Unit", "New presets are made for this unit when no pedal is connected. A connected pedal always decides.");
                         ui.add_enabled_ui(self.connected.is_none(), |ui| {
@@ -140,6 +151,7 @@ impl App {
                     // ---- NAM A2 Lite (optional community firmware).
                     let mut changed = false;
                     let mut convert = false;
+                    settings_anchor(ui, "NAM");
                     theme::card(ui, |ui| {
                         theme::section_help(
                             ui,
@@ -183,6 +195,7 @@ impl App {
                     ui.add_space(10.0);
 
                     // ---- Boxes.
+                    settings_anchor(ui, "Boxes");
                     theme::card(ui, |ui| {
                         theme::section_help(ui, "Helrig Boxes", "Boxes this computer is paired with. Forgetting one means pairing it again before you can connect.");
                         changed |= ui
@@ -224,6 +237,7 @@ impl App {
                     ui.add_space(10.0);
 
                     // ---- Behaviour.
+                    settings_anchor(ui, "Behaviour");
                     theme::card(ui, |ui| {
                         theme::section(ui, "Behaviour");
                         changed |= ui.checkbox(&mut self.settings.confirm_pedal, "Ask before writing to or clearing a slot on the pedal").changed();
@@ -243,6 +257,7 @@ impl App {
 
                     // ---- Look.
                     let mut names_changed = false;
+                    settings_anchor(ui, "Display");
                     theme::card(ui, |ui| {
                         theme::section(ui, "Display");
                         ui.horizontal(|ui| {
@@ -306,5 +321,14 @@ impl App {
                     });
                 });
             });
+    }
+}
+
+/// The place a "Jump to" button scrolls to: put just before a card.
+fn settings_anchor(ui: &egui::Ui, name: &str) {
+    let id = egui::Id::new("settings-jump");
+    if ui.data(|d| d.get_temp::<String>(id)).as_deref() == Some(name) {
+        ui.data_mut(|d| d.remove_temp::<String>(id));
+        ui.scroll_to_cursor(Some(egui::Align::TOP));
     }
 }

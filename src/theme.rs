@@ -19,7 +19,7 @@ pub fn line() -> Color32 {
     Color32::from_rgb(0x2a, 0x2d, 0x34)
 }
 pub const TEXT: Color32 = Color32::from_rgb(0xe6, 0xe9, 0xef);
-pub const MUTED: Color32 = Color32::from_rgb(0x8b, 0x93, 0xa7);
+pub const MUTED: Color32 = Color32::from_rgb(0x9a, 0xa2, 0xb6);
 /// The accent colour, picked in the top bar (teal by default).
 static ACCENT_RGB: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x2ec4b6);
 pub const ACCENTS: [(u32, &str); 6] =

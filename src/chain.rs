@@ -121,7 +121,8 @@ fn draw_block(ui: &egui::Ui, rect: Rect, cell: &Cell, selected: bool, hovered: b
             } else if hovered {
                 MUTED
             } else {
-                crate::theme::line()
+                // Visible enough to find, quiet enough not to compete with the effects.
+                MUTED.gamma_multiply(0.4)
             };
             p.rect_filled(small, CornerRadius::same(8), bg());
             p.rect_stroke(small, CornerRadius::same(8), Stroke::new(1.0_f32, col), egui::StrokeKind::Inside);

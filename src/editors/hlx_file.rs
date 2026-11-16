@@ -16,7 +16,7 @@ fn assign_menu(ui: &mut egui::Ui, json: &mut serde_json::Value, b: &hlx::HlxBloc
     let fam = snapshots::family(json);
     let current = snapshots::controller(json, b, knob);
     let label = current.map(|c| c.0.short()).unwrap_or_else(|| "assign".into());
-    let col = if current.is_some() { ORANGE } else { MUTED.gamma_multiply(0.6) };
+    let col = if current.is_some() { ORANGE } else { MUTED.gamma_multiply(0.85) };
     // Quiet until it means something: no frame when nothing is assigned, an orange tag when it is.
     {
         let w = &mut ui.style_mut().visuals.widgets;
