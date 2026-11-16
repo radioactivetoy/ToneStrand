@@ -604,17 +604,40 @@ pub fn io_mut<'a>(doc: &'a mut Value, dsp: &str, input: bool) -> Option<&'a mut 
 /// output only) is added for Helix units when the file has only one.
 /// Returns true when something was added.
 pub fn ensure_paths(doc: &mut Value, paths: usize) -> bool {
-    if paths < 2 || doc.pointer("/data/tone/dsp1").is_some() {
+    // An HX Stomp file keeps an empty `dsp1`: that is still a path without input and output.
+    let has_io = doc.pointer("/data/tone/dsp1/inputA").is_some() && doc.pointer("/data/tone/dsp1/outputA").is_some();
+    if paths < 2 || has_io {
         return false;
     }
+    // A file that keeps a second input and output per path (inputB, outputB) gets them here too, unrouted.
+    let lane_b = |name: &str, route: &str, doc: &Value| -> Option<Value> {
+        let mut v = doc.pointer(&format!("/data/tone/dsp0/{name}"))?.clone();
+        v.as_object_mut()?.insert(route.into(), json!(0));
+        Some(v)
+    };
+    let (in_b, out_b) = (lane_b("inputB", "@input", doc), lane_b("outputB", "@output", doc));
     let Some(tone) = doc.pointer_mut("/data/tone").and_then(Value::as_object_mut) else { return false };
-    tone.insert(
-        "dsp1".into(),
-        json!({
-            "inputA": { "@input": 0, "@model": "HD2_AppDSPFlow2Input", "noiseGate": false, "threshold": -48.0, "decay": 0.1 },
-            "outputA": { "@model": "HD2_AppDSPFlowOutput", "@output": 1, "gain": 0.0, "pan": 0.5 }
-        }),
-    );
+    let mut dsp1 = json!({
+        "inputA": { "@input": 0, "@model": "HD2_AppDSPFlow2Input", "noiseGate": false, "threshold": -48.0, "decay": 0.1 },
+        "outputA": { "@model": "HD2_AppDSPFlowOutput", "@output": 1, "gain": 0.0, "pan": 0.5 }
+    });
+    if let Some(o) = dsp1.as_object_mut() {
+        if let Some(v) = in_b {
+            o.insert("inputB".into(), v);
+        }
+        if let Some(v) = out_b {
+            o.insert("outputB".into(), v);
+        }
+    }
+    // Keep whatever else the file already holds for that path.
+    if let Some(Value::Object(old)) = tone.get("dsp1").cloned() {
+        if let (Some(new), true) = (dsp1.as_object_mut(), !old.is_empty()) {
+            for (k, v) in old {
+                new.insert(k, v);
+            }
+        }
+    }
+    tone.insert("dsp1".into(), dsp1);
     if let Some(g) = tone.get_mut("global").and_then(Value::as_object_mut) {
         g.entry("@topology1").or_insert(json!("A"));
     }

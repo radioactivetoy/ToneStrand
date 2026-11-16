@@ -22,6 +22,7 @@ mod msgpack;
 mod nam;
 mod proto;
 mod realnames;
+mod routes;
 mod selftest;
 mod session;
 mod snapshots;

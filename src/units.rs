@@ -36,6 +36,18 @@ pub fn convert(doc: &mut Value, target: i64, cat: Option<&Catalog>) -> Result<Ve
         } else if work.pointer(&format!("/data/tone/{dsp}")).is_some() {
             if let Some(t) = work.pointer_mut("/data/tone").and_then(Value::as_object_mut) {
                 t.remove(&dsp);
+                // What the file keeps about that path elsewhere goes with it.
+                if let Some(g) = t.get_mut("global").and_then(Value::as_object_mut) {
+                    g.remove(&format!("@topology{extra}"));
+                }
+                if let Some(c) = t.get_mut("controller").and_then(Value::as_object_mut) {
+                    c.remove(&dsp);
+                }
+                for (_, snap) in t.iter_mut().filter(|(k, _)| k.starts_with("snapshot")) {
+                    if let Some(b) = snap.get_mut("blocks").and_then(Value::as_object_mut) {
+                        b.remove(&dsp);
+                    }
+                }
             }
         }
     }
@@ -139,6 +151,7 @@ pub fn convert(doc: &mut Value, target: i64, cat: Option<&Catalog>) -> Result<Ve
     if let Some(d) = work.pointer_mut("/data").and_then(Value::as_object_mut) {
         d.insert("device".into(), json!(target));
     }
+    changes.extend(convert_io(&mut work, from, to, to_name));
     if hlx::ensure_paths(&mut work, to.paths) {
         changes.push(format!("Path 2 was added (empty): the {to_name} has two paths."));
     }
@@ -150,6 +163,54 @@ pub fn convert(doc: &mut Value, target: i64, cat: Option<&Catalog>) -> Result<Ve
     Ok(changes)
 }
 
+/// Input and output of every path on the new unit: the routes keep their meaning (the numbers
+/// differ per unit), and the models take the unit family's naming. Returns what to tell the person.
+fn convert_io(work: &mut Value, from: snapshots::Family, to: snapshots::Family, to_name: &str) -> Vec<String> {
+    let mut notes = Vec::new();
+    for dsp in hlx::dsps(work) {
+        let pnum = dsp.trim_start_matches("dsp").parse::<usize>().unwrap_or(0) + 1;
+        for (sec, input) in [("inputA", true), ("inputB", true), ("outputA", false), ("outputB", false)] {
+            let Some(obj) = work.pointer_mut(&format!("/data/tone/{dsp}/{sec}")).and_then(Value::as_object_mut) else { continue };
+            let route_key = if input { "@input" } else { "@output" };
+            if let Some(v) = obj.get(route_key).and_then(Value::as_i64) {
+                let (nv, exact) = crate::routes::map_route(from, to, input, v);
+                if nv != v {
+                    obj.insert(route_key.into(), json!(nv));
+                }
+                if !exact {
+                    let was = crate::routes::route_name(from, input, v).map(str::to_owned).unwrap_or(format!("route {v}"));
+                    let now = crate::routes::route_name(to, input, nv).unwrap_or("the main one");
+                    let what = if input { "input" } else { "output" };
+                    notes.push(format!("Path {pnum} {what} ({sec}): \"{was}\" isn't on the {to_name}; set to \"{now}\"."));
+                }
+            }
+            if from.paths != to.paths {
+                if let Some(m) = obj.get("@model").and_then(Value::as_str).map(str::to_owned) {
+                    let renamed = if to.paths == 1 {
+                        match (input, sec.ends_with('B'), m.starts_with("HD2_AppDSPFlow")) {
+                            (true, _, true) => Some("HelixStomp_AppDSPFlowInput"),
+                            (false, false, true) => Some("HelixStomp_AppDSPFlowOutputMain"),
+                            (false, true, true) => Some("HelixStomp_AppDSPFlowOutputSend"),
+                            _ => None,
+                        }
+                    } else if m.starts_with("HelixStomp_AppDSPFlow") {
+                        Some(match (input, dsp.as_str()) {
+                            (true, "dsp0") => "HD2_AppDSPFlow1Input",
+                            (true, _) => "HD2_AppDSPFlow2Input",
+                            (false, _) => "HD2_AppDSPFlowOutput",
+                        })
+                    } else {
+                        None
+                    };
+                    if let Some(r) = renamed {
+                        obj.insert("@model".into(), json!(r));
+                    }
+                }
+            }
+        }
+    }
+    notes
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,5 +402,48 @@ mod split_tests {
         hlx::remove_block(&mut doc, &b);
         assert!(hlx::remove_split(&mut doc, "dsp0", fam.positions));
         assert!(hlx::blocks(&doc).iter().all(|b| b.path == 0 && b.position < fam.positions));
+    }
+}
+
+#[cfg(test)]
+mod io_tests {
+    use super::*;
+
+    #[test]
+    fn stomp_to_helix_keeps_the_input_meaning_and_gives_path_two_its_io() {
+        let mut doc = hlx::blank_for("t", 2162694);
+        // As HX Edit writes an HX Stomp file: an empty dsp1, the second lane's input and output.
+        doc["data"]["tone"]["dsp1"] = json!({});
+        doc["data"]["tone"]["dsp0"]["inputA"]["@input"] = json!(4); // Return L/R
+        doc["data"]["tone"]["dsp0"]["inputB"] = json!({ "@input": 0, "@model": "HelixStomp_AppDSPFlowInput" });
+        let notes = convert(&mut doc, 2162689, None).unwrap();
+        let tone = &doc["data"]["tone"];
+        assert_eq!(tone["dsp0"]["inputA"]["@input"], json!(11), "Return L/R becomes Return 1/2");
+        assert_eq!(tone["dsp0"]["inputA"]["@model"], json!("HD2_AppDSPFlow1Input"));
+        assert_eq!(tone["dsp0"]["outputA"]["@model"], json!("HD2_AppDSPFlowOutput"));
+        assert!(tone["dsp1"]["inputA"].is_object() && tone["dsp1"]["outputA"].is_object());
+        assert!(tone["dsp1"]["inputB"].is_object(), "the second lane's input follows the file");
+        assert!(notes.iter().any(|n| n.starts_with("Path 2 was added")));
+    }
+
+    #[test]
+    fn helix_to_stomp_maps_routes_and_drops_path_two_leftovers() {
+        let mut doc = hlx::blank_for("t", 2162689);
+        doc["data"]["tone"]["dsp0"]["inputA"]["@input"] = json!(6); // Mic
+        doc["data"]["tone"]["dsp0"]["outputA"]["@output"] = json!(6); // XLR
+        doc["data"]["tone"]["controller"] = json!({ "dsp1": {} });
+        doc["data"]["tone"]["snapshot0"]["blocks"] = json!({ "dsp1": {} });
+        let notes = convert(&mut doc, 2162694, None).unwrap();
+        let tone = &doc["data"]["tone"];
+        assert_eq!(tone["dsp0"]["inputA"]["@input"], json!(1));
+        assert_eq!(tone["dsp0"]["outputA"]["@output"], json!(1));
+        assert_eq!(tone["dsp0"]["inputA"]["@model"], json!("HelixStomp_AppDSPFlowInput"));
+        assert_eq!(tone["dsp0"]["outputA"]["@model"], json!("HelixStomp_AppDSPFlowOutputMain"));
+        assert!(tone.get("dsp1").is_none());
+        assert!(tone["global"].get("@topology1").is_none());
+        assert!(tone["controller"].get("dsp1").is_none());
+        assert!(tone["snapshot0"]["blocks"].get("dsp1").is_none());
+        assert!(notes.iter().any(|n| n.contains("\"Mic\" isn't on the")));
+        assert!(notes.iter().any(|n| n.contains("\"XLR\" isn't on the")));
     }
 }

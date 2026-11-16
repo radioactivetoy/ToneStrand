@@ -568,7 +568,7 @@ pub fn hlx_editor(
             let mut route = obj.get(route_key).and_then(|v| v.as_i64()).unwrap_or(1);
             ui.horizontal(|ui| {
                 ui.label(RichText::new(if input { "Source" } else { "Destination" }).color(MUTED));
-                if choice_combo(ui, &format!("route-{dsp}-{input}"), &mut route, &route_names(fam, input)) {
+                if choice_combo(ui, &format!("route-{dsp}-{input}"), &mut route, &crate::routes::route_names(fam, input, di > 0)) {
                     obj.insert(route_key.into(), serde_json::json!(route));
                     *dirty = true;
                 }

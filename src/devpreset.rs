@@ -939,6 +939,29 @@ impl DevicePreset {
                     out.set_attach(pk, at, attach);
                 }
             }
+            // The path's input and output: where the sound comes from and goes, and their knobs.
+            let (hlx_fam, pedal_fam) = (crate::snapshots::family(doc), crate::snapshots::family_of_device(crate::nam::unit()));
+            for (sec, input, slot) in [("inputA", true, 0usize), ("outputA", false, columns + 1)] {
+                let Some(obj) = doc.pointer(&format!("{tone}/{sec}")).and_then(serde_json::Value::as_object) else { continue };
+                let route = obj.get(if input { "@input" } else { "@output" }).and_then(serde_json::Value::as_i64);
+                if let (Some(v), Some(_)) = (route, out.io_route(pk, slot)) {
+                    let (nv, exact) = crate::routes::map_route(hlx_fam, pedal_fam, input, v);
+                    out.set_io_route(pk, slot, nv);
+                    if !exact {
+                        let was = crate::routes::route_name(hlx_fam, input, v).map(str::to_owned).unwrap_or(format!("route {v}"));
+                        let now = crate::routes::route_name(pedal_fam, input, nv).unwrap_or("the main one");
+                        let what = if input { "input" } else { "output" };
+                        notes.push(format!("Path {} {what}: \"{was}\" isn't on this pedal; set to \"{now}\".", d + 1));
+                    }
+                }
+                let knobs: &[(usize, &str, i64)] =
+                    if input { &[(0, "noiseGate", 2), (1, "threshold", 1), (2, "decay", 1)] } else { &[(0, "gain", 1), (1, "pan", 1)] };
+                for (i, id, vt) in knobs {
+                    if let Some(v) = obj.get(*id) {
+                        out.set_value(pk, slot, *i, knob_value(Some(v), *vt, 0.0));
+                    }
+                }
+            }
             out.sync_split_active(pk);
         }
         if let Some(t) = doc.pointer("/data/tone/global/@tempo").and_then(serde_json::Value::as_f64) {

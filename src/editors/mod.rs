@@ -57,7 +57,8 @@ fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bo
         if let Some(route) = preset.io_route(s.path, s.position) {
             // The jacks by name, numbered as in .hlx files (the same numbers the pedal keeps).
             let fam = snapshots::family_of_device(crate::nam::unit());
-            let mut names: Vec<(i64, String)> = route_names(fam, input).into_iter().map(|(v, n)| (v, n.to_owned())).collect();
+            let mut names: Vec<(i64, String)> =
+                crate::routes::route_names(fam, input, s.path > 0).into_iter().map(|(v, n)| (v, n.to_owned())).collect();
             if !names.iter().any(|(v, _)| *v == route) {
                 names.push((route, format!("Other ({route})")));
             }
@@ -989,60 +990,6 @@ fn bound_cell(ui: &mut egui::Ui, v: &Value, meta: Option<&crate::catalog::Param>
             );
             r.changed().then(|| if int { Value::int(x.round() as i64) } else { Value::F32(x as f32) })
         }
-    }
-}
-
-/// Names of input sources and output destinations for a pedal family.
-fn route_names(fam: snapshots::Family, input: bool) -> Vec<(i64, &'static str)> {
-    let stomp = fam.name.starts_with("HX Stomp");
-    if input && stomp {
-        vec![(0, "None"), (1, "Main L/R"), (4, "Return L/R"), (6, "USB 5/6")]
-    } else if input {
-        [
-            "None",
-            "Multi (Guitar, Aux, Variax)",
-            "Guitar",
-            "Aux",
-            "Variax",
-            "Variax Magnetics",
-            "Mic",
-            "Return 1",
-            "Return 2",
-            "Return 3",
-            "Return 4",
-            "Return 1/2",
-            "Return 3/4",
-            "S/PDIF",
-            "USB 3/4",
-            "USB 5/6",
-            "USB 7/8",
-        ]
-        .iter()
-        .enumerate()
-        .map(|(i, n)| (i as i64, *n))
-        .collect()
-    } else if stomp {
-        vec![(0, "None"), (1, "Multi (Main L/R, Send, USB)")]
-    } else {
-        [
-            "None",
-            "Multi (1/4\", XLR, Digital, USB 1/2)",
-            "Path 2A",
-            "Path 2B",
-            "Path 2A+B",
-            "1/4\"",
-            "XLR",
-            "Send 1/2",
-            "Send 3/4",
-            "Digital",
-            "USB 1/2",
-            "USB 3/4",
-            "USB 5/6",
-        ]
-        .iter()
-        .enumerate()
-        .map(|(i, n)| (i as i64, *n))
-        .collect()
     }
 }
 
