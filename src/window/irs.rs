@@ -5,9 +5,13 @@ use super::*;
 impl App {
     /// Pick .nam captures and a folder, write a User IR .wav for each, and show what happened.
     pub(super) fn convert_nam_files(&mut self) {
-        let Some(files) = rfd::FileDialog::new().set_title("Pick NAM captures").add_filter("NAM captures", &["nam"]).pick_files() else { return };
+        let Some(files) = rfd::FileDialog::new().set_title("Pick NAM captures").add_filter("NAM captures", &["nam"]).pick_files() else {
+            return;
+        };
         let start = self.settings.nam_out_dir.clone().map(PathBuf::from).unwrap_or_else(|| self.library_dir.clone());
-        let Some(out) = rfd::FileDialog::new().set_title("Where to save the .wav files").set_directory(&start).pick_folder() else { return };
+        let Some(out) = rfd::FileDialog::new().set_title("Where to save the .wav files").set_directory(&start).pick_folder() else {
+            return;
+        };
         self.settings.nam_out_dir = Some(out.to_string_lossy().into_owned());
         self.settings.save();
         let opts = crate::nam::Options { use_level: self.settings.nam_use_level, use_loudness: self.settings.nam_use_loudness };
@@ -24,7 +28,10 @@ impl App {
         }
         let ok = files.len() - failed;
         lines.push(String::new());
-        lines.push(format!("Saved in {}. Import each .wav into a User IR slot with HX Edit, then set the NAM block's Model knob to that slot.", out.display()));
+        lines.push(format!(
+            "Saved in {}. Import each .wav into a User IR slot with HX Edit, then set the NAM block's Model knob to that slot.",
+            out.display()
+        ));
         self.note(if failed == 0 { LogLevel::Good } else { LogLevel::Bad }, format!("Converted {ok} of {} captures", files.len()));
         self.unit_report = Some((format!("NAM captures: {ok} converted, {failed} refused"), lines, failed > 0 && ok == 0));
     }
@@ -100,19 +107,26 @@ impl App {
                             if let Some(t) = tex {
                                 ui.add(egui::Image::new(&t).fit_to_exact_size(Vec2::splat(22.0)));
                             }
-                            ui.label(RichText::new(if row.nam { "NAM capture" } else { "IR" }).small().color(if row.nam { PINK } else { BLUE }));
+                            ui.label(RichText::new(if row.nam { "NAM capture" } else { "IR" }).small().color(if row.nam {
+                                PINK
+                            } else {
+                                BLUE
+                            }));
                         });
                         ui.label(RichText::new(&row.name).strong()).on_hover_text(format!("{}\n{}", row.file, row.notes));
                         let label = |s: i64| match used.get(&s) {
                             Some(n) => format!("{} · {n}", s + 1),
                             None => format!("{} · empty", s + 1),
                         };
-                        egui::ComboBox::from_id_salt(("plan-slot", i)).selected_text(label(row.slot)).width(220.0).height(360.0).show_ui(ui, |ui| {
-                            for s in 0..crate::session::IR_SLOTS {
-                                let col = if used.contains_key(&s) { ORANGE } else { TEXT };
-                                ui.selectable_value(&mut row.slot, s, RichText::new(label(s)).color(col));
-                            }
-                        });
+                        egui::ComboBox::from_id_salt(("plan-slot", i)).selected_text(label(row.slot)).width(220.0).height(360.0).show_ui(
+                            ui,
+                            |ui| {
+                                for s in 0..crate::session::IR_SLOTS {
+                                    let col = if used.contains_key(&s) { ORANGE } else { TEXT };
+                                    ui.selectable_value(&mut row.slot, s, RichText::new(label(s)).color(col));
+                                }
+                            },
+                        );
                         let twice = slots.iter().filter(|s| **s == row.slot).count() > 1;
                         if twice {
                             ui.label(RichText::new("same slot twice").small().color(BAD));
@@ -127,8 +141,14 @@ impl App {
                 if plan.rows.iter().any(|r| r.nam) {
                     ui.add_space(8.0);
                     theme::card(ui, |ui| {
-                        ui.label(RichText::new("NAM captures only work with the NAM A2 Lite firmware on the pedal.").strong().color(ORANGE));
-                        ui.label(RichText::new("Without it the pedal refuses them, and the transfer can hang and drop the connection.").small().color(MUTED));
+                        ui.label(
+                            RichText::new("NAM captures only work with the NAM A2 Lite firmware on the pedal.").strong().color(ORANGE),
+                        );
+                        ui.label(
+                            RichText::new("Without it the pedal refuses them, and the transfer can hang and drop the connection.")
+                                .small()
+                                .color(MUTED),
+                        );
                         ui.checkbox(&mut plan.firmware_ok, "My pedal has the NAM A2 Lite firmware");
                     });
                 }
@@ -139,8 +159,18 @@ impl App {
                 let dup = (0..plan.rows.len()).any(|i| plan.rows.iter().skip(i + 1).any(|r| r.slot == plan.rows[i].slot));
                 let sendable = plan.rows.iter().filter(|r| !r.nam || plan.firmware_ok).count();
                 ui.horizontal(|ui| {
-                    let label = if sendable == plan.rows.len() { format!("Send {sendable}") } else { format!("Send {sendable} (skip the captures)") };
-                    if ui.add_enabled(!dup && sendable > 0, egui::Button::new(RichText::new(label).strong()).fill(accent().gamma_multiply(0.6))).clicked() {
+                    let label = if sendable == plan.rows.len() {
+                        format!("Send {sendable}")
+                    } else {
+                        format!("Send {sendable} (skip the captures)")
+                    };
+                    if ui
+                        .add_enabled(
+                            !dup && sendable > 0,
+                            egui::Button::new(RichText::new(label).strong()).fill(accent().gamma_multiply(0.6)),
+                        )
+                        .clicked()
+                    {
                         result = Some(true);
                     }
                     if ui.button("Cancel").clicked() {
@@ -378,20 +408,23 @@ impl App {
         // Renaming one IR.
         if let Some((slot, mut name)) = self.ir_rename.take() {
             let mut result = None;
-            egui::Window::new("Rename IR").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
-                ui.label(format!("Slot {}", slot + 1));
-                let r = ui.add(egui::TextEdit::singleline(&mut name).char_limit(crate::session::IR_NAME_MAX).desired_width(260.0));
-                ui.horizontal(|ui| theme::name_hint(ui, &name, crate::session::IR_NAME_MAX));
-                let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                ui.horizontal(|ui| {
-                    if theme::primary_button(ui, "Rename").clicked() || enter {
-                        result = Some(true);
-                    }
-                    if ui.button("Cancel").clicked() {
-                        result = Some(false);
-                    }
-                });
-            });
+            egui::Window::new("Rename IR").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(
+                ctx,
+                |ui| {
+                    ui.label(format!("Slot {}", slot + 1));
+                    let r = ui.add(egui::TextEdit::singleline(&mut name).char_limit(crate::session::IR_NAME_MAX).desired_width(260.0));
+                    ui.horizontal(|ui| theme::name_hint(ui, &name, crate::session::IR_NAME_MAX));
+                    let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                    ui.horizontal(|ui| {
+                        if theme::primary_button(ui, "Rename").clicked() || enter {
+                            result = Some(true);
+                        }
+                        if ui.button("Cancel").clicked() {
+                            result = Some(false);
+                        }
+                    });
+                },
+            );
             match result {
                 Some(true) => {
                     let n = crate::irs::clean_name(&name);

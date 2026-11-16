@@ -214,12 +214,25 @@ fn num(v: Option<&Json>, default: f64) -> f64 {
 pub fn builtin_choices(display: &str) -> Vec<String> {
     let items: &[&str] = match display {
         "sync_note" => &[
-            "1/1", "1/2 Dotted", "1/2", "1/2 Triplet",
-            "1/4 Dotted", "1/4", "1/4 Triplet",
-            "1/8 Dotted", "1/8", "1/8 Triplet",
-            "1/16 Dotted", "1/16", "1/16 Triplet",
-            "1/32 Dotted", "1/32", "1/32 Triplet",
-            "1/64 Dotted", "1/64", "1/64 Triplet",
+            "1/1",
+            "1/2 Dotted",
+            "1/2",
+            "1/2 Triplet",
+            "1/4 Dotted",
+            "1/4",
+            "1/4 Triplet",
+            "1/8 Dotted",
+            "1/8",
+            "1/8 Triplet",
+            "1/16 Dotted",
+            "1/16",
+            "1/16 Triplet",
+            "1/32 Dotted",
+            "1/32",
+            "1/32 Triplet",
+            "1/64 Dotted",
+            "1/64",
+            "1/64 Triplet",
         ],
         "delay_mod_mode" => &["Off", "Chorus", "Vibrato"],
         "chorus_mode" => &["Chorus", "Vibrato"],
@@ -230,19 +243,50 @@ pub fn builtin_choices(display: &str) -> Vec<String> {
         "comp_ratio" => &["2:1", "3:1", "4:1", "6:1", "10:1", "20:1"],
         "comp_ratio_3band" => &["2:1", "3:1", "4:1", "6:1", "10:1", "20:1", "Inf:1"],
         "mic" => &[
-            "57 Dynamic", "409 Dynamic", "421 Dynamic", "30 Dynamic", "20 Dynamic",
-            "121 Ribbon", "160 Ribbon", "4038 Ribbon", "414 Cond", "84 Cond",
-            "67 Cond", "87 Cond", "47 Cond", "112 Dynamic", "12 Dynamic", "7 Dynamic",
+            "57 Dynamic",
+            "409 Dynamic",
+            "421 Dynamic",
+            "30 Dynamic",
+            "20 Dynamic",
+            "121 Ribbon",
+            "160 Ribbon",
+            "4038 Ribbon",
+            "414 Cond",
+            "84 Cond",
+            "67 Cond",
+            "87 Cond",
+            "47 Cond",
+            "112 Dynamic",
+            "12 Dynamic",
+            "7 Dynamic",
         ],
         "cabMICir" => &[
-            "57 Dynamic", "421 Dynamic", "7 Dynamic", "906 Dynamic", "30 Dynamic",
-            "121 Ribbon", "160 Ribbon", "4038 Ribbon", "84 Ribbon", "414 Cond",
-            "47 Cond FET", "67 Cond",
+            "57 Dynamic",
+            "421 Dynamic",
+            "7 Dynamic",
+            "906 Dynamic",
+            "30 Dynamic",
+            "121 Ribbon",
+            "160 Ribbon",
+            "4038 Ribbon",
+            "84 Ribbon",
+            "414 Cond",
+            "47 Cond FET",
+            "67 Cond",
         ],
         "cabMICirBass" => &[
-            "57 Dynamic", "421 Dynamic", "7 Dynamic", "88 Dynamic", "52 Dynamic",
-            "112 Dynamic", "20 Dynamic", "12 Dynamic", "121 Ribbon", "4038 Ribbon",
-            "414 Cond", "47 Cond FET",
+            "57 Dynamic",
+            "421 Dynamic",
+            "7 Dynamic",
+            "88 Dynamic",
+            "52 Dynamic",
+            "112 Dynamic",
+            "20 Dynamic",
+            "12 Dynamic",
+            "121 Ribbon",
+            "4038 Ribbon",
+            "414 Cond",
+            "47 Cond FET",
         ],
         "lfo_shape" => &["Sawtooth Up", "Sawtooth Down", "Triangle", "Sine", "Square", "Exp Sine"],
         "lfo_shape_dualphaser" => &["Sine", "Square"],
@@ -314,13 +358,31 @@ pub fn builtin_choices(display: &str) -> Vec<String> {
         "panstereoimager_mode" => &["Mono In", "Stereo In"],
         "pan_discrete" | "sswitch" => &["Left", "Center", "Right"],
         "shift_mode" => &["Up", "Down", "Stereo"],
-        "scale_voice" => &["Major", "Minor", "Major Pentatonic", "Minor Pentatonic", "Harmonic Minor", "Melodic Minor", "Whole Tone", "Diminished"],
+        "scale_voice" => {
+            &["Major", "Minor", "Major Pentatonic", "Minor Pentatonic", "Harmonic Minor", "Melodic Minor", "Whole Tone", "Diminished"]
+        }
         "key_voice" => &["A", "A#", "B", "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#"],
         "note_pitch" => &["C", "C sharp", "D", "D sharp", "E", "F", "F sharp", "G", "G sharp", "A", "A sharp", "B"],
         "synthharmony_interval1" => &["-Major 6th", "-Minor 6th", "-4th", "-Major 3rd", "-Minor 3rd", "Minor 3rd", "Major 3rd", "5th"],
         "synthharmony_interval2" => &["-1 Octave", "-5th", "-4th", "-2nd", "Unison", "4th", "5th", "1 Octave", "2 Octaves"],
-        "pitch_shift" => &["-9th", "-8th", "-7th", "-6th", "-5th", "-4th", "-3rd", "-2nd", "Unison", "+2nd", "+3rd", "+4th", "+5th", "+6th", "+7th", "+8th", "+9th"],
-        "feedback_type" => &["-Octave", "Unison", "+Octave", "+Octave & 5th", "+2 Octaves", "+5th", "+Maj 3rd", "+Min 3rd", "+4th", "-5th", "-4th", "Random"],
+        "pitch_shift" => &[
+            "-9th", "-8th", "-7th", "-6th", "-5th", "-4th", "-3rd", "-2nd", "Unison", "+2nd", "+3rd", "+4th", "+5th", "+6th", "+7th",
+            "+8th", "+9th",
+        ],
+        "feedback_type" => &[
+            "-Octave",
+            "Unison",
+            "+Octave",
+            "+Octave & 5th",
+            "+2 Octaves",
+            "+5th",
+            "+Maj 3rd",
+            "+Min 3rd",
+            "+4th",
+            "-5th",
+            "-4th",
+            "Random",
+        ],
         "feedbacker_dryctrl" => &["Off", "On", "Always"],
         "feedbacker_reference" => &["Lowest", "Loudest"],
         "feedbacker_retrigger" => &["---", "Trigger"],
@@ -330,7 +392,19 @@ pub fn builtin_choices(display: &str) -> Vec<String> {
         "poly_acoustic_sim" => &["Standard", "Jumbo", "Enhanced", "Piezo"],
         "poly_chorus_hicut" => &["1 kHz", "2 kHz", "5 kHz", "10 kHz", "Off"],
         "poly_chorus_lowcut" => &["Off", "20 Hz", "50 Hz", "100 Hz", "150 Hz", "200 Hz", "250 Hz", "300 Hz", "400 Hz"],
-        "poly_shift_slicecurve" => &["StartSlow5", "StartSlow4", "StartSlow3", "StartSlow2", "StartSlow1", "Linear", "EndSlow1", "EndSlow2", "EndSlow3", "EndSlow4", "EndSlow5"],
+        "poly_shift_slicecurve" => &[
+            "StartSlow5",
+            "StartSlow4",
+            "StartSlow3",
+            "StartSlow2",
+            "StartSlow1",
+            "Linear",
+            "EndSlow1",
+            "EndSlow2",
+            "EndSlow3",
+            "EndSlow4",
+            "EndSlow5",
+        ],
         "stutterEdit_Mode" => &["Speed", "Pitch"],
         "stutterEdit_Reverse" => &["Forward", "Reverse", "Fwd/Rev"],
         "vowel_start" | "vowel_end" => &["A", "E", "I", "O", "U"],
@@ -465,25 +539,13 @@ fn build_param(p: &serde_json::Map<String, Json>, controls: &Json, stereo_varian
     let name = p.get("name").and_then(Json::as_str).unwrap_or("").to_owned();
     let value_type = num(p.get("valueType"), 1.0) as i64;
     let display = if stereo_variant {
-        p.get("displayType_stereo")
-            .and_then(Json::as_str)
-            .or_else(|| p.get("displayType").and_then(Json::as_str))
-            .unwrap_or("")
-            .to_owned()
+        p.get("displayType_stereo").and_then(Json::as_str).or_else(|| p.get("displayType").and_then(Json::as_str)).unwrap_or("").to_owned()
     } else {
         p.get("displayType").and_then(Json::as_str).unwrap_or("").to_owned()
     };
     let min = num(p.get("min"), 0.0);
-    let max = if stereo_variant {
-        num(p.get("max_stereo").or_else(|| p.get("max")), 1.0)
-    } else {
-        num(p.get("max"), 1.0)
-    };
-    let default = if stereo_variant {
-        num(p.get("default_stereo").or_else(|| p.get("default")), 0.0)
-    } else {
-        num(p.get("default"), 0.0)
-    };
+    let max = if stereo_variant { num(p.get("max_stereo").or_else(|| p.get("max")), 1.0) } else { num(p.get("max"), 1.0) };
+    let default = if stereo_variant { num(p.get("default_stereo").or_else(|| p.get("default")), 0.0) } else { num(p.get("default"), 0.0) };
     let (mut choices, spec) = resolve_control(controls, &display);
     if choices.is_empty() && value_type == 0 && spec.int_offset != 0 && max >= min && (max - min) <= 32.0 {
         let lo = min.round() as i64;
@@ -501,14 +563,9 @@ fn collect_models(v: &Json, controls: &Json, out: &mut HashMap<String, ModelInfo
             if let (Some(Json::String(id)), Some(Json::Array(params))) = (o.get("symbolicID"), o.get("params")) {
                 let mono_supported = o.get("mono").and_then(Json::as_bool).unwrap_or(true);
                 let stereo_supported = o.get("stereo").and_then(Json::as_bool).unwrap_or(false);
-                let mono_params: Vec<Param> = params
-                    .iter()
-                    .filter_map(|p| build_param(p.as_object()?, controls, !mono_supported && stereo_supported))
-                    .collect();
-                let stereo_params: Vec<Param> = params
-                    .iter()
-                    .filter_map(|p| build_param(p.as_object()?, controls, true))
-                    .collect();
+                let mono_params: Vec<Param> =
+                    params.iter().filter_map(|p| build_param(p.as_object()?, controls, !mono_supported && stereo_supported)).collect();
+                let stereo_params: Vec<Param> = params.iter().filter_map(|p| build_param(p.as_object()?, controls, true)).collect();
                 let base_info = ModelInfo {
                     name: o.get("name").and_then(Json::as_str).unwrap_or(id).to_owned(),
                     load: num(o.get("load"), 0.0),
@@ -557,10 +614,8 @@ impl Catalog {
             .collect();
         let sym_index = sym.iter().enumerate().map(|(i, s)| (s.symbol.clone(), i)).collect();
 
-        let controls: Json = std::fs::read_to_string(dir.join("HelixControls.json"))
-            .ok()
-            .and_then(|t| serde_json::from_str(&t).ok())
-            .unwrap_or(Json::Null);
+        let controls: Json =
+            std::fs::read_to_string(dir.join("HelixControls.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Json::Null);
 
         let mut models = HashMap::new();
         if let Ok(rd) = std::fs::read_dir(dir) {
@@ -622,11 +677,7 @@ impl Catalog {
                         continue;
                     }
                     let Some(number) = self.number_for(id, &sub) else { continue };
-                    let name = m
-                        .get("name")
-                        .and_then(Json::as_str)
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| self.model_name(number));
+                    let name = m.get("name").and_then(Json::as_str).map(str::to_owned).unwrap_or_else(|| self.model_name(number));
                     picks.push(PickModel { name, number });
                 }
                 if !picks.is_empty() {
@@ -699,7 +750,15 @@ impl Catalog {
             }
             let colour = groups.iter().find(|g| g.category == "Amp").map(|g| g.colour).unwrap_or(Color32::from_rgb(0xff, 0x8a, 0x3d));
             let at = groups.iter().rposition(|g| g.category == "Amp").map(|i| i + 1).unwrap_or(groups.len());
-            groups.insert(at, PickGroup { category: "Amp".into(), sub: "NAM".into(), colour, models: vec![PickModel { name: crate::nam::NAME.into(), number: num }] });
+            groups.insert(
+                at,
+                PickGroup {
+                    category: "Amp".into(),
+                    sub: "NAM".into(),
+                    colour,
+                    models: vec![PickModel { name: crate::nam::NAME.into(), number: num }],
+                },
+            );
         } else {
             // HX Effects: in the mono Xenomorph's place.
             for g in &mut groups {
@@ -730,11 +789,7 @@ impl Catalog {
     /// A model's display name, with its variant when there is one.
     pub fn model_name(&self, number: i64) -> String {
         let Some(sym) = self.symbol(number) else { return format!("Model {number}") };
-        let variant = if sym.ends_with("Stereo") {
-            " (stereo)"
-        } else {
-            ""
-        };
+        let variant = if sym.ends_with("Stereo") { " (stereo)" } else { "" };
         match self.info_for_symbol(sym) {
             Some(i) => format!("{}{variant}", crate::realnames::show(&i.name)),
             None => crate::hlx::pretty_model(sym),
@@ -763,12 +818,8 @@ impl Catalog {
             (Some(pid), Some(info)) => info.params.iter().find(|p| &p.id == pid).cloned(),
             _ => None,
         };
-        let name = meta
-            .as_ref()
-            .map(|m| m.name.clone())
-            .filter(|n| !n.is_empty())
-            .or(pid)
-            .unwrap_or_else(|| format!("Setting {}", index + 1));
+        let name =
+            meta.as_ref().map(|m| m.name.clone()).filter(|n| !n.is_empty()).or(pid).unwrap_or_else(|| format!("Setting {}", index + 1));
         (name, meta)
     }
 
@@ -911,13 +962,7 @@ pub fn format_value(meta: Option<&Param>, v: f64) -> String {
             // shows them: a cab mic's Position reads "Center" at 0 and "Edge" at 10.0.
             .find(|p| dv >= p.lower && dv < p.upper)
             .or_else(|| spec.pieces.iter().rev().find(|p| dv >= p.lower && dv <= p.upper))
-            .or_else(|| {
-                if dv < spec.pieces[0].lower {
-                    spec.pieces.first()
-                } else {
-                    spec.pieces.last()
-                }
-            });
+            .or_else(|| if dv < spec.pieces[0].lower { spec.pieces.first() } else { spec.pieces.last() });
         if let Some(p) = piece {
             let shown = dv * p.mult;
             let pat = p.format_units.as_deref().or(p.format.as_deref()).unwrap_or("%.1f");

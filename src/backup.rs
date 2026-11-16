@@ -130,7 +130,8 @@ pub fn read_hxb(b: &[u8]) -> Result<Contents, String> {
         if i == 0 {
             continue; // the index's own header
         }
-        let (offset, stored, compressed, size) = (u64le(b, o + 4) as usize, u64le(b, o + 12) as usize, u32le(b, o + 20) != 0, u64le(b, o + 24));
+        let (offset, stored, compressed, size) =
+            (u64le(b, o + 4) as usize, u64le(b, o + 12) as usize, u32le(b, o + 20) != 0, u64le(b, o + 24));
         if offset < 48 || offset + stored > b.len() || size > CEILING {
             return Err(format!("entry {tag} points outside the file"));
         }
@@ -149,7 +150,9 @@ pub fn read_hxb(b: &[u8]) -> Result<Contents, String> {
         None => Vec::new(),
     };
     let num = |tag: &str, prefix: &str, digits: usize| -> Option<usize> {
-        tag.strip_prefix(prefix).filter(|r| r.len() == digits && r.chars().all(|c| c.is_ascii_hexdigit())).and_then(|r| usize::from_str_radix(r, 16).ok())
+        tag.strip_prefix(prefix)
+            .filter(|r| r.len() == digits && r.chars().all(|c| c.is_ascii_hexdigit()))
+            .and_then(|r| usize::from_str_radix(r, 16).ok())
     };
     let mut sl: Vec<(usize, &Entry)> = entries.iter().filter_map(|e| num(&e.tag, "SL", 2).map(|n| (n, e))).collect();
     sl.sort_by_key(|x| x.0);

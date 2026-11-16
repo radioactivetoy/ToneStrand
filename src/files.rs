@@ -33,10 +33,7 @@ pub fn unique_path(dir: &Path, file_name: &str) -> PathBuf {
     let p = Path::new(file_name);
     let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| file_name.to_owned());
     let ext = p.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
-    (2..)
-        .map(|n| dir.join(format!("{stem} ({n}){ext}")))
-        .find(|c| !c.exists())
-        .expect("an unused name exists")
+    (2..).map(|n| dir.join(format!("{stem} ({n}){ext}"))).find(|c| !c.exists()).expect("an unused name exists")
 }
 
 /// Copy `from` into `dir` under its own name, picking a new name rather than replacing a file.

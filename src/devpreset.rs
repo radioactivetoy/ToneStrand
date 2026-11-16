@@ -135,9 +135,7 @@ impl DevicePreset {
         if !self.rest.is_empty() {
             return Err(format!("the document has {} unknown part(s) after the tone; it was not sent", self.rest.len()));
         }
-        let table = self
-            .computed_table()
-            .ok_or("the document's offset table can't be rebuilt (a section is missing); it was not sent")?;
+        let table = self.computed_table().ok_or("the document's offset table can't be rebuilt (a section is missing); it was not sent")?;
         Ok(self.encode_with(table))
     }
 
@@ -212,12 +210,7 @@ impl DevicePreset {
                 _ => Value::F32(bpm as f32),
             };
         }
-        let cur = self
-            .tone
-            .at(&[key::SNAPSHOT_SECTION, 6])
-            .and_then(Value::as_i64)
-            .unwrap_or(0)
-            .max(0) as usize;
+        let cur = self.tone.at(&[key::SNAPSHOT_SECTION, 6]).and_then(Value::as_i64).unwrap_or(0).max(0) as usize;
         if let Some(Value::Array(snaps, _)) = self.tone.at_mut(&[key::SNAPSHOT_SECTION, key::SNAPSHOTS]) {
             if let Some(v) = snaps.get_mut(cur).and_then(|s| s.get_mut(5)) {
                 *v = Value::F32(bpm as f32);
@@ -235,19 +228,11 @@ impl DevicePreset {
         self.tone
             .at(&[key::SNAPSHOT_SECTION, key::SNAPSHOTS])
             .and_then(Value::as_array)
-            .map(|a| {
-                a.iter()
-                    .map(|s| crate::session::clean(s.get(key::SNAPSHOT_NAME).and_then(Value::as_str).unwrap_or("")))
-                    .collect()
-            })
+            .map(|a| a.iter().map(|s| crate::session::clean(s.get(key::SNAPSHOT_NAME).and_then(Value::as_str).unwrap_or(""))).collect())
             .unwrap_or_default()
     }
     pub fn set_snapshot_name(&mut self, index: usize, name: &str) {
-        let clean: String = name
-            .chars()
-            .filter(|c| (' '..='~').contains(c))
-            .take(10)
-            .collect();
+        let clean: String = name.chars().filter(|c| (' '..='~').contains(c)).take(10).collect();
         if let Some(Value::Array(a, _)) = self.tone.at_mut(&[key::SNAPSHOT_SECTION, key::SNAPSHOTS]) {
             if let Some(snap) = a.get_mut(index) {
                 if let Some(Value::Str(s, _)) = snap.get_mut(key::SNAPSHOT_NAME) {
@@ -421,15 +406,12 @@ impl DevicePreset {
         if let Some(Value::Bool(b)) = self.body_mut(path, position).and_then(|b| b.get_mut(key::ENABLED)) {
             *b = on;
         }
-        let cur = self
-            .tone
-            .at(&[key::SNAPSHOT_SECTION, 6])
-            .and_then(Value::as_i64)
-            .unwrap_or(0)
-            .max(0) as usize;
+        let cur = self.tone.at(&[key::SNAPSHOT_SECTION, 6]).and_then(Value::as_i64).unwrap_or(0).max(0) as usize;
         let wire = (20 * path + position as i64).max(0) as usize;
         if let Some(Value::Array(snaps, _)) = self.tone.at_mut(&[key::SNAPSHOT_SECTION, key::SNAPSHOTS]) {
-            if let Some(Value::Array(entry, _)) = snaps.get_mut(cur).and_then(|s| s.get_mut(3)).and_then(Value::as_array_mut).and_then(|t| t.get_mut(wire)) {
+            if let Some(Value::Array(entry, _)) =
+                snaps.get_mut(cur).and_then(|s| s.get_mut(3)).and_then(Value::as_array_mut).and_then(|t| t.get_mut(wire))
+            {
                 if let Some(Value::Bool(b)) = entry.get_mut(1) {
                     *b = on;
                 }
@@ -440,7 +422,9 @@ impl DevicePreset {
     /// A block's on/off in one snapshot (snapshot entry 3, indexed by the slot's wire number).
     pub fn set_snapshot_enabled(&mut self, snapshot: usize, wire: usize, on: bool) {
         if let Some(Value::Array(snaps, _)) = self.tone.at_mut(&[key::SNAPSHOT_SECTION, key::SNAPSHOTS]) {
-            if let Some(Value::Array(entry, _)) = snaps.get_mut(snapshot).and_then(|s| s.get_mut(3)).and_then(Value::as_array_mut).and_then(|t| t.get_mut(wire)) {
+            if let Some(Value::Array(entry, _)) =
+                snaps.get_mut(snapshot).and_then(|s| s.get_mut(3)).and_then(Value::as_array_mut).and_then(|t| t.get_mut(wire))
+            {
                 if let Some(Value::Bool(b)) = entry.get_mut(1) {
                     *b = on;
                 }
@@ -455,10 +439,7 @@ impl DevicePreset {
             return false;
         }
         let Value::Array(src_items, _) = &snaps[from] else { return false };
-        let src: Vec<(usize, Value)> = [2usize, 3]
-            .into_iter()
-            .filter_map(|f| src_items.get(f).cloned().map(|v| (f, v)))
-            .collect();
+        let src: Vec<(usize, Value)> = [2usize, 3].into_iter().filter_map(|f| src_items.get(f).cloned().map(|v| (f, v))).collect();
         let Value::Array(dst, _) = &mut snaps[to] else { return false };
         for (f, v) in src {
             if f < dst.len() {
@@ -510,9 +491,8 @@ impl DevicePreset {
         if sp >= jp {
             return;
         }
-        let lower_has_block = items[sp + 1..jp]
-            .iter()
-            .any(|r| Kind::from_wire(r.get(key::KIND).and_then(Value::as_i64).unwrap_or(-1)) != Kind::Empty);
+        let lower_has_block =
+            items[sp + 1..jp].iter().any(|r| Kind::from_wire(r.get(key::KIND).and_then(Value::as_i64).unwrap_or(-1)) != Kind::Empty);
         for idx in [sp, jp] {
             if let Some(Value::Bool(active)) = items.get_mut(idx).and_then(|s| s.get_mut(key::BODY)).and_then(|b| b.get_mut(18)) {
                 *active = lower_has_block;
@@ -535,12 +515,7 @@ impl DevicePreset {
     /// The knobs of the cab paired with a block (amp + cab).
     pub fn paired_values(&self, path: i64, position: usize) -> Vec<Value> {
         let Some(Value::Array(items, _)) = self.tone.at(&[path, key::SLOTS]) else { return Vec::new() };
-        items
-            .get(position)
-            .and_then(|raw| raw.get(key::BODY))
-            .and_then(|b| b.get(key::PAIRED_VALUES))
-            .map(read_values)
-            .unwrap_or_default()
+        items.get(position).and_then(|raw| raw.get(key::BODY)).and_then(|b| b.get(key::PAIRED_VALUES)).map(read_values).unwrap_or_default()
     }
 
     pub fn set_paired_value(&mut self, path: i64, position: usize, index: usize, value: Value) {
@@ -579,7 +554,19 @@ pub struct Ctl {
 impl Ctl {
     /// A new knob assignment with no range, CC or snapshot values yet; set those next.
     pub fn knob(controller: i64, wire: i64, index: usize) -> Ctl {
-        Ctl { controller, kind: 0, wire, index, cab: false, min: Value::Nil, max: Value::Nil, cc: 0, snapshot_disable: false, raw: Value::Nil, snaps: Vec::new() }
+        Ctl {
+            controller,
+            kind: 0,
+            wire,
+            index,
+            cab: false,
+            min: Value::Nil,
+            max: Value::Nil,
+            cc: 0,
+            snapshot_disable: false,
+            raw: Value::Nil,
+            snaps: Vec::new(),
+        }
     }
 }
 
@@ -604,9 +591,10 @@ impl DevicePreset {
                 let snaps = snap_records
                     .iter()
                     .map(|recs| {
-                        recs.iter().filter_map(Value::as_array).find(|r| r.get(1).and_then(Value::as_i64) == Some(t)).map(|r| {
-                            (matches!(r.first(), Some(Value::Bool(true))), r.get(2).cloned().unwrap_or(Value::Nil))
-                        })
+                        recs.iter()
+                            .filter_map(Value::as_array)
+                            .find(|r| r.get(1).and_then(Value::as_i64) == Some(t))
+                            .map(|r| (matches!(r.first(), Some(Value::Bool(true))), r.get(2).cloned().unwrap_or(Value::Nil)))
                     })
                     .collect();
                 out.push((
@@ -656,7 +644,13 @@ impl DevicePreset {
                     (13, Value::Bool(c.snapshot_disable)),
                 ]),
             };
-            for (k, v) in [(0, Value::int(c.controller)), (1, Value::int(c.cc)), (2, c.min.clone()), (3, c.max.clone()), (13, Value::Bool(c.snapshot_disable))] {
+            for (k, v) in [
+                (0, Value::int(c.controller)),
+                (1, Value::int(c.cc)),
+                (2, c.min.clone()),
+                (3, c.max.clone()),
+                (13, Value::Bool(c.snapshot_disable)),
+            ] {
                 if let Some(slot) = inner.get_mut(k) {
                     *slot = v;
                 }
@@ -694,17 +688,25 @@ impl DevicePreset {
     /// The footswitch (1-based) that switches a slot on and off, if any (tone key 3).
     pub fn block_footswitch(&self, wire: i64) -> Option<usize> {
         let table = self.tone.at(&[3, 8])?.as_array()?;
-        table.iter().position(|sw| {
-            sw.as_array().is_some_and(|recs| {
-                recs.iter().any(|r| r.get(11).is_some_and(|i| i.get(0).and_then(Value::as_i64) == Some(1) && i.get(8).and_then(Value::as_i64) == Some(wire)))
+        table
+            .iter()
+            .position(|sw| {
+                sw.as_array().is_some_and(|recs| {
+                    recs.iter().any(|r| {
+                        r.get(11)
+                            .is_some_and(|i| i.get(0).and_then(Value::as_i64) == Some(1) && i.get(8).and_then(Value::as_i64) == Some(wire))
+                    })
+                })
             })
-        }).map(|i| i + 1)
+            .map(|i| i + 1)
     }
 
     /// Put a slot's on/off on a footswitch (1-based), or take it off (None).
     pub fn set_block_footswitch(&mut self, wire: i64, fs: Option<usize>, label: &str, enabled: bool) {
         let Some(Value::Array(table, _)) = self.tone.at_mut(&[3, 8]) else { return };
-        let is_this = |r: &Value| r.get(11).is_some_and(|i| i.get(0).and_then(Value::as_i64) == Some(1) && i.get(8).and_then(Value::as_i64) == Some(wire));
+        let is_this = |r: &Value| {
+            r.get(11).is_some_and(|i| i.get(0).and_then(Value::as_i64) == Some(1) && i.get(8).and_then(Value::as_i64) == Some(wire))
+        };
         for sw in table.iter_mut() {
             if let Value::Array(recs, _) = sw {
                 recs.retain(|r| !is_this(r));
@@ -796,10 +798,18 @@ fn typed_bound(v: Option<&serde_json::Value>, vt: i64, default: f64) -> Value {
         Some(serde_json::Value::Bool(b)) => Value::Bool(*b),
         Some(serde_json::Value::Number(n)) => {
             let x = n.as_f64().unwrap_or(default);
-            if vt == 0 { Value::int(x.round() as i64) } else { Value::F32(x as f32) }
+            if vt == 0 {
+                Value::int(x.round() as i64)
+            } else {
+                Value::F32(x as f32)
+            }
         }
         _ => {
-            if vt == 0 { Value::int(default.round() as i64) } else { Value::F32(default as f32) }
+            if vt == 0 {
+                Value::int(default.round() as i64)
+            } else {
+                Value::F32(default as f32)
+            }
         }
     }
 }
@@ -887,7 +897,11 @@ impl DevicePreset {
                     .and_then(serde_json::Value::as_str)
                     .and_then(|k| doc.pointer(&format!("/data/tone/{dsp}/{k}")))
                     .cloned();
-                let cab = cab_obj.as_ref().and_then(|c| c.get("@model")).and_then(serde_json::Value::as_str).and_then(|m| cat.number_for_hlx(m, false));
+                let cab = cab_obj
+                    .as_ref()
+                    .and_then(|c| c.get("@model"))
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(|m| cat.number_for_hlx(m, false));
                 out.place_model(cat, pk, slot, model, cab);
                 placed.push((d, b.key.clone(), slot, model));
                 for (i, (id, vt, def)) in cat.default_values(model).into_iter().enumerate() {
@@ -936,7 +950,13 @@ impl DevicePreset {
     /// Controllers, per-snapshot knob values and footswitches from a .hlx, laid out
     /// as the pedal keeps them (tone key 4 = controllers, key 3 =
     /// footswitches, each snapshot's field 2 = values of the assigned knobs).
-    fn apply_hlx_controllers(&mut self, doc: &serde_json::Value, cat: &Catalog, placed: &[(i64, String, usize, i64)], notes: &mut Vec<String>) {
+    fn apply_hlx_controllers(
+        &mut self,
+        doc: &serde_json::Value,
+        cat: &Catalog,
+        placed: &[(i64, String, usize, i64)],
+        notes: &mut Vec<String>,
+    ) {
         let fam = crate::snapshots::family(doc);
         // Every knob on a controller.
         let mut list: Vec<Assign> = Vec::new();
@@ -963,15 +983,33 @@ impl DevicePreset {
                         } else if let Some(i) = params.iter().position(|p| &p.0 == param) {
                             (i, params[i].1)
                         } else {
-                            notes.push(format!("{}'s {param} has no place on the pedal; its controller was left out.", cat.model_name(*model)));
+                            notes.push(format!(
+                                "{}'s {param} has no place on the pedal; its controller was left out.",
+                                cat.model_name(*model)
+                            ));
                             continue;
                         };
-                        list.push(Assign { controller, dsp: d, slot: *slot, key: key.clone(), param: param.clone(), index, vt, trails, cfg: cfg.clone() });
+                        list.push(Assign {
+                            controller,
+                            dsp: d,
+                            slot: *slot,
+                            key: key.clone(),
+                            param: param.clone(),
+                            index,
+                            vt,
+                            trails,
+                            cfg: cfg.clone(),
+                        });
                     }
                 }
             }
         }
-        list.sort_by(|a, b| a.controller.cmp(&b.controller).then((1000 * a.dsp + a.slot as i64).cmp(&(1000 * b.dsp + b.slot as i64))).then(a.param.cmp(&b.param)));
+        list.sort_by(|a, b| {
+            a.controller
+                .cmp(&b.controller)
+                .then((1000 * a.dsp + a.slot as i64).cmp(&(1000 * b.dsp + b.slot as i64)))
+                .then(a.param.cmp(&b.param))
+        });
 
         // Tone key 4: per controller number, its knobs.
         if let Some(Value::Array(table, fmt)) = self.tone.get(4).cloned() {
@@ -1015,7 +1053,8 @@ impl DevicePreset {
         let snaps = self.snapshot_names().len();
         if let Some(Value::Array(snap_list, _)) = self.tone.at_mut(&[key::SNAPSHOT_SECTION, key::SNAPSHOTS]) {
             for (i, snap) in snap_list.iter_mut().enumerate().take(snaps) {
-                let mut f: Vec<Value> = (0..64).map(|_| Value::Array(vec![Value::Bool(false), Value::int(64), Value::Nil], crate::msgpack::AUTO)).collect();
+                let mut f: Vec<Value> =
+                    (0..64).map(|_| Value::Array(vec![Value::Bool(false), Value::int(64), Value::Nil], crate::msgpack::AUTO)).collect();
                 for (t, a) in list.iter().enumerate() {
                     let p = t;
                     if p >= 64 {
@@ -1027,7 +1066,11 @@ impl DevicePreset {
                         Some(serde_json::Value::Bool(b)) => Value::Bool(*b),
                         Some(serde_json::Value::Number(n)) => {
                             let x = n.as_f64().unwrap_or(0.0);
-                            if a.vt == 0 { Value::int(x.round() as i64) } else { Value::F32(x as f32) }
+                            if a.vt == 0 {
+                                Value::int(x.round() as i64)
+                            } else {
+                                Value::F32(x as f32)
+                            }
                         }
                         _ => Value::Nil,
                     };
@@ -1073,7 +1116,11 @@ impl DevicePreset {
                     }
                     let enabled = n.get("@fs_enabled").and_then(serde_json::Value::as_bool).unwrap_or(false);
                     let led = n.get("@fs_ledcolor").and_then(serde_json::Value::as_i64).unwrap_or(0);
-                    let led = if n.get("@fs_customcolor").and_then(serde_json::Value::as_i64).unwrap_or(0) != 0 { led } else { led_colour(led, enabled) };
+                    let led = if n.get("@fs_customcolor").and_then(serde_json::Value::as_i64).unwrap_or(0) != 0 {
+                        led
+                    } else {
+                        led_colour(led, enabled)
+                    };
                     let ordinal = 20 * d + *slot as i64;
                     let inner = Value::map(vec![
                         (0, Value::int(1)),
@@ -1091,7 +1138,11 @@ impl DevicePreset {
         // Knobs on a footswitch (controller numbers fs_first.. are the switches).
         for a in &list {
             let n = a.controller - fam.fs_first + 1;
-            if a.controller < fam.fs_first || n < 1 || n as usize > switches || a.cfg.get("@fs_label").and_then(serde_json::Value::as_str).is_none() {
+            if a.controller < fam.fs_first
+                || n < 1
+                || n as usize > switches
+                || a.cfg.get("@fs_label").and_then(serde_json::Value::as_str).is_none()
+            {
                 continue;
             }
             let ordinal = 20 * a.dsp + a.slot as i64;
@@ -1152,20 +1203,13 @@ pub fn values_container(cat: &Catalog, model: i64) -> Value {
 /// all other blocks use outer kind `6`.
 pub fn block_slot(cat: &Catalog, model: i64, cab: Option<i64>, enabled: bool, with_values: bool) -> Value {
     if cab.is_none() && cat.kind_code(model) == 22 {
-        let mut fields = vec![
-            (key::INLINE_MODEL, Value::int(model)),
-            (9, Value::int(22)),
-            (key::ENABLED, Value::Bool(enabled)),
-        ];
+        let mut fields = vec![(key::INLINE_MODEL, Value::int(model)), (9, Value::int(22)), (key::ENABLED, Value::Bool(enabled))];
         if with_values {
             fields.push((key::IO_VALUES, values_container(cat, model)));
         }
         return Value::map(vec![(key::KIND, Value::int(7)), (key::BODY, Value::map(fields))]);
     }
-    Value::map(vec![
-        (key::KIND, Value::int(6)),
-        (key::BODY, block_body(cat, model, cab, enabled, with_values)),
-    ])
+    Value::map(vec![(key::KIND, Value::int(6)), (key::BODY, block_body(cat, model, cab, enabled, with_values))])
 }
 
 /// The body of an effect slot, built the way the pedal expects it:
@@ -1181,11 +1225,7 @@ pub fn block_body(cat: &Catalog, model: i64, cab: Option<i64>, enabled: bool, wi
         (key::MODEL, Value::int(model)),
         (key::PAIRED_MODEL, Value::int(cab.unwrap_or(-1))),
     ]);
-    let mut fields = vec![
-        (key::MODEL_REF, reference),
-        (9, Value::int(kind)),
-        (key::ENABLED, Value::Bool(enabled)),
-    ];
+    let mut fields = vec![(key::MODEL_REF, reference), (9, Value::int(kind)), (key::ENABLED, Value::Bool(enabled))];
     if with_values {
         fields.push((key::VALUES, values_container(cat, model)));
         let cab_values = match cab {
@@ -1198,11 +1238,7 @@ pub fn block_body(cat: &Catalog, model: i64, cab: Option<i64>, enabled: bool, wi
 }
 
 fn read_values(array: &Value) -> Vec<Value> {
-    array
-        .get(key::ARRAY_VALUES)
-        .and_then(Value::as_array)
-        .cloned()
-        .unwrap_or_default()
+    array.get(key::ARRAY_VALUES).and_then(Value::as_array).cloned().unwrap_or_default()
 }
 
 fn read_slot(raw: &Value, path: i64, position: usize) -> SlotView {
@@ -1216,19 +1252,9 @@ fn read_slot(raw: &Value, path: i64, position: usize) -> SlotView {
         _ => body,
     };
     let reference = body.get(key::MODEL_REF);
-    let model = reference
-        .and_then(|r| r.get(key::MODEL))
-        .or_else(|| body.get(key::INLINE_MODEL))
-        .and_then(Value::as_i64);
-    let paired = reference
-        .and_then(|r| r.get(key::PAIRED_MODEL))
-        .and_then(Value::as_i64)
-        .filter(|n| *n >= 0);
-    let values = body
-        .get(key::VALUES)
-        .or_else(|| body.get(key::IO_VALUES))
-        .map(read_values)
-        .unwrap_or_default();
+    let model = reference.and_then(|r| r.get(key::MODEL)).or_else(|| body.get(key::INLINE_MODEL)).and_then(Value::as_i64);
+    let paired = reference.and_then(|r| r.get(key::PAIRED_MODEL)).and_then(Value::as_i64).filter(|n| *n >= 0);
+    let values = body.get(key::VALUES).or_else(|| body.get(key::IO_VALUES)).map(read_values).unwrap_or_default();
     let enabled = match body.get(key::ENABLED) {
         Some(Value::Bool(b)) => Some(*b),
         _ => None,
@@ -1248,7 +1274,13 @@ mod tests {
         for k in [0i64, 1, 2, 3, 4, 5, 6, 7, 10] {
             pairs.push((Value::int(k), Value::map(vec![(1, Value::int(k))])));
         }
-        let doc = DevicePreset { magic: Value::str("l6-helix\0"), table_fmt: 0xc4, table: Vec::new(), tone: Value::Map(pairs, 0x80), rest: Vec::new() };
+        let doc = DevicePreset {
+            magic: Value::str("l6-helix\0"),
+            table_fmt: 0xc4,
+            table: Vec::new(),
+            tone: Value::Map(pairs, 0x80),
+            rest: Vec::new(),
+        };
         let blob = doc.encode();
         let back = DevicePreset::parse(&blob).unwrap();
         assert_eq!(back.encode(), blob);
@@ -1262,7 +1294,13 @@ mod tests {
 
     fn tiny(keys: &[i64]) -> DevicePreset {
         let pairs = keys.iter().map(|k| (Value::int(*k), Value::map(vec![(1, Value::int(*k))]))).collect();
-        DevicePreset { magic: Value::str("l6-helix\0"), table_fmt: 0xc4, table: vec![0; 48], tone: Value::Map(pairs, 0x80), rest: Vec::new() }
+        DevicePreset {
+            magic: Value::str("l6-helix\0"),
+            table_fmt: 0xc4,
+            table: vec![0; 48],
+            tone: Value::Map(pairs, 0x80),
+            rest: Vec::new(),
+        }
     }
 
     /// A section the offset table points at is missing: the stale table must never go to the pedal.
@@ -1286,8 +1324,26 @@ mod tests {
 
     #[test]
     fn wire_block_addresses_second_path_from_twenty() {
-        let s0 = SlotView { global: 3, path: 0, position: 3, kind: Kind::Block, model: None, paired: None, enabled: Some(true), values: Vec::new() };
-        let s1 = SlotView { global: 15, path: 1, position: 1, kind: Kind::Block, model: None, paired: None, enabled: Some(true), values: Vec::new() };
+        let s0 = SlotView {
+            global: 3,
+            path: 0,
+            position: 3,
+            kind: Kind::Block,
+            model: None,
+            paired: None,
+            enabled: Some(true),
+            values: Vec::new(),
+        };
+        let s1 = SlotView {
+            global: 15,
+            path: 1,
+            position: 1,
+            kind: Kind::Block,
+            model: None,
+            paired: None,
+            enabled: Some(true),
+            values: Vec::new(),
+        };
         assert_eq!(s0.wire_block(), 3);
         assert_eq!(s1.wire_block(), 21);
         assert_eq!(Kind::from_wire(7), Kind::Block);
@@ -1343,7 +1399,15 @@ mod editing_tests {
         let mut doc = crate::hlx::blank("t");
         let n = cat.number_of_symbol("HD2_DistScream808Mono").unwrap();
         let (m, st) = cat.hlx_model(n).unwrap();
-        crate::hlx::place_model(&mut doc, "dsp0", 0, 2, None, &crate::hlx::NewModel { model: &m, stereo: st, params: &cat.default_values(n), cab: None }).unwrap();
+        crate::hlx::place_model(
+            &mut doc,
+            "dsp0",
+            0,
+            2,
+            None,
+            &crate::hlx::NewModel { model: &m, stereo: st, params: &cat.default_values(n), cab: None },
+        )
+        .unwrap();
         let b = crate::hlx::blocks(&doc).into_iter().next().unwrap();
         assert_eq!(b.model, "HD2_DistScream808");
         assert_eq!(b.position, 2);
@@ -1360,6 +1424,12 @@ impl DevicePreset {
     /// A tiny made-up document for tests in other modules.
     pub(crate) fn tiny_for_tests() -> DevicePreset {
         let pairs = [0i64, 1, 2].iter().map(|k| (Value::int(*k), Value::map(vec![(1, Value::int(*k))]))).collect();
-        DevicePreset { magic: Value::str("l6-helix\0"), table_fmt: 0xc4, table: Vec::new(), tone: Value::Map(pairs, 0x80), rest: Vec::new() }
+        DevicePreset {
+            magic: Value::str("l6-helix\0"),
+            table_fmt: 0xc4,
+            table: Vec::new(),
+            tone: Value::Map(pairs, 0x80),
+            rest: Vec::new(),
+        }
     }
 }

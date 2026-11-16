@@ -9,7 +9,8 @@ Read this first, then `docs/ARCHITECTURE.md`. The protocol and formats are in
 cargo build                     # debug (optimised enough to use)
 cargo build --release
 cargo test                      # 49 tests; must stay green
-cargo clippy --all-targets -- -D warnings   # must stay clean (CI runs both)
+cargo fmt                       # rustfmt.toml sets the style; CI runs `cargo fmt --check`
+cargo clippy --all-targets -- -D warnings   # must stay clean (CI runs these)
 cargo run -- --help             # the command-line tools
 cargo run -- --screenshot shot.png   # render the window to a PNG and exit
 ```
@@ -54,7 +55,7 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 
 ## How to verify a change
 
-- `cargo test` and `cargo clippy --all-targets -- -D warnings` (CI runs both on pull requests).
+- `cargo fmt`, `cargo test` and `cargo clippy --all-targets -- -D warnings` (CI runs all three on pull requests).
 - A change to `session.rs`: add a case to `fakepedal.rs` (a fake pedal behind `Wire`).
 - A screenshot (`--screenshot`) of the page you changed; use the `TONESTRAND_*` variables in
   `docs/BUILDING.md` to open a given page or file.

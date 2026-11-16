@@ -5,12 +5,12 @@
 use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 
 use crate::catalog::{self, Catalog, Param};
+use crate::chain;
 use crate::device::Cmd;
 use crate::devpreset::{DevicePreset, Kind, SlotView};
-use crate::chain;
 use crate::hlx;
-use crate::snapshots;
 use crate::msgpack::Value;
+use crate::snapshots;
 use crate::theme::{self, *};
 
 mod device;
@@ -19,8 +19,8 @@ mod hlx_file;
 mod studio;
 
 pub use device::{device_controllers, device_editor};
-pub use doc::PresetDoc;
 use doc::slots_dsp;
+pub use doc::PresetDoc;
 pub use hlx_file::hlx_editor;
 pub use studio::{studio_strip_device, studio_strip_hlx};
 
@@ -45,10 +45,7 @@ fn io_params(input: bool) -> Vec<(&'static str, Param)> {
             ("Decay", p("decay", "Decay", 1, "time_ms", 0.001, 1.0, 0.1)),
         ]
     } else {
-        vec![
-            ("Level", p("gain", "Level", 1, "volume", -120.0, 20.0, 0.0)),
-            ("Pan", p("pan", "Pan", 1, "pan", 0.0, 1.0, 0.5)),
-        ]
+        vec![("Level", p("gain", "Level", 1, "volume", -120.0, 20.0, 0.0)), ("Pan", p("pan", "Pan", 1, "pan", 0.0, 1.0, 0.5))]
     }
 }
 
@@ -86,7 +83,8 @@ fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bo
     ui.horizontal_wrapped(|ui| {
         ui.spacing_mut().item_spacing = Vec2::new(6.0, 12.0);
         for (vi, v) in s.values.iter().enumerate() {
-            let (name, meta) = names.get(vi).map(|(n, m)| (n.to_string(), Some(m.clone()))).unwrap_or((format!("Setting {}", vi + 1), None));
+            let (name, meta) =
+                names.get(vi).map(|(n, m)| (n.to_string(), Some(m.clone()))).unwrap_or((format!("Setting {}", vi + 1), None));
             let (nv, commit) = param_cell(ui, &name, meta.as_ref(), v);
             if let Some(nv) = &nv {
                 preset.set_value(s.path, s.position, vi, nv.clone());
@@ -300,14 +298,19 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                     egui::ScrollArea::vertical().id_salt("pick-models").max_height(440.0).auto_shrink([false, false]).show(ui, |ui| {
                         for g in groups.iter().filter(|g| !search.is_empty() || groups.len() == 1 || g.sub == st.sub) {
                             let loops = snapshots::family_of_device(crate::nam::unit()).fx_loops;
-                            for m in g.models.iter().filter(|m| {
-                                // Only the sends and returns this unit has jacks for.
-                                !(g.category == "Send/Return" && loops < 4 && (m.name.contains('3') || m.name.contains('4')))
-                            }).filter(|m| {
-                                search.is_empty()
-                                    || m.name.to_lowercase().contains(&search)
-                                    || crate::realnames::real(&m.name).is_some_and(|r| r.to_lowercase().contains(&search))
-                            }) {
+                            for m in g
+                                .models
+                                .iter()
+                                .filter(|m| {
+                                    // Only the sends and returns this unit has jacks for.
+                                    !(g.category == "Send/Return" && loops < 4 && (m.name.contains('3') || m.name.contains('4')))
+                                })
+                                .filter(|m| {
+                                    search.is_empty()
+                                        || m.name.to_lowercase().contains(&search)
+                                        || crate::realnames::real(&m.name).is_some_and(|r| r.to_lowercase().contains(&search))
+                                })
+                            {
                                 let shown = crate::realnames::show(&m.name);
                                 let with_cab = g.category.contains("Amp") && g.category.contains("Cab");
                                 // A dual cab is two cabs in one block; it starts with the same cab twice,
@@ -332,14 +335,22 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                 let sw = egui::Rect::from_min_size(rect.left_top() + Vec2::new(5.0, 5.0), Vec2::splat(24.0));
                                 let sym_now = cat.symbol(m.number).unwrap_or("");
                                 // Amps listed under "Amp+Cab" get the amp + cab icon.
-                                let kind = if g.category.contains("Amp") && g.category.contains("Cab") { "Amp+Cab" } else { g.category.as_str() };
+                                let kind =
+                                    if g.category.contains("Amp") && g.category.contains("Cab") { "Amp+Cab" } else { g.category.as_str() };
                                 let tint = if fits { Color32::WHITE } else { Color32::from_white_alpha(90) };
                                 if !crate::icons::paint_model(p, ui.ctx(), sw, kind, sym_now, &m.name, tint) {
                                     p.rect_filled(sw, CornerRadius::same(5), if fits { g.colour } else { g.colour.linear_multiply(0.35) });
                                 }
                                 let tc = if fits { TEXT } else { MUTED };
-                                let title = if search.is_empty() || g.sub.is_empty() { shown.clone() } else { format!("{}  ·  {}", shown, g.sub) };
-                                p.text(rect.left_center() + Vec2::new(38.0, 0.0), egui::Align2::LEFT_CENTER, title, egui::FontId::proportional(14.0), tc);
+                                let title =
+                                    if search.is_empty() || g.sub.is_empty() { shown.clone() } else { format!("{}  ·  {}", shown, g.sub) };
+                                p.text(
+                                    rect.left_center() + Vec2::new(38.0, 0.0),
+                                    egui::Align2::LEFT_CENTER,
+                                    title,
+                                    egui::FontId::proportional(14.0),
+                                    tc,
+                                );
                                 if cost > 0.0 {
                                     p.text(
                                         rect.right_center() - Vec2::new(10.0, 0.0),
@@ -488,7 +499,9 @@ fn capture_picker(ui: &mut egui::Ui, cur: i64, nam: bool) -> Option<i64> {
             let unknown: Vec<&(i64, String)> = names.iter().filter(|(s, _)| crate::nam::slot_is_capture(*s).is_none()).collect();
             let irs: Vec<&(i64, String)> = names.iter().filter(|(s, _)| crate::nam::slot_is_capture(*s) == Some(false)).collect();
             if names.is_empty() {
-                ui.label(RichText::new("Connect the pedal to list its IR slots.\nOr type the slot number under the list.").small().color(MUTED));
+                ui.label(
+                    RichText::new("Connect the pedal to list its IR slots.\nOr type the slot number under the list.").small().color(MUTED),
+                );
             }
             let mut section = |ui: &mut egui::Ui, title: &str, list: &[&(i64, String)], col: Color32| {
                 if list.is_empty() {
@@ -542,7 +555,11 @@ fn capture_picker(ui: &mut egui::Ui, cur: i64, nam: bool) -> Option<i64> {
 /// Returns the new value and whether it should be sent now (released or clicked).
 fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<Value>, bool) {
     // The NAM block's capture and an IR block's IR Select: a pedal IR slot, picked by name.
-    if let Some(nam) = meta.and_then(|m| match m.display.as_str() { "nam_slot" => Some(true), "ir_select" => Some(false), _ => None }) {
+    if let Some(nam) = meta.and_then(|m| match m.display.as_str() {
+        "nam_slot" => Some(true),
+        "ir_select" => Some(false),
+        _ => None,
+    }) {
         let cur = v.as_f64().unwrap_or(0.0).trunc() as i64;
         let mut out = (None, false);
         ui.add_space(10.0);
@@ -596,27 +613,20 @@ fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<V
                 let shown = &choices[if bb { 1 } else { 0 }];
                 let mut changed = false;
                 ui.add_space(10.0);
-                egui::ComboBox::from_id_salt("bool-choice")
-                    .selected_text(shown.as_str())
-                    .width(94.0)
-                    .show_ui(ui, |ui| {
-                        for (idx, lbl) in choices.iter().take(2).enumerate() {
-                            let target = idx == 1;
-                            if ui.selectable_label(bb == target, lbl).clicked() && bb != target {
-                                bb = target;
-                                changed = true;
-                            }
+                egui::ComboBox::from_id_salt("bool-choice").selected_text(shown.as_str()).width(94.0).show_ui(ui, |ui| {
+                    for (idx, lbl) in choices.iter().take(2).enumerate() {
+                        let target = idx == 1;
+                        if ui.selectable_label(bb == target, lbl).clicked() && bb != target {
+                            bb = target;
+                            changed = true;
                         }
-                    });
+                    }
+                });
                 if changed {
                     return (Some(Value::Bool(bb)), true);
                 }
             } else {
-                let (off_lbl, on_lbl) = if choices.len() >= 2 {
-                    (choices[0].as_str(), choices[1].as_str())
-                } else {
-                    ("Off", "On")
-                };
+                let (off_lbl, on_lbl) = if choices.len() >= 2 { (choices[0].as_str(), choices[1].as_str()) } else { ("Off", "On") };
                 let label = if bb { format!("  {on_lbl}  ") } else { format!("  {off_lbl}  ") };
                 ui.add_space(10.0);
                 let r = ui.toggle_value(&mut bb, label);
@@ -845,35 +855,35 @@ fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: b
     let per_row = ((ui.available_width() + 6.0) / 116.0).floor().max(1.0) as usize;
     let all: Vec<(usize, &Value)> = values.iter().enumerate().collect();
     for row in all.chunks(per_row) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing = Vec2::new(6.0, 12.0);
-        for &(vi, v) in row.iter() {
-            let (name, meta) = match (model, cat) {
-                (Some(m), Some(c)) => c.param(m, vi),
-                _ => (format!("Setting {}", vi + 1), None),
-            };
-            let (nv, commit) = param_cell(ui, &name, meta.as_ref(), v);
-            if let Some(nv) = &nv {
-                if cab {
-                    preset.set_paired_value(s.path, s.position, vi, nv.clone());
-                } else {
-                    preset.set_value(s.path, s.position, vi, nv.clone());
-                }
-                *dirty = true;
-            }
-            if live && commit {
-                let cur = if cab {
-                    preset.paired_values(s.path, s.position).get(vi).cloned()
-                } else {
-                    preset.slots().get(sel).and_then(|x| x.values.get(vi).cloned())
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = Vec2::new(6.0, 12.0);
+            for &(vi, v) in row.iter() {
+                let (name, meta) = match (model, cat) {
+                    (Some(m), Some(c)) => c.param(m, vi),
+                    _ => (format!("Setting {}", vi + 1), None),
                 };
-                if let Some(value) = cur {
-                    // Key 26 picks the block's own knobs (0) or its cab's (1).
-                    cmds.push(Cmd::SetParam { block: s.wire_block(), path: cab as i64, index: vi as i64, value });
+                let (nv, commit) = param_cell(ui, &name, meta.as_ref(), v);
+                if let Some(nv) = &nv {
+                    if cab {
+                        preset.set_paired_value(s.path, s.position, vi, nv.clone());
+                    } else {
+                        preset.set_value(s.path, s.position, vi, nv.clone());
+                    }
+                    *dirty = true;
+                }
+                if live && commit {
+                    let cur = if cab {
+                        preset.paired_values(s.path, s.position).get(vi).cloned()
+                    } else {
+                        preset.slots().get(sel).and_then(|x| x.values.get(vi).cloned())
+                    };
+                    if let Some(value) = cur {
+                        // Key 26 picks the block's own knobs (0) or its cab's (1).
+                        cmds.push(Cmd::SetParam { block: s.wire_block(), path: cab as i64, index: vi as i64, value });
+                    }
                 }
             }
-        }
-    });
+        });
     }
 }
 
@@ -899,7 +909,6 @@ fn bound_cell(ui: &mut egui::Ui, v: &Value, meta: Option<&crate::catalog::Param>
     }
 }
 
-
 /// Names of input sources and output destinations for a pedal family.
 fn route_names(fam: snapshots::Family, input: bool) -> Vec<(i64, &'static str)> {
     let stomp = fam.name.starts_with("HX Stomp");
@@ -907,8 +916,23 @@ fn route_names(fam: snapshots::Family, input: bool) -> Vec<(i64, &'static str)> 
         vec![(0, "None"), (1, "Main L/R"), (4, "Return L/R"), (6, "USB 5/6")]
     } else if input {
         [
-            "None", "Multi (Guitar, Aux, Variax)", "Guitar", "Aux", "Variax", "Variax Magnetics", "Mic", "Return 1", "Return 2", "Return 3",
-            "Return 4", "Return 1/2", "Return 3/4", "S/PDIF", "USB 3/4", "USB 5/6", "USB 7/8",
+            "None",
+            "Multi (Guitar, Aux, Variax)",
+            "Guitar",
+            "Aux",
+            "Variax",
+            "Variax Magnetics",
+            "Mic",
+            "Return 1",
+            "Return 2",
+            "Return 3",
+            "Return 4",
+            "Return 1/2",
+            "Return 3/4",
+            "S/PDIF",
+            "USB 3/4",
+            "USB 5/6",
+            "USB 7/8",
         ]
         .iter()
         .enumerate()
@@ -918,8 +942,19 @@ fn route_names(fam: snapshots::Family, input: bool) -> Vec<(i64, &'static str)> 
         vec![(0, "None"), (1, "Multi (Main L/R, Send, USB)")]
     } else {
         [
-            "None", "Multi (1/4\", XLR, Digital, USB 1/2)", "Path 2A", "Path 2B", "Path 2A+B", "1/4\"", "XLR", "Send 1/2", "Send 3/4", "Digital",
-            "USB 1/2", "USB 3/4", "USB 5/6",
+            "None",
+            "Multi (1/4\", XLR, Digital, USB 1/2)",
+            "Path 2A",
+            "Path 2B",
+            "Path 2A+B",
+            "1/4\"",
+            "XLR",
+            "Send 1/2",
+            "Send 3/4",
+            "Digital",
+            "USB 1/2",
+            "USB 3/4",
+            "USB 5/6",
         ]
         .iter()
         .enumerate()
@@ -927,7 +962,6 @@ fn route_names(fam: snapshots::Family, input: bool) -> Vec<(i64, &'static str)> 
         .collect()
     }
 }
-
 
 /// What is being dragged in a pedal preset's chain: a slot.
 #[derive(Clone, Copy)]

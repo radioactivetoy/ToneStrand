@@ -5,8 +5,18 @@ use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnam
 
 /// The command-line tools (everything else opens the window).
 pub const CLI_FLAGS: [&str; 12] = [
-    "--probe", "--nam2ir", "--read-backup", "--fmt-check", "--find-blocks", "--attach-check",
-    "--dsp-report", "--ctl-check", "--dump-doc", "--hlx-check", "--list-models", "--find-boxes",
+    "--probe",
+    "--nam2ir",
+    "--read-backup",
+    "--fmt-check",
+    "--find-blocks",
+    "--attach-check",
+    "--dsp-report",
+    "--ctl-check",
+    "--dump-doc",
+    "--hlx-check",
+    "--list-models",
+    "--find-boxes",
 ];
 
 /// Release builds are windowed programs on Windows, with no console: borrow the console of
@@ -99,12 +109,21 @@ pub fn run(args: &[String]) -> bool {
         // Read-only: list what a .hxb or .hls holds.
         for f in &args[i + 1..] {
             let Some(b) = need(std::fs::read(f), f) else { continue };
-            let r = if f.to_ascii_lowercase().ends_with(".hls") { backup::read_hls(&b).map(|s| (vec![s], 0)) } else { backup::read_hxb(&b).map(|c| (c.setlists, c.irs.len())) };
+            let r = if f.to_ascii_lowercase().ends_with(".hls") {
+                backup::read_hls(&b).map(|s| (vec![s], 0))
+            } else {
+                backup::read_hxb(&b).map(|c| (c.setlists, c.irs.len()))
+            };
             match r {
                 Ok((sets, irs)) => {
                     println!("{f}: {} setlists, {irs} IRs", sets.len());
                     for s in &sets {
-                        let first: Vec<String> = s.presets.iter().take(4).map(|p| format!("{} {} ({} blocks)", proto::slot_label(p.slot), p.name, hlx::blocks(&p.hlx).len())).collect();
+                        let first: Vec<String> = s
+                            .presets
+                            .iter()
+                            .take(4)
+                            .map(|p| format!("{} {} ({} blocks)", proto::slot_label(p.slot), p.name, hlx::blocks(&p.hlx).len()))
+                            .collect();
                         println!("  {}: {} presets, {} skipped; {}", s.name, s.presets.len(), s.skipped, first.join(", "));
                     }
                 }
@@ -144,7 +163,9 @@ pub fn run(args: &[String]) -> bool {
             for s in &c.setlists {
                 for p in &s.presets {
                     for dsp in hlx::dsps(&p.hlx) {
-                        let Some(sec) = p.hlx.pointer(&format!("/data/tone/{dsp}")).and_then(serde_json::Value::as_object) else { continue };
+                        let Some(sec) = p.hlx.pointer(&format!("/data/tone/{dsp}")).and_then(serde_json::Value::as_object) else {
+                            continue;
+                        };
                         for (k, v) in sec {
                             let m = v.get("@model").and_then(serde_json::Value::as_str).unwrap_or("");
                             if m.contains(&needle) && shown < 6 {
@@ -195,7 +216,12 @@ pub fn run(args: &[String]) -> bool {
                     }
                 }
                 if !parts.is_empty() {
-                    println!("{:.2}\t{}\tpath {path}\t{}", total, std::path::Path::new(f).file_name().and_then(|x| x.to_str()).unwrap_or("?"), parts.join(" "));
+                    println!(
+                        "{:.2}\t{}\tpath {path}\t{}",
+                        total,
+                        std::path::Path::new(f).file_name().and_then(|x| x.to_str()).unwrap_or("?"),
+                        parts.join(" ")
+                    );
                 }
             }
         }
@@ -237,7 +263,9 @@ pub fn run(args: &[String]) -> bool {
                 V::Str(s, _) => format!("{:?}", s.trim_end_matches('\0')),
                 V::Bin(b, _) => format!("bin({})", b.len()),
                 V::Array(a, _) => format!("[{}]", a.iter().map(show).collect::<Vec<_>>().join(", ")),
-                V::Map(m, _) => format!("{{{}}}", m.iter().map(|(k, v)| format!("{}: {}", show(k), show(v))).collect::<Vec<_>>().join(", ")),
+                V::Map(m, _) => {
+                    format!("{{{}}}", m.iter().map(|(k, v)| format!("{}: {}", show(k), show(v))).collect::<Vec<_>>().join(", "))
+                }
                 #[allow(unreachable_patterns)]
                 _ => "ext".into(),
             }
@@ -272,18 +300,38 @@ pub fn run(args: &[String]) -> bool {
                 println!("converted: {} bytes, parses back identical: {again:?}", bytes.len());
                 for s in d.slots() {
                     let name = s.model.map(|m| cat.model_name(m)).unwrap_or_default();
-                    let vals: Vec<String> = s.values.iter().take(4).enumerate().map(|(k, v)| {
-                        let (n, meta) = s.model.map(|m| cat.param(m, k)).unwrap_or_default();
-                        format!("{n}={}", catalog::format_value(meta.as_ref(), v.as_f64().unwrap_or(0.0)))
-                    }).collect();
+                    let vals: Vec<String> = s
+                        .values
+                        .iter()
+                        .take(4)
+                        .enumerate()
+                        .map(|(k, v)| {
+                            let (n, meta) = s.model.map(|m| cat.param(m, k)).unwrap_or_default();
+                            format!("{n}={}", catalog::format_value(meta.as_ref(), v.as_f64().unwrap_or(0.0)))
+                        })
+                        .collect();
                     let attach = d.attach(s.path, s.position).map(|a| format!(" attach={a}")).unwrap_or_default();
                     let snaps: String = (0..d.snapshot_names().len())
-                        .map(|k| match d.snapshot_enabled(k, s.wire_block().max(0) as usize) { Some(true) => '1', Some(false) => '0', None => '-' })
+                        .map(|k| match d.snapshot_enabled(k, s.wire_block().max(0) as usize) {
+                            Some(true) => '1',
+                            Some(false) => '0',
+                            None => '-',
+                        })
                         .collect();
-                    println!("  #{} {:?} {name} on={:?} snaps={snaps} paired={:?}{attach} {}", s.global, s.kind, s.enabled, s.paired.map(|p| cat.model_name(p)), vals.join(", "));
+                    println!(
+                        "  #{} {:?} {name} on={:?} snaps={snaps} paired={:?}{attach} {}",
+                        s.global,
+                        s.kind,
+                        s.enabled,
+                        s.paired.map(|p| cat.model_name(p)),
+                        vals.join(", ")
+                    );
                 }
                 for c in d.controllers() {
-                    println!("  controller {} kind {} slot {} knob {} cab {} min {:?} max {:?} cc {} snaps {:?}", c.controller, c.kind, c.wire, c.index, c.cab, c.min, c.max, c.cc, c.snaps);
+                    println!(
+                        "  controller {} kind {} slot {} knob {} cab {} min {:?} max {:?} cc {} snaps {:?}",
+                        c.controller, c.kind, c.wire, c.index, c.cab, c.min, c.max, c.cc, c.snaps
+                    );
                 }
                 for w in 0..20 {
                     if let Some(fs) = d.block_footswitch(w) {
@@ -331,7 +379,12 @@ fn probe(host: Option<String>) {
     let w: Box<dyn wire::Wire> = if let Some(host) = host {
         // The pairing ToneStrand saved for that box (pair it in the app first).
         let settings = boxes::Settings::load();
-        let Some(token) = settings.tokens.get(&host).cloned().or_else(|| settings.saved.iter().find(|b| b.host == host).and_then(|b| settings.token_for(b))) else {
+        let Some(token) = settings
+            .tokens
+            .get(&host)
+            .cloned()
+            .or_else(|| settings.saved.iter().find(|b| b.host == host).and_then(|b| settings.token_for(b)))
+        else {
             return println!("no saved pairing for {host}");
         };
         match wire::BoxWire::open(&host, &token, "box") {
@@ -382,12 +435,33 @@ fn probe(host: Option<String>) {
                 println!("current preset document: {} bytes, round trip identical: {same}, slots {}", b.len(), d.slots().len());
                 if let Some(cat) = catalog::find_dir(None).and_then(|p| catalog::Catalog::load(&p).ok()) {
                     println!("catalog: {} models, {} picker groups", cat.sym.len(), cat.groups.len());
-                    let total: f64 = d.slots().iter().map(|s| s.model.map(|m| cat.dsp_cost(m)).unwrap_or(0.0) + s.paired.map(|m| cat.dsp_cost(m)).unwrap_or(0.0)).sum();
+                    let total: f64 = d
+                        .slots()
+                        .iter()
+                        .map(|s| s.model.map(|m| cat.dsp_cost(m)).unwrap_or(0.0) + s.paired.map(|m| cat.dsp_cost(m)).unwrap_or(0.0))
+                        .sum();
                     println!("dsp load total {total:.2}");
                     for s in d.slots() {
                         let name = s.model.map(|m| cat.model_name(m)).unwrap_or_default();
-                        let params: Vec<String> = s.values.iter().enumerate().take(4).map(|(i, v)| { let (n, meta) = s.model.map(|m| cat.param(m, i)).unwrap_or_default(); format!("{n}={}", catalog::format_value(meta.as_ref(), v.as_f64().unwrap_or(0.0))) }).collect();
-                        println!("  #{} path {} {:?} {name} on={:?} paired={:?} {}", s.global, s.path, s.kind, s.enabled, s.paired.map(|p| cat.model_name(p)), params.join(", "));
+                        let params: Vec<String> = s
+                            .values
+                            .iter()
+                            .enumerate()
+                            .take(4)
+                            .map(|(i, v)| {
+                                let (n, meta) = s.model.map(|m| cat.param(m, i)).unwrap_or_default();
+                                format!("{n}={}", catalog::format_value(meta.as_ref(), v.as_f64().unwrap_or(0.0)))
+                            })
+                            .collect();
+                        println!(
+                            "  #{} path {} {:?} {name} on={:?} paired={:?} {}",
+                            s.global,
+                            s.path,
+                            s.kind,
+                            s.enabled,
+                            s.paired.map(|p| cat.model_name(p)),
+                            params.join(", ")
+                        );
                     }
                 }
             }

@@ -94,7 +94,8 @@ impl FakePedal {
         let reader = self.streams.entry(ch).or_default();
         reader.push(body);
         for msg in reader.take_messages() {
-            let (Some(txn), Some(opcode)) = (msg.get(key::TXN).and_then(Value::as_i64), msg.get(key::OPCODE).and_then(Value::as_i64)) else {
+            let (Some(txn), Some(opcode)) = (msg.get(key::TXN).and_then(Value::as_i64), msg.get(key::OPCODE).and_then(Value::as_i64))
+            else {
                 // Opening a service: just confirm.
                 let ack = self.frame(ch, host, MSG_ACK, &[]);
                 self.shared.lock().unwrap().inbox.push_back(ack);

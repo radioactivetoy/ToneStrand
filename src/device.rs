@@ -20,48 +20,156 @@ pub enum Cmd {
     Presets(i64),
     Select(i64, i64),
     ReadCurrent,
-    FetchSlot { setlist: i64, index: i64, purpose: Purpose },
+    FetchSlot {
+        setlist: i64,
+        index: i64,
+        purpose: Purpose,
+    },
     /// `backup`: the folder the slot is kept in before it is written over.
-    WriteSlot { setlist: i64, index: i64, name: String, doc: Vec<u8>, backup: PathBuf },
-    Rename { setlist: i64, index: i64, name: String },
-    Clear { setlist: i64, index: i64 },
-    SaveCurrent { setlist: i64, index: i64, name: String },
-    SetParam { block: i64, path: i64, index: i64, value: Value },
-    SetEnabled { block: i64, enabled: bool },
-    SetModel { block: i64, model: i64, paired: Option<i64> },
-    ReplaceBlock { block: i64, slot: Value },
-    ClearBlock { block: i64 },
-    AddBlock { block: i64, body: Value },
-    MoveBlock { from: i64, to: i64 },
-    MoveSplit { block: i64 },
-    MoveJoin { block: i64 },
-    SetRoute { block: i64, input: bool, value: i64 },
+    WriteSlot {
+        setlist: i64,
+        index: i64,
+        name: String,
+        doc: Vec<u8>,
+        backup: PathBuf,
+    },
+    Rename {
+        setlist: i64,
+        index: i64,
+        name: String,
+    },
+    Clear {
+        setlist: i64,
+        index: i64,
+    },
+    SaveCurrent {
+        setlist: i64,
+        index: i64,
+        name: String,
+    },
+    SetParam {
+        block: i64,
+        path: i64,
+        index: i64,
+        value: Value,
+    },
+    SetEnabled {
+        block: i64,
+        enabled: bool,
+    },
+    SetModel {
+        block: i64,
+        model: i64,
+        paired: Option<i64>,
+    },
+    ReplaceBlock {
+        block: i64,
+        slot: Value,
+    },
+    ClearBlock {
+        block: i64,
+    },
+    AddBlock {
+        block: i64,
+        body: Value,
+    },
+    MoveBlock {
+        from: i64,
+        to: i64,
+    },
+    MoveSplit {
+        block: i64,
+    },
+    MoveJoin {
+        block: i64,
+    },
+    SetRoute {
+        block: i64,
+        input: bool,
+        value: i64,
+    },
     Snapshot(i64),
-    RenameSnapshot { index: i64, name: String },
-    Backup { setlist: i64, count: usize, folder: std::path::PathBuf, names: Vec<String> },
+    RenameSnapshot {
+        index: i64,
+        name: String,
+    },
+    Backup {
+        setlist: i64,
+        count: usize,
+        folder: std::path::PathBuf,
+        names: Vec<String>,
+    },
     /// Save every setlist's presets and all User IRs into a new folder inside `folder`.
-    FullBackup { folder: std::path::PathBuf },
+    FullBackup {
+        folder: std::path::PathBuf,
+    },
     /// Read the names of the pedal's User IRs.
     ListIrs,
     /// Write IRs into slots: (slot from 0, name, 8,192 bytes of audio).
     /// `backup`: the folder replaced IRs are kept in first.
-    ImportIrs { items: Vec<(i64, String, Vec<u8>)>, backup: PathBuf },
+    ImportIrs {
+        items: Vec<(i64, String, Vec<u8>)>,
+        backup: PathBuf,
+    },
     /// Save IRs from slots as .wav files in a folder: (slot, name).
-    ExportIrs { slots: Vec<(i64, String)>, folder: std::path::PathBuf },
-    RenameIr { slot: i64, name: String },
-    DeleteIrs { slots: Vec<i64>, backup: PathBuf },
+    ExportIrs {
+        slots: Vec<(i64, String)>,
+        folder: std::path::PathBuf,
+    },
+    RenameIr {
+        slot: i64,
+        name: String,
+    },
+    DeleteIrs {
+        slots: Vec<i64>,
+        backup: PathBuf,
+    },
     /// Look at slots' audio to tell IRs from NAM captures: (slot, name).
     IrKinds(Vec<(i64, String)>),
     /// Convert a .hlx preset to the pedal's format (using the loaded preset as the
     /// template) and write it into a slot, then read it back to check.
-    WriteHlx { setlist: i64, index: i64, name: String, json: serde_json::Value, cat: std::sync::Arc<crate::catalog::Catalog>, backup: PathBuf },
+    WriteHlx {
+        setlist: i64,
+        index: i64,
+        name: String,
+        json: serde_json::Value,
+        cat: std::sync::Arc<crate::catalog::Catalog>,
+        backup: PathBuf,
+    },
     /// Live controller and footswitch changes on the loaded preset.
-    AssignController { block: i64, cab: bool, index: i64, controller: i64, cc: i64 },
-    UnassignController { block: i64, cab: bool, index: i64 },
-    ControllerBound { max: bool, block: i64, cab: bool, index: i64, value: Value },
-    ControllerCc { block: i64, cab: bool, index: i64, cc: i64 },
-    AssignFootswitch { block: i64, fs: i64 },
-    UnassignFootswitch { block: i64, fs: i64 },
+    AssignController {
+        block: i64,
+        cab: bool,
+        index: i64,
+        controller: i64,
+        cc: i64,
+    },
+    UnassignController {
+        block: i64,
+        cab: bool,
+        index: i64,
+    },
+    ControllerBound {
+        max: bool,
+        block: i64,
+        cab: bool,
+        index: i64,
+        value: Value,
+    },
+    ControllerCc {
+        block: i64,
+        cab: bool,
+        index: i64,
+        cc: i64,
+    },
+    AssignFootswitch {
+        block: i64,
+        fs: i64,
+    },
+    UnassignFootswitch {
+        block: i64,
+        fs: i64,
+    },
     /// The hidden Tests page's careful run of every operation.
     SelfTest(crate::selftest::Plan),
     Disconnect,
@@ -83,15 +191,27 @@ pub enum Event {
     Setlists(Vec<String>),
     Presets(i64, Vec<String>),
     Current(i64, i64, String),
-    Document { setlist: i64, index: i64, live: bool, purpose: Purpose, blob: Option<Vec<u8>> },
+    Document {
+        setlist: i64,
+        index: i64,
+        live: bool,
+        purpose: Purpose,
+        blob: Option<Vec<u8>>,
+    },
     Done(String),
     /// The pedal's User IRs that hold something: (slot from 0, name).
     Irs(Vec<(i64, String)>),
     /// Which slots hold NAM captures: (slot, name, is a NAM capture).
     IrKinds(Vec<(i64, String, bool)>),
     /// A self-test step: passed (Some(true)), failed (Some(false)) or a note (None).
-    TestStep { name: String, ok: Option<bool>, detail: String },
-    TestDone { failures: usize },
+    TestStep {
+        name: String,
+        ok: Option<bool>,
+        detail: String,
+    },
+    TestDone {
+        failures: usize,
+    },
 }
 
 pub struct Link {
@@ -130,9 +250,7 @@ pub fn connect(target: Target, repaint: impl Fn() + Send + 'static) -> Link {
         send(Event::Busy("Connecting...".into()));
         let wire: Result<Box<dyn Wire>, String> = match target {
             Target::Usb { pid } => UsbWire::open(pid).map(|w| Box::new(w) as Box<dyn Wire>),
-            Target::Box { host, token, label } => {
-                BoxWire::open(&host, &token, &label).map(|w| Box::new(w) as Box<dyn Wire>)
-            }
+            Target::Box { host, token, label } => BoxWire::open(&host, &token, &label).map(|w| Box::new(w) as Box<dyn Wire>),
         };
         let wire = match wire {
             Ok(w) => w,
@@ -285,7 +403,9 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     if same {
                         send(Event::Done(format!("Wrote \"{name}\" to the pedal (read back the same)")));
                     } else {
-                        send(Event::Error(format!("Wrote \"{name}\", but it reads back different from what was sent: check it on the pedal")));
+                        send(Event::Error(format!(
+                            "Wrote \"{name}\", but it reads back different from what was sent: check it on the pedal"
+                        )));
                     }
                 }
                 Cmd::Rename { setlist: sl, index, name } => {
@@ -405,7 +525,9 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     let presets_saved = run.saved;
                     let mut irs_saved = 0;
                     if !stopped {
-                        let in_use = s.list_irs().map_err(|e| format!("Backed up {presets_saved} presets to {}, but can't read the IR list ({e})", root.display()))?;
+                        let in_use = s.list_irs().map_err(|e| {
+                            format!("Backed up {presets_saved} presets to {}, but can't read the IR list ({e})", root.display())
+                        })?;
                         let dir = root.join("IRs");
                         for (i, (slot, name)) in in_use.iter().enumerate() {
                             send(Event::Busy(format!("Backing up IR {}/{}...", i + 1, in_use.len())));
@@ -425,7 +547,11 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     }
                     let summary = format!("{presets_saved} presets and {irs_saved} IRs to {}", root.display());
                     if stopped {
-                        return Err(format!("Backed up {summary}, then stopped: {} in a row failed: {}", run.in_a_row, run.failed.join(", ")));
+                        return Err(format!(
+                            "Backed up {summary}, then stopped: {} in a row failed: {}",
+                            run.in_a_row,
+                            run.failed.join(", ")
+                        ));
                     }
                     if run.failed.is_empty() {
                         send(Event::Done(format!("Backed up {summary}")));
@@ -463,7 +589,8 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     send(Event::Busy("Converting the .hlx preset...".into()));
                     let template = s.read_current().map_err(|e| e.to_string())?;
                     let template = crate::devpreset::DevicePreset::parse(&template)?;
-                    let (doc, notes) = crate::devpreset::DevicePreset::from_hlx(&template, &json, &cat).map_err(|e| format!("Can't convert it: {e}"))?;
+                    let (doc, notes) =
+                        crate::devpreset::DevicePreset::from_hlx(&template, &json, &cat).map_err(|e| format!("Can't convert it: {e}"))?;
                     let bytes = doc.encode_checked()?;
                     send(Event::Busy("Backing up the slot...".into()));
                     if let Some(note) = backup_slot(s, &backup, sl, index)? {
@@ -481,7 +608,9 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     if same {
                         send(Event::Done(format!("Wrote \"{name}\" to the pedal (converted from .hlx; read back the same)")));
                     } else {
-                        send(Event::Error(format!("Wrote \"{name}\", but it reads back different from what was sent: check it on the pedal")));
+                        send(Event::Error(format!(
+                            "Wrote \"{name}\", but it reads back different from what was sent: check it on the pedal"
+                        )));
                     }
                 }
                 Cmd::SelfTest(plan) => {
@@ -621,7 +750,16 @@ impl BackupRun {
 /// that fails; true when it stopped because the pedal seems gone. `what` starts the
 /// progress text ("" or "Setlist 2: ").
 #[allow(clippy::too_many_arguments)]
-fn backup_setlist(s: &mut Session, send: &dyn Fn(Event), sl: i64, count: usize, names: &[String], folder: &Path, what: &str, run: &mut BackupRun) -> bool {
+fn backup_setlist(
+    s: &mut Session,
+    send: &dyn Fn(Event),
+    sl: i64,
+    count: usize,
+    names: &[String],
+    folder: &Path,
+    what: &str,
+    run: &mut BackupRun,
+) -> bool {
     for i in 0..count {
         send(Event::Busy(format!("Backing up {what}{}/{count}...", i + 1)));
         let label = crate::proto::slot_label(i);
@@ -696,10 +834,7 @@ fn backup_ir(s: &mut Session, backup: &Path, slot: i64, in_use: &[(i64, String)]
 }
 
 pub fn sanitize(name: &str) -> String {
-    let s: String = name
-        .chars()
-        .map(|c| if c.is_alphanumeric() || " -_.()".contains(c) { c } else { '_' })
-        .collect();
+    let s: String = name.chars().map(|c| if c.is_alphanumeric() || " -_.()".contains(c) { c } else { '_' }).collect();
     let t = s.trim().to_owned();
     if t.is_empty() {
         "preset".into()

@@ -31,7 +31,11 @@ impl App {
             }
             n += written;
             let skipped = if s.skipped > 0 { format!(", {} unreadable slots skipped", s.skipped) } else { String::new() };
-            lines.push(format!("✔ {} -> {stem}/{}: {written} presets{skipped}", file.file_name().and_then(|x| x.to_str()).unwrap_or("?"), s.name));
+            lines.push(format!(
+                "✔ {} -> {stem}/{}: {written} presets{skipped}",
+                file.file_name().and_then(|x| x.to_str()).unwrap_or("?"),
+                s.name
+            ));
         }
         if !irs.is_empty() {
             // The backup's IRs go to the IR library, in a folder named after the backup.
@@ -39,7 +43,13 @@ impl App {
             let _ = std::fs::create_dir_all(&ir_dir);
             let written = irs
                 .iter()
-                .filter(|ir| crate::files::write_atomic(&crate::files::unique_path(&ir_dir, &crate::irs::file_name(ir.slot as i64, &ir.name)), &ir.wav).is_ok())
+                .filter(|ir| {
+                    crate::files::write_atomic(
+                        &crate::files::unique_path(&ir_dir, &crate::irs::file_name(ir.slot as i64, &ir.name)),
+                        &ir.wav,
+                    )
+                    .is_ok()
+                })
                 .count();
             lines.push(format!("✔ {written} IRs -> IR library/{stem}"));
             self.scan_tones();
@@ -109,7 +119,9 @@ impl App {
                         self.note(LogLevel::Bad, "Sending .hlx presets needs HX Edit's effect list (see Settings).");
                         continue;
                     };
-                    let json = std::fs::read_to_string(&p).map_err(|e| e.to_string()).and_then(|t| serde_json::from_str::<serde_json::Value>(&t).map_err(|e| e.to_string()));
+                    let json = std::fs::read_to_string(&p)
+                        .map_err(|e| e.to_string())
+                        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).map_err(|e| e.to_string()));
                     let mut json = match json {
                         Ok(j) => j,
                         Err(e) => {
@@ -120,7 +132,8 @@ impl App {
                     // A preset made for another unit is converted to this pedal first.
                     if crate::snapshots::device(&json) != self.unit {
                         if let Err(why) = crate::units::convert(&mut json, self.unit, Some(&cat)) {
-                            self.unit_report = Some((format!("This preset doesn't fit the {}", crate::units::unit_name(self.unit)), why, true));
+                            self.unit_report =
+                                Some((format!("This preset doesn't fit the {}", crate::units::unit_name(self.unit)), why, true));
                             continue;
                         }
                     }
@@ -163,7 +176,8 @@ impl App {
                     let dir = if setlist.is_empty() { self.lib.root.clone() } else { self.lib.root.join(&setlist) };
                     if p.parent() != Some(dir.as_path()) {
                         match crate::folders::move_into(&p, &dir) {
-                            Ok(_) => self.note(LogLevel::Good, format!("Moved to {}", if setlist.is_empty() { "the top folder" } else { &setlist })),
+                            Ok(_) => self
+                                .note(LogLevel::Good, format!("Moved to {}", if setlist.is_empty() { "the top folder" } else { &setlist })),
                             Err(e) => self.note(LogLevel::Bad, format!("Could not move: {e}")),
                         }
                     }
@@ -171,9 +185,8 @@ impl App {
                 }
                 library::Action::Rescan => self.scan_library(),
                 library::Action::Import => {
-                    if let Some(files) = rfd::FileDialog::new()
-                        .add_filter("Presets, backups and setlists", &["hlx", "hxpreset", "hxb", "hls"])
-                        .pick_files()
+                    if let Some(files) =
+                        rfd::FileDialog::new().add_filter("Presets, backups and setlists", &["hlx", "hxpreset", "hxb", "hls"]).pick_files()
                     {
                         self.import_files(files);
                     }
@@ -182,11 +195,9 @@ impl App {
         }
         if let Some(p) = self.pending_delete.clone() {
             let mut result = None;
-            egui::Window::new("Delete preset")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ctx, |ui| {
+            egui::Window::new("Delete preset").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(
+                ctx,
+                |ui| {
                     let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
                     if crate::files::HAS_RECYCLE_BIN {
                         ui.label(format!("Move {name} to the Recycle Bin?"));
@@ -194,14 +205,18 @@ impl App {
                         ui.label(format!("Delete {name} from your library? This cannot be undone."));
                     }
                     ui.horizontal(|ui| {
-                        if ui.button(RichText::new(if crate::files::HAS_RECYCLE_BIN { "Move to Recycle Bin" } else { "Delete" }).color(BAD)).clicked() {
+                        if ui
+                            .button(RichText::new(if crate::files::HAS_RECYCLE_BIN { "Move to Recycle Bin" } else { "Delete" }).color(BAD))
+                            .clicked()
+                        {
                             result = Some(true);
                         }
                         if ui.button("Cancel").clicked() {
                             result = Some(false);
                         }
                     });
-                });
+                },
+            );
             if let Some(yes) = result {
                 if yes {
                     self.delete_library_file(&p);
@@ -229,7 +244,9 @@ impl App {
         let _ = std::fs::create_dir_all(&dir);
         let path = crate::files::unique_path(&dir, &format!("{base}.{ext}"));
         match crate::files::write_atomic(&path, &bytes) {
-            Ok(_) => self.note(LogLevel::Good, format!("Saved to your library as {}", path.file_name().and_then(|s| s.to_str()).unwrap_or(""))),
+            Ok(_) => {
+                self.note(LogLevel::Good, format!("Saved to your library as {}", path.file_name().and_then(|s| s.to_str()).unwrap_or("")))
+            }
             Err(e) => self.note(LogLevel::Bad, format!("Could not save to the library: {e}")),
         }
         self.scan_library();

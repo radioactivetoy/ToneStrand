@@ -66,7 +66,9 @@ impl Run<'_> {
 /// Whether an error means the connection itself is gone (not just a refused step).
 fn link_lost(e: &str) -> bool {
     let e = e.to_lowercase();
-    ["lost usb", "lost the box", "usb contact", "closed the link", "forcibly closed", "half way", "power-cycle", "disconnected", "no reply"].iter().any(|w| e.contains(w))
+    ["lost usb", "lost the box", "usb contact", "closed the link", "forcibly closed", "half way", "power-cycle", "disconnected", "no reply"]
+        .iter()
+        .any(|w| e.contains(w))
 }
 
 fn canon(b: &[u8]) -> Result<Vec<u8>, String> {
@@ -80,7 +82,13 @@ fn test_ir() -> Vec<u8> {
     for i in 0..IR_AUDIO_BYTES / 4 {
         seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
         let noise = (seed >> 8) as f32 / (1u32 << 24) as f32 * 2.0 - 1.0;
-        let v = if i == 0 { 0.9 } else if i == 2047 { 0.0 } else { noise * 0.3 * (-(i as f32) / 180.0).exp() };
+        let v = if i == 0 {
+            0.9
+        } else if i == 2047 {
+            0.0
+        } else {
+            noise * 0.3 * (-(i as f32) / 180.0).exp()
+        };
         out.extend(v.to_le_bytes());
     }
     out
@@ -109,10 +117,18 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
     let sl = plan.setlist;
     let ps = plan.preset_slot;
     let label = slot_label(ps.max(0) as usize);
-    r.info("Plan", format!(
-        "Setlist {}, preset slot {label}, IR slot {}. Writes: presets {}, live edit {}, IRs {}. Backups in {}.",
-        sl + 1, plan.ir_slot + 1, yes(plan.preset_writes), yes(plan.live_edit), yes(plan.ir_writes), plan.folder.display()
-    ));
+    r.info(
+        "Plan",
+        format!(
+            "Setlist {}, preset slot {label}, IR slot {}. Writes: presets {}, live edit {}, IRs {}. Backups in {}.",
+            sl + 1,
+            plan.ir_slot + 1,
+            yes(plan.preset_writes),
+            yes(plan.live_edit),
+            yes(plan.ir_writes),
+            plan.folder.display()
+        ),
+    );
 
     // ---------------------------------------------------------------- backup ---
     r.busy("backing up");
@@ -161,13 +177,26 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
             }
         }
     }
-    if !r.step("Back up the setlist", if backup_ok { Ok(format!("{saved} presets saved")) } else { Err(format!("only {saved} saved; stopping before any write")) }) {
+    if !r.step(
+        "Back up the setlist",
+        if backup_ok { Ok(format!("{saved} presets saved")) } else { Err(format!("only {saved} saved; stopping before any write")) },
+    ) {
         return finish(&mut r);
     }
     // The test slot itself, read twice: reads must be stable.
     let original = match (s.fetch_slot(sl, ps), s.fetch_slot(sl, ps)) {
         (Ok(a), Ok(b)) => {
-            r.step("Read the test slot twice", if a == b { Ok(match &a { Some(x) => format!("{} bytes, both reads the same", x.len()), None => "empty, both reads".into() }) } else { Err("the two reads differ".into()) });
+            r.step(
+                "Read the test slot twice",
+                if a == b {
+                    Ok(match &a {
+                        Some(x) => format!("{} bytes, both reads the same", x.len()),
+                        None => "empty, both reads".into(),
+                    })
+                } else {
+                    Err("the two reads differ".into())
+                },
+            );
             a
         }
         (Err(e), _) | (_, Err(e)) => {
@@ -187,7 +216,8 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
     // IRs.
     let irs_before = match s.list_irs() {
         Ok(l) => {
-            let _ = std::fs::write(plan.folder.join("ir-list.txt"), l.iter().map(|(s, n)| format!("{:03} {n}\n", s + 1)).collect::<String>());
+            let _ =
+                std::fs::write(plan.folder.join("ir-list.txt"), l.iter().map(|(s, n)| format!("{:03} {n}\n", s + 1)).collect::<String>());
             r.step("Read the IR list", Ok(format!("{} slots in use", l.len())));
             Some(l)
         }
@@ -196,11 +226,15 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
             None
         }
     };
-    let ir_original: Option<(String, Vec<u8>)> = match irs_before.as_ref().and_then(|l| l.iter().find(|(s, _)| *s == plan.ir_slot).cloned()) {
+    let ir_original: Option<(String, Vec<u8>)> = match irs_before.as_ref().and_then(|l| l.iter().find(|(s, _)| *s == plan.ir_slot).cloned())
+    {
         Some((_, name)) => match (s.ir_audio(plan.ir_slot), s.ir_audio(plan.ir_slot)) {
             (Ok(a), Ok(b)) => {
                 let _ = std::fs::write(plan.folder.join(crate::irs::file_name(plan.ir_slot, &name)), crate::irs::audio_to_wav(&a));
-                r.step("Back up the test IR (read twice)", if a == b { Ok(format!("\"{name}\" saved, both reads the same")) } else { Err("the two reads differ".into()) });
+                r.step(
+                    "Back up the test IR (read twice)",
+                    if a == b { Ok(format!("\"{name}\" saved, both reads the same")) } else { Err("the two reads differ".into()) },
+                );
                 Some((name, a))
             }
             (Err(e), _) | (_, Err(e)) => {
@@ -219,7 +253,19 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
     // Read another IR, to test downloads even when the test slot is empty.
     if let Some((slot, name)) = irs_before.as_ref().and_then(|l| l.iter().find(|(s, _)| *s != plan.ir_slot).cloned()) {
         r.busy("downloading an IR");
-        r.step("Download another IR", s.ir_audio(slot).map(|a| format!("slot {} \"{name}\": {} bytes{}", slot + 1, a.len(), if crate::irs::is_nam_capture(&a) { ", a NAM capture" } else { "" })).map_err(|e| e.to_string()));
+        r.step(
+            "Download another IR",
+            s.ir_audio(slot)
+                .map(|a| {
+                    format!(
+                        "slot {} \"{name}\": {} bytes{}",
+                        slot + 1,
+                        a.len(),
+                        if crate::irs::is_nam_capture(&a) { ", a NAM capture" } else { "" }
+                    )
+                })
+                .map_err(|e| e.to_string()),
+        );
     }
 
     // ------------------------------------------------------- live edit (no-op) ---
@@ -228,7 +274,11 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
         let res = (|| -> Result<String, String> {
             let before = s.read_current().map_err(|e| e.to_string())?;
             let doc = DevicePreset::parse(&before)?;
-            let slot = doc.slots().into_iter().find(|x| x.model.is_some() && !x.values.is_empty()).ok_or("the loaded preset has no block with knobs")?;
+            let slot = doc
+                .slots()
+                .into_iter()
+                .find(|x| x.model.is_some() && !x.values.is_empty())
+                .ok_or("the loaded preset has no block with knobs")?;
             s.set_param(slot.wire_block(), 0, 0, slot.values[0].clone()).map_err(|e| e.to_string())?;
             let after = s.read_current().map_err(|e| e.to_string())?;
             let same = canon(&after)? == canon(&before)?;
@@ -241,7 +291,10 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
         r.step("Live edit (no change)", res);
         // Put the edit buffer back exactly as stored.
         r.busy("reloading the loaded preset");
-        r.step("Reload the loaded preset", s.select_preset(start.0, start.1).map(|_| "edit buffer discarded".into()).map_err(|e| e.to_string()));
+        r.step(
+            "Reload the loaded preset",
+            s.select_preset(start.0, start.1).map(|_| "edit buffer discarded".into()).map_err(|e| e.to_string()),
+        );
         // Let the pedal finish loading before anything is written.
         let _ = s.idle(std::time::Duration::from_millis(1500));
     }
@@ -258,20 +311,46 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
             let doc = s.read_current().map_err(|e| e.to_string())?;
             let expect = canon(&doc)?;
             touched = true;
-            let ok = r.step("Write a test preset", s.write_slot(sl, ps, TEST_NAME, doc.clone()).map(|_| format!("the loaded preset, as \"{TEST_NAME}\", into {label}")).map_err(|e| e.to_string()));
+            let ok = r.step(
+                "Write a test preset",
+                s.write_slot(sl, ps, TEST_NAME, doc.clone())
+                    .map(|_| format!("the loaded preset, as \"{TEST_NAME}\", into {label}"))
+                    .map_err(|e| e.to_string()),
+            );
             if !ok {
                 return Err("write failed".into());
             }
             let back = s.fetch_slot(sl, ps).map_err(|e| e.to_string())?.ok_or("the slot reads back empty")?;
-            if !r.step("Verify it reads back the same", if canon(&back)? == expect { Ok(format!("{} bytes match", back.len())) } else { Err("the document read back differs from what was written".into()) }) {
+            if !r.step(
+                "Verify it reads back the same",
+                if canon(&back)? == expect {
+                    Ok(format!("{} bytes match", back.len()))
+                } else {
+                    Err("the document read back differs from what was written".into())
+                },
+            ) {
                 return Err("verify failed".into());
             }
             let n = s.presets(sl).map_err(|e| e.to_string())?;
-            r.step("Verify its name", if n.get(ps as usize).map(String::as_str) == Some(TEST_NAME) { Ok(format!("\"{TEST_NAME}\"")) } else { Err(format!("the list shows \"{}\"", n.get(ps as usize).cloned().unwrap_or_default())) });
+            r.step(
+                "Verify its name",
+                if n.get(ps as usize).map(String::as_str) == Some(TEST_NAME) {
+                    Ok(format!("\"{TEST_NAME}\""))
+                } else {
+                    Err(format!("the list shows \"{}\"", n.get(ps as usize).cloned().unwrap_or_default()))
+                },
+            );
             r.busy("renaming");
             r.step("Rename", s.rename_slot(sl, ps, TEST_NAME_2).map(|_| String::new()).map_err(|e| e.to_string()));
             let n = s.presets(sl).map_err(|e| e.to_string())?;
-            r.step("Verify the new name", if n.get(ps as usize).map(String::as_str) == Some(TEST_NAME_2) { Ok(format!("\"{TEST_NAME_2}\"")) } else { Err(format!("the list shows \"{}\"", n.get(ps as usize).cloned().unwrap_or_default())) });
+            r.step(
+                "Verify the new name",
+                if n.get(ps as usize).map(String::as_str) == Some(TEST_NAME_2) {
+                    Ok(format!("\"{TEST_NAME_2}\""))
+                } else {
+                    Err(format!("the list shows \"{}\"", n.get(ps as usize).cloned().unwrap_or_default()))
+                },
+            );
             Ok(())
         })();
         if r.lost {
@@ -289,26 +368,53 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
     }
 
     // -------------------------------------------------------------- IR writes ---
-    let ir_backup_ok = irs_before.is_some() && (ir_original.is_some() || !irs_before.as_ref().is_some_and(|l| l.iter().any(|(x, _)| *x == plan.ir_slot)));
+    let ir_backup_ok =
+        irs_before.is_some() && (ir_original.is_some() || !irs_before.as_ref().is_some_and(|l| l.iter().any(|(x, _)| *x == plan.ir_slot)));
     if plan.ir_writes && ir_backup_ok {
         let mut touched = false;
         let res = (|| -> Result<(), String> {
             let audio = test_ir();
             r.busy("writing the test IR");
             touched = true;
-            if !r.step("Upload a test IR", s.import_ir(plan.ir_slot, TEST_IR_NAME, &audio).map(|_| format!("into IR slot {}", plan.ir_slot + 1)).map_err(|e| e.to_string())) {
+            if !r.step(
+                "Upload a test IR",
+                s.import_ir(plan.ir_slot, TEST_IR_NAME, &audio)
+                    .map(|_| format!("into IR slot {}", plan.ir_slot + 1))
+                    .map_err(|e| e.to_string()),
+            ) {
                 return Err("upload failed".into());
             }
             let l = s.list_irs().map_err(|e| e.to_string())?;
-            r.step("Verify the IR's name", match l.iter().find(|(x, _)| *x == plan.ir_slot) { Some((_, n)) if n == TEST_IR_NAME => Ok(format!("\"{n}\"")), Some((_, n)) => Err(format!("the list shows \"{n}\"")), None => Err("the slot shows empty".into()) });
+            r.step(
+                "Verify the IR's name",
+                match l.iter().find(|(x, _)| *x == plan.ir_slot) {
+                    Some((_, n)) if n == TEST_IR_NAME => Ok(format!("\"{n}\"")),
+                    Some((_, n)) => Err(format!("the list shows \"{n}\"")),
+                    None => Err("the slot shows empty".into()),
+                },
+            );
             let back = s.ir_audio(plan.ir_slot).map_err(|e| e.to_string())?;
-            if !r.step("Verify the IR downloads the same", if back == audio { Ok("8,192 bytes match".into()) } else { Err(format!("{} of 2,048 samples differ", back.chunks(4).zip(audio.chunks(4)).filter(|(a, b)| a != b).count())) }) {
+            if !r.step(
+                "Verify the IR downloads the same",
+                if back == audio {
+                    Ok("8,192 bytes match".into())
+                } else {
+                    Err(format!("{} of 2,048 samples differ", back.chunks(4).zip(audio.chunks(4)).filter(|(a, b)| a != b).count()))
+                },
+            ) {
                 return Err("verify failed".into());
             }
             r.busy("renaming the IR");
             r.step("Rename the IR", s.rename_ir(plan.ir_slot, TEST_IR_NAME_2).map(|_| String::new()).map_err(|e| e.to_string()));
             let l = s.list_irs().map_err(|e| e.to_string())?;
-            r.step("Verify the IR's new name", match l.iter().find(|(x, _)| *x == plan.ir_slot) { Some((_, n)) if n == TEST_IR_NAME_2 => Ok(format!("\"{n}\"")), Some((_, n)) => Err(format!("the list shows \"{n}\"")), None => Err("the slot shows empty".into()) });
+            r.step(
+                "Verify the IR's new name",
+                match l.iter().find(|(x, _)| *x == plan.ir_slot) {
+                    Some((_, n)) if n == TEST_IR_NAME_2 => Ok(format!("\"{n}\"")),
+                    Some((_, n)) => Err(format!("the list shows \"{n}\"")),
+                    None => Err("the slot shows empty".into()),
+                },
+            );
             Ok(())
         })();
         if r.lost {
@@ -343,7 +449,10 @@ pub fn run(s: &mut Session, plan: Plan, send: &dyn Fn(Event)) {
         }
         Ok(_) => {
             let back = s.select_preset(start.0, start.1);
-            r.step("Final: loaded preset", back.map(|_| "it had changed; the starting preset is loaded again".into()).map_err(|e| e.to_string()));
+            r.step(
+                "Final: loaded preset",
+                back.map(|_| "it had changed; the starting preset is loaded again".into()).map_err(|e| e.to_string()),
+            );
         }
         Err(e) => {
             r.step("Final: loaded preset", Err(e.to_string()));
@@ -371,7 +480,10 @@ fn restore_preset(s: &mut Session, r: &mut Run, plan: &Plan, original: &Option<V
     r.busy("restoring the test slot");
     match original {
         Some(doc) => {
-            let ok = r.step("Restore the test slot", s.write_slot(sl, ps, name, doc.clone()).map(|_| format!("\"{name}\" written back")).map_err(|e| e.to_string()));
+            let ok = r.step(
+                "Restore the test slot",
+                s.write_slot(sl, ps, name, doc.clone()).map(|_| format!("\"{name}\" written back")).map_err(|e| e.to_string()),
+            );
             if ok {
                 let res = s.fetch_slot(sl, ps).map_err(|e| e.to_string()).and_then(|b| {
                     let b = b.ok_or("the slot reads back empty")?;
@@ -385,13 +497,19 @@ fn restore_preset(s: &mut Session, r: &mut Run, plan: &Plan, original: &Option<V
             }
         }
         None => {
-            let ok = r.step("Restore the test slot", s.clear_slot(sl, ps).map(|_| "emptied again (it was empty)".into()).map_err(|e| e.to_string()));
+            let ok = r.step(
+                "Restore the test slot",
+                s.clear_slot(sl, ps).map(|_| "emptied again (it was empty)".into()).map_err(|e| e.to_string()),
+            );
             if ok {
-                r.step("Verify the restore", match s.fetch_slot(sl, ps) {
-                    Ok(None) => Ok("it reads back empty".into()),
-                    Ok(Some(_)) => Err("it still holds a preset".into()),
-                    Err(e) => Err(e.to_string()),
-                });
+                r.step(
+                    "Verify the restore",
+                    match s.fetch_slot(sl, ps) {
+                        Ok(None) => Ok("it reads back empty".into()),
+                        Ok(Some(_)) => Err("it still holds a preset".into()),
+                        Err(e) => Err(e.to_string()),
+                    },
+                );
             }
         }
     }
@@ -401,23 +519,36 @@ fn restore_ir(s: &mut Session, r: &mut Run, plan: &Plan, original: &Option<(Stri
     r.busy("restoring the IR slot");
     match original {
         Some((name, audio)) => {
-            if r.step("Restore the IR slot", s.import_ir(plan.ir_slot, name, audio).map(|_| format!("\"{name}\" written back")).map_err(|e| e.to_string())) {
-                r.step("Verify the IR restore", match s.ir_audio(plan.ir_slot) {
-                    Ok(b) if &b == audio => Ok("the audio matches the backup".into()),
-                    Ok(_) => Err("the audio differs from the backup; restore it by hand from the backup folder".into()),
-                    Err(e) => Err(e.to_string()),
-                });
+            if r.step(
+                "Restore the IR slot",
+                s.import_ir(plan.ir_slot, name, audio).map(|_| format!("\"{name}\" written back")).map_err(|e| e.to_string()),
+            ) {
+                r.step(
+                    "Verify the IR restore",
+                    match s.ir_audio(plan.ir_slot) {
+                        Ok(b) if &b == audio => Ok("the audio matches the backup".into()),
+                        Ok(_) => Err("the audio differs from the backup; restore it by hand from the backup folder".into()),
+                        Err(e) => Err(e.to_string()),
+                    },
+                );
             }
         }
         None => {
-            if r.step("Restore the IR slot", s.delete_ir(plan.ir_slot).map(|_| "emptied again (it was empty)".into()).map_err(|e| e.to_string())) {
+            if r.step(
+                "Restore the IR slot",
+                s.delete_ir(plan.ir_slot).map(|_| "emptied again (it was empty)".into()).map_err(|e| e.to_string()),
+            ) {
                 // checked with the whole list below
             }
         }
     }
     match s.list_irs() {
         Ok(after) => {
-            let res = if after == before { Ok(format!("{} slots, names as before", after.len())) } else { Err(format!("the IR list differs: {} slots before, {} now", before.len(), after.len())) };
+            let res = if after == before {
+                Ok(format!("{} slots, names as before", after.len()))
+            } else {
+                Err(format!("the IR list differs: {} slots before, {} now", before.len(), after.len()))
+            };
             r.step("Final: IR list", res);
         }
         Err(e) => {

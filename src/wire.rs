@@ -44,10 +44,7 @@ pub fn list_usb_pedals() -> Vec<UsbPedal> {
     devices
         .filter(|d| d.vendor_id() == LINE6_VID)
         .map(|d| UsbPedal {
-            product: d
-                .product_string()
-                .map(|s| s.trim().to_owned())
-                .unwrap_or_else(|| format!("Line 6 device {:04x}", d.product_id())),
+            product: d.product_string().map(|s| s.trim().to_owned()).unwrap_or_else(|| format!("Line 6 device {:04x}", d.product_id())),
             pid: d.product_id(),
             serial: d.serial_number().unwrap_or("").trim().to_owned(),
         })
@@ -68,15 +65,11 @@ impl UsbWire {
             .find(|d| d.vendor_id() == LINE6_VID && d.product_id() == pid)
             .ok_or("the pedal is no longer plugged in")?;
         let name = info.product_string().unwrap_or("Helix").trim().to_owned();
-        let device = info
-            .open()
-            .map_err(|e| format!("could not open the pedal ({e}); is another editor running?"))?;
+        let device = info.open().map_err(|e| format!("could not open the pedal ({e}); is another editor running?"))?;
         // Claim, release and claim again: the release clears the pedal's
         // per-channel state left from an earlier connection.
         drop(device.claim_interface(0).map_err(|e| format!("could not claim the pedal: {e}"))?);
-        let interface = device
-            .claim_interface(0)
-            .map_err(|e| format!("could not claim the pedal: {e}"))?;
+        let interface = device.claim_interface(0).map_err(|e| format!("could not claim the pedal: {e}"))?;
         let _ = interface.clear_halt(EP_OUT);
         let _ = interface.clear_halt(EP_IN);
         let out_q = interface.bulk_out_queue(EP_OUT);
@@ -166,21 +159,13 @@ impl BoxWire {
             .map_err(|e| format!("could not find {host}: {e}"))?
             .next()
             .ok_or_else(|| format!("could not find {host}"))?;
-        let stream = TcpStream::connect_timeout(&addr, Duration::from_secs(4))
-            .map_err(|e| format!("the box at {host} did not answer: {e}"))?;
+        let stream =
+            TcpStream::connect_timeout(&addr, Duration::from_secs(4)).map_err(|e| format!("the box at {host} did not answer: {e}"))?;
         let _ = stream.set_nodelay(true);
-        stream
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .map_err(|e| e.to_string())?;
-        let mut req = format!("ws://{url_host}/raw")
-            .into_client_request()
-            .map_err(|e| e.to_string())?;
-        req.headers_mut().insert(
-            "Authorization",
-            format!("Bearer {token}").parse().map_err(|_| "bad token")?,
-        );
-        let (mut ws, _) = tungstenite::client(req, stream)
-            .map_err(|e| format!("the box refused the link: {e}"))?;
+        stream.set_read_timeout(Some(Duration::from_secs(5))).map_err(|e| e.to_string())?;
+        let mut req = format!("ws://{url_host}/raw").into_client_request().map_err(|e| e.to_string())?;
+        req.headers_mut().insert("Authorization", format!("Bearer {token}").parse().map_err(|_| "bad token")?);
+        let (mut ws, _) = tungstenite::client(req, stream).map_err(|e| format!("the box refused the link: {e}"))?;
 
         // The hello comes first, before any transfer.
         let hello = loop {
@@ -207,17 +192,8 @@ impl BoxWire {
         if v.get("pid").is_none_or(|p| p.is_null()) {
             return Err("no pedal is plugged into the box".into());
         }
-        let product = v
-            .get("product")
-            .and_then(|p| p.as_str())
-            .unwrap_or("Helix")
-            .trim()
-            .to_owned();
-        Ok(BoxWire {
-            name: format!("{product} via {label}"),
-            ws,
-            last_sent: Instant::now(),
-        })
+        let product = v.get("product").and_then(|p| p.as_str()).unwrap_or("Helix").trim().to_owned();
+        Ok(BoxWire { name: format!("{product} via {label}"), ws, last_sent: Instant::now() })
     }
 }
 
@@ -237,9 +213,7 @@ pub fn explain_box_error(code: &str) -> String {
 impl Wire for BoxWire {
     fn send(&mut self, bytes: &[u8]) -> Result<(), String> {
         self.last_sent = Instant::now();
-        self.ws
-            .send(tungstenite::Message::Binary(bytes.to_vec()))
-            .map_err(|e| format!("lost the box: {e}"))
+        self.ws.send(tungstenite::Message::Binary(bytes.to_vec())).map_err(|e| format!("lost the box: {e}"))
     }
 
     fn recv(&mut self, timeout: Duration) -> Result<Vec<u8>, String> {
@@ -249,8 +223,7 @@ impl Wire for BoxWire {
             match self.ws.read() {
                 Ok(tungstenite::Message::Binary(b)) => return Ok(b.to_vec()),
                 Ok(tungstenite::Message::Text(text)) => {
-                    let v: serde_json::Value =
-                        serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
+                    let v: serde_json::Value = serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
                     match v.get("t").and_then(|t| t.as_str()) {
                         Some("pong") => continue,
                         Some("pedal_detached") => return Err("the pedal was unplugged from the box".into()),
@@ -264,9 +237,7 @@ impl Wire for BoxWire {
                 }
                 Ok(tungstenite::Message::Close(_)) => return Err("the box closed the link".into()),
                 Ok(_) => continue,
-                Err(tungstenite::Error::Io(e))
-                    if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) =>
-                {
+                Err(tungstenite::Error::Io(e)) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
                     return Err(TIMEOUT.into())
                 }
                 Err(e) => return Err(format!("lost the box: {e}")),
@@ -278,9 +249,7 @@ impl Wire for BoxWire {
         // The box drops a client that sends nothing for 6 s; ping after 3 s of quiet.
         if self.last_sent.elapsed() > Duration::from_secs(3) {
             self.last_sent = Instant::now();
-            self.ws
-                .send(tungstenite::Message::Text(r#"{"t":"ping"}"#.into()))
-                .map_err(|e| format!("lost the box: {e}"))?;
+            self.ws.send(tungstenite::Message::Text(r#"{"t":"ping"}"#.into())).map_err(|e| format!("lost the box: {e}"))?;
         }
         Ok(())
     }

@@ -1,34 +1,34 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod cli;
-mod window;
+mod backup;
 mod boxes;
 mod catalog;
 mod chain;
+mod cli;
 mod controllers;
-mod editors;
-mod library;
 mod device;
 mod devpreset;
-mod hlx;
-mod msgpack;
-mod proto;
-mod realnames;
-mod nam;
-mod irs;
-mod selftest;
-mod modelinfo;
-mod icons;
+mod editors;
 #[cfg(test)]
 mod fakepedal;
 mod files;
 mod folders;
-mod backup;
-mod tonelib;
+mod hlx;
+mod icons;
+mod irs;
+mod library;
+mod modelinfo;
+mod msgpack;
+mod nam;
+mod proto;
+mod realnames;
+mod selftest;
 mod session;
 mod snapshots;
 mod theme;
+mod tonelib;
 mod units;
+mod window;
 mod wire;
 
 use eframe::egui;
@@ -38,12 +38,7 @@ fn main() -> eframe::Result<()> {
     if cli::run(&args) {
         return Ok(());
     }
-    let screenshot = args
-        .iter()
-        .position(|a| a == "--screenshot")
-        .and_then(|i| args.get(i + 1))
-        .map(std::path::PathBuf::from);
-
+    let screenshot = args.iter().position(|a| a == "--screenshot").and_then(|i| args.get(i + 1)).map(std::path::PathBuf::from);
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("ToneStrand")
@@ -64,11 +59,7 @@ fn main() -> eframe::Result<()> {
         }
     }
     let options = eframe::NativeOptions { viewport, ..Default::default() };
-    let result = eframe::run_native(
-        "ToneStrand",
-        options,
-        Box::new(move |cc| Ok(Box::new(window::App::new(cc, screenshot)))),
-    );
+    let result = eframe::run_native("ToneStrand", options, Box::new(move |cc| Ok(Box::new(window::App::new(cc, screenshot)))));
     // Background helpers (network search, a pedal link mid-answer) must not
     // keep the program alive once its window is closed.
     if result.is_ok() {

@@ -80,19 +80,13 @@ impl Value {
     /// The value under an integer key of a map.
     pub fn get(&self, key: i64) -> Option<&Value> {
         match self {
-            Value::Map(pairs, _) => pairs
-                .iter()
-                .find(|(k, _)| k.as_i64() == Some(key))
-                .map(|(_, v)| v),
+            Value::Map(pairs, _) => pairs.iter().find(|(k, _)| k.as_i64() == Some(key)).map(|(_, v)| v),
             _ => None,
         }
     }
     pub fn get_mut(&mut self, key: i64) -> Option<&mut Value> {
         match self {
-            Value::Map(pairs, _) => pairs
-                .iter_mut()
-                .find(|(k, _)| k.as_i64() == Some(key))
-                .map(|(_, v)| v),
+            Value::Map(pairs, _) => pairs.iter_mut().find(|(k, _)| k.as_i64() == Some(key)).map(|(_, v)| v),
             _ => None,
         }
     }
@@ -568,9 +562,7 @@ mod tests {
     #[test]
     fn round_trips_a_request() {
         // {102: 1009, 100: 20, 101: {107: 0, 108: 12}} as the pedal's editors send it.
-        let raw = [
-            0x83, 0x66, 0xcd, 0x03, 0xf1, 0x64, 0x14, 0x65, 0x82, 0x6b, 0x00, 0x6c, 0x0c,
-        ];
+        let raw = [0x83, 0x66, 0xcd, 0x03, 0xf1, 0x64, 0x14, 0x65, 0x82, 0x6b, 0x00, 0x6c, 0x0c];
         let v = Decoder::new(&raw).value().unwrap();
         assert_eq!(v.get(102).unwrap().as_i64(), Some(1009));
         assert_eq!(v.encode(), raw);

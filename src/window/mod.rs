@@ -9,16 +9,16 @@ use std::time::{Duration, Instant};
 use eframe::egui::{self, Color32, CornerRadius, RichText, Stroke, Vec2};
 
 use crate::boxes::{self, BoxInfo, PairPoll, RelayStatus, Settings};
-use crate::device::{self, Cmd, Event, Link, Purpose, Target};
 use crate::catalog::Catalog;
+use crate::device::{self, Cmd, Event, Link, Purpose, Target};
 use crate::devpreset::DevicePreset;
 use crate::editors;
-use crate::library::{self, Library};
-use std::sync::Arc;
 use crate::hlx;
+use crate::library::{self, Library};
 use crate::proto::slot_label;
 use crate::theme::{self, *};
 use crate::wire::{self, UsbPedal};
+use std::sync::Arc;
 
 mod backups;
 mod bars;
@@ -300,9 +300,7 @@ impl App {
             user_disconnected: false,
             catalog_card_hidden: false,
         };
-        app.catalog = crate::catalog::find_dir(app.settings.hx_edit.as_deref())
-            .and_then(|d| Catalog::load(&d).ok())
-            .map(Arc::new);
+        app.catalog = crate::catalog::find_dir(app.settings.hx_edit.as_deref()).and_then(|d| Catalog::load(&d).ok()).map(Arc::new);
         app.lib = Library::new(app.library_dir.clone());
         app.unit = app.settings.unit.unwrap_or(2162694);
         // Start for a given unit (used to check pictures for each pedal).
@@ -464,7 +462,18 @@ impl App {
                 (stem.clone(), name)
             }
         };
-        self.docs.push(Doc { title, name, path: Some(path.to_owned()), kind, dirty: false, selected: None, example: false, undo: Vec::new(), redo: Vec::new(), last_edit: None });
+        self.docs.push(Doc {
+            title,
+            name,
+            path: Some(path.to_owned()),
+            kind,
+            dirty: false,
+            selected: None,
+            example: false,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            last_edit: None,
+        });
         self.active = self.docs.len() - 1;
         self.remember_recent(path);
         // A preset made for another unit is converted to this one, or explained.
@@ -542,17 +551,27 @@ impl App {
                 let active = i == self.active;
                 let galley = ui.painter().layout_no_wrap(d.title.clone(), font.clone(), TEXT);
                 let dot = if d.dirty { 12.0 } else { 0.0 };
-                let (rect, resp) = ui.allocate_exact_size(Vec2::new(10.0 + dot + galley.size().x + 6.0 + 16.0 + 5.0, 26.0), egui::Sense::click());
+                let (rect, resp) =
+                    ui.allocate_exact_size(Vec2::new(10.0 + dot + galley.size().x + 6.0 + 16.0 + 5.0, 26.0), egui::Sense::click());
                 // The close cross sits at the right end; it is its own target.
                 let x_rect = egui::Rect::from_center_size(egui::pos2(rect.right() - 5.0 - 8.0, rect.center().y), Vec2::splat(16.0));
                 let x_resp = ui.interact(x_rect, resp.id.with("close"), egui::Sense::click());
                 let hot = resp.hovered() || x_resp.hovered();
                 let p = ui.painter();
-                let fill = if active { card_hi() } else if hot { card_bg() } else { Color32::TRANSPARENT };
+                let fill = if active {
+                    card_hi()
+                } else if hot {
+                    card_bg()
+                } else {
+                    Color32::TRANSPARENT
+                };
                 p.rect_filled(rect, CornerRadius::same(7), fill);
                 if active {
                     // A thin accent underline, inside the pill's lower edge.
-                    let under = egui::Rect::from_min_max(egui::pos2(rect.left() + 8.0, rect.bottom() - 2.0), egui::pos2(rect.right() - 8.0, rect.bottom() - 1.0));
+                    let under = egui::Rect::from_min_max(
+                        egui::pos2(rect.left() + 8.0, rect.bottom() - 2.0),
+                        egui::pos2(rect.right() - 8.0, rect.bottom() - 1.0),
+                    );
                     p.rect_filled(under, CornerRadius::same(1), accent());
                 }
                 let mut x = rect.left() + 10.0;
@@ -561,7 +580,13 @@ impl App {
                     p.circle_filled(egui::pos2(x + 3.0, rect.center().y), 3.0, ORANGE);
                     x += dot;
                 }
-                let col = if active { accent() } else if hot { TEXT } else { MUTED };
+                let col = if active {
+                    accent()
+                } else if hot {
+                    TEXT
+                } else {
+                    MUTED
+                };
                 p.galley(egui::pos2(x, rect.center().y - galley.size().y / 2.0), galley, col);
                 if active || hot {
                     if x_resp.hovered() {
@@ -667,7 +692,13 @@ impl App {
             painter.rect_filled(screen, CornerRadius::ZERO, Color32::from_black_alpha(215));
             let inner = screen.shrink(24.0);
             painter.rect_stroke(inner, CornerRadius::same(12), Stroke::new(2.0_f32, accent()), egui::StrokeKind::Inside);
-            painter.text(inner.center() - Vec2::new(0.0, 14.0), egui::Align2::CENTER_CENTER, "Drop files here", egui::FontId::proportional(26.0), TEXT);
+            painter.text(
+                inner.center() - Vec2::new(0.0, 14.0),
+                egui::Align2::CENTER_CENTER,
+                "Drop files here",
+                egui::FontId::proportional(26.0),
+                TEXT,
+            );
             painter.text(
                 inner.center() + Vec2::new(0.0, 18.0),
                 egui::Align2::CENTER_CENTER,
@@ -775,27 +806,23 @@ impl App {
             }
         };
         let mut choice = None;
-        egui::Window::new(title)
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .show(ctx, |ui| {
-                ui.label(&text);
-                ui.add_space(6.0);
-                ui.horizontal(|ui| {
-                    let save = if matches!(ask, CloseAsk::Quit) && unsaved.len() > 1 { "Save all" } else { "Save" };
-                    if theme::primary_button(ui, save).clicked() {
-                        choice = Some(0);
-                    }
-                    let discard = if matches!(ask, CloseAsk::Quit) { "Quit without saving" } else { "Close without saving" };
-                    if ui.button(RichText::new(discard).color(BAD)).clicked() {
-                        choice = Some(1);
-                    }
-                    if ui.button("Cancel").clicked() {
-                        choice = Some(2);
-                    }
-                });
+        egui::Window::new(title).collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
+            ui.label(&text);
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                let save = if matches!(ask, CloseAsk::Quit) && unsaved.len() > 1 { "Save all" } else { "Save" };
+                if theme::primary_button(ui, save).clicked() {
+                    choice = Some(0);
+                }
+                let discard = if matches!(ask, CloseAsk::Quit) { "Quit without saving" } else { "Close without saving" };
+                if ui.button(RichText::new(discard).color(BAD)).clicked() {
+                    choice = Some(1);
+                }
+                if ui.button("Cancel").clicked() {
+                    choice = Some(2);
+                }
             });
+        });
         match (choice, ask) {
             (None, ask) => self.close_ask = Some(ask),
             (Some(2), _) => {}
@@ -842,9 +869,7 @@ impl App {
 
     /// Load the effects list from HX Edit's resources (custom folder or the usual place).
     fn reload_catalog(&mut self) {
-        self.catalog = crate::catalog::find_dir(self.settings.hx_edit.as_deref())
-            .and_then(|d| Catalog::load(&d).ok())
-            .map(Arc::new);
+        self.catalog = crate::catalog::find_dir(self.settings.hx_edit.as_deref()).and_then(|d| Catalog::load(&d).ok()).map(Arc::new);
         self.scan_library();
         if self.catalog.is_some() {
             self.note(LogLevel::Good, "Effects list loaded.");
@@ -982,7 +1007,14 @@ impl App {
                 let params = cat.default_values(model);
                 let cab_model = cab.and_then(|c| cat.hlx_model(c).map(|(m, _)| (m, cat.default_values(c))));
                 let cab_ref = cab_model.as_ref().map(|(m, p)| (m.as_str(), p.as_slice()));
-                if let Some(key) = hlx::place_model(json, &dsp, st.path, st.position as i64, st.hlx_key.as_deref(), &hlx::NewModel { model: &hlx_model, stereo, params: &params, cab: cab_ref }) {
+                if let Some(key) = hlx::place_model(
+                    json,
+                    &dsp,
+                    st.path,
+                    st.position as i64,
+                    st.hlx_key.as_deref(),
+                    &hlx::NewModel { model: &hlx_model, stereo, params: &params, cab: cab_ref },
+                ) {
                     // Select the new block in the chain.
                     let shown: Vec<hlx::HlxBlock> = hlx::blocks(json);
                     doc.selected = shown.iter().filter(|b| !b.key.starts_with("cab")).position(|b| b.dsp == dsp && b.key == key);
@@ -1014,19 +1046,17 @@ impl App {
         if !self.docs.is_empty() {
             return self.studio_central(ctx);
         }
-        egui::CentralPanel::default()
-            .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin::same(14)))
-            .show(ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.add_space(80.0);
-                    if let Some(t) = theme::logo(ui.ctx(), theme::Logo::WithName) {
-                        ui.add(egui::Image::new(&t).fit_to_exact_size(Vec2::new(360.0, 145.0)).tint(Color32::from_white_alpha(150)));
-                        ui.add_space(16.0);
-                    }
-                    ui.label(RichText::new("No preset open").size(22.0).strong());
-                    ui.label(RichText::new("Open a file, start a new preset, or edit one from the pedal.").color(MUTED));
-                });
+        egui::CentralPanel::default().frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin::same(14))).show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.add_space(80.0);
+                if let Some(t) = theme::logo(ui.ctx(), theme::Logo::WithName) {
+                    ui.add(egui::Image::new(&t).fit_to_exact_size(Vec2::new(360.0, 145.0)).tint(Color32::from_white_alpha(150)));
+                    ui.add_space(16.0);
+                }
+                ui.label(RichText::new("No preset open").size(22.0).strong());
+                ui.label(RichText::new("Open a file, start a new preset, or edit one from the pedal.").color(MUTED));
             });
+        });
     }
 
     /// Without HX Edit's files there are no effect names, ranges or pictures: say so on the
@@ -1199,7 +1229,12 @@ impl App {
                 }
                 DocKind::Device { origin, .. } => {
                     let r = ui
-                        .add(egui::TextEdit::singleline(&mut doc.name).font(font).desired_width(w).char_limit(crate::session::PRESET_NAME_MAX))
+                        .add(
+                            egui::TextEdit::singleline(&mut doc.name)
+                                .font(font)
+                                .desired_width(w)
+                                .char_limit(crate::session::PRESET_NAME_MAX),
+                        )
                         .on_hover_text("The name it gets on the pedal when you write or save it");
                     focus_if_asked(ui, &r, doc.name.chars().count());
                     if r.has_focus() {
@@ -1210,7 +1245,9 @@ impl App {
                     }
                     match origin {
                         Origin::Live { index, .. } => theme::pill(ui, &format!("LIVE · {}", slot_label((*index).max(0) as usize)), GOOD),
-                        Origin::Slot { index, .. } => theme::pill(ui, &format!("from pedal · {}", slot_label((*index).max(0) as usize)), accent()),
+                        Origin::Slot { index, .. } => {
+                            theme::pill(ui, &format!("from pedal · {}", slot_label((*index).max(0) as usize)), accent())
+                        }
                         Origin::File => theme::pill(ui, "pedal preset file", ORANGE),
                     }
                 }
@@ -1241,7 +1278,12 @@ impl App {
             let live_doc = doc.is_live();
             let undo_tip = if live_doc { "Not on the live preset: its changes are already on the pedal" } else { "Undo (Ctrl+Z)" };
             let (u, r) = if studio { ("⟲", "⟳") } else { ("Undo", "Redo") };
-            if ui.add_enabled(!live_doc && !doc.undo.is_empty(), egui::Button::new(u)).on_hover_text(undo_tip).on_disabled_hover_text(undo_tip).clicked() {
+            if ui
+                .add_enabled(!live_doc && !doc.undo.is_empty(), egui::Button::new(u))
+                .on_hover_text(undo_tip)
+                .on_disabled_hover_text(undo_tip)
+                .clicked()
+            {
                 *history = Some(true);
             }
             if ui.add_enabled(!live_doc && !doc.redo.is_empty(), egui::Button::new(r)).on_hover_text("Redo (Ctrl+Y)").clicked() {
@@ -1249,7 +1291,9 @@ impl App {
             }
             if !live_doc && history.is_none() {
                 ui.input_mut(|inp| {
-                    if inp.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z) || inp.consume_key(egui::Modifiers::COMMAND, egui::Key::Y) {
+                    if inp.consume_key(egui::Modifiers::COMMAND | egui::Modifiers::SHIFT, egui::Key::Z)
+                        || inp.consume_key(egui::Modifiers::COMMAND, egui::Key::Y)
+                    {
                         *history = Some(false);
                     } else if inp.consume_key(egui::Modifiers::COMMAND, egui::Key::Z) {
                         *history = Some(true);
@@ -1272,7 +1316,13 @@ impl App {
                     if ui.add_enabled(connected && doc.dirty, egui::Button::new("Write back to its slot")).clicked() {
                         *confirm = Some((
                             format!("Replace {} on the pedal with your edited version?", slot_label((*index).max(0) as usize)),
-                            Cmd::WriteSlot { setlist: *sl, index: *index, name: name.clone(), doc: preset.encode(), backup: backup.clone() },
+                            Cmd::WriteSlot {
+                                setlist: *sl,
+                                index: *index,
+                                name: name.clone(),
+                                doc: preset.encode(),
+                                backup: backup.clone(),
+                            },
                         ));
                         clean = true;
                     }
@@ -1285,7 +1335,12 @@ impl App {
                 } else {
                     "Write this preset into the picked slot"
                 };
-                if ui.add_enabled(connected && chosen.is_some(), egui::Button::new(label)).on_hover_text(hover).on_disabled_hover_text(hover).clicked() {
+                if ui
+                    .add_enabled(connected && chosen.is_some(), egui::Button::new(label))
+                    .on_hover_text(hover)
+                    .on_disabled_hover_text(hover)
+                    .clicked()
+                {
                     if let Some(c) = chosen {
                         *confirm = Some((
                             format!("Write \"{}\" into {} (now \"{}\")?", name, slot_label(c), chosen_name),
@@ -1431,11 +1486,9 @@ impl App {
         if let Some((sl, idx, mut name)) = self.rename.take() {
             let mut keep = true;
             let mut go = false;
-            egui::Window::new("Rename preset")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ctx, |ui| {
+            egui::Window::new("Rename preset").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(
+                ctx,
+                |ui| {
                     ui.label(format!("New name for {}:", slot_label(idx)));
                     let r = ui.add(egui::TextEdit::singleline(&mut name).char_limit(crate::session::PRESET_NAME_MAX));
                     ui.horizontal(|ui| theme::name_hint(ui, &name, crate::session::PRESET_NAME_MAX));
@@ -1449,7 +1502,8 @@ impl App {
                             keep = false;
                         }
                     });
-                });
+                },
+            );
             if go {
                 self.send(Cmd::Rename { setlist: sl, index: idx as i64, name });
             } else if keep {
@@ -1465,11 +1519,9 @@ impl App {
         self.restore_window(ctx);
         if let Some((text, cmd)) = self.confirm.take() {
             let mut result = None;
-            egui::Window::new("Please confirm")
-                .collapsible(false)
-                .resizable(false)
-                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-                .show(ctx, |ui| {
+            egui::Window::new("Please confirm").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(
+                ctx,
+                |ui| {
                     ui.label(&text);
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
@@ -1480,7 +1532,8 @@ impl App {
                             result = Some(false);
                         }
                     });
-                });
+                },
+            );
             match result {
                 Some(true) => self.send(cmd),
                 Some(false) => {}
@@ -1521,7 +1574,6 @@ impl App {
         }
     }
 }
-
 
 fn level_colour(l: LogLevel, info: Color32) -> Color32 {
     match l {
@@ -1610,7 +1662,6 @@ impl eframe::App for App {
             }
         }
         self.screenshot_step(ctx);
-
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
@@ -1628,7 +1679,6 @@ impl eframe::App for App {
         }
     }
 }
-
 
 /// One file waiting to go into an IR slot.
 struct IrPlanRow {

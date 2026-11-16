@@ -74,7 +74,12 @@ pub(super) fn scan_backups(dir: &Path) -> Vec<BackupFile> {
         }
         let file = path.file_name().and_then(|s| s.to_str()).unwrap_or("").to_owned();
         let (slot, name, stamp, before_write) = parse_backup_name(&file);
-        let modified = e.metadata().ok().and_then(|m| m.modified().ok()).and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_secs());
+        let modified = e
+            .metadata()
+            .ok()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs());
         out.push(BackupFile { path, slot, name, when: stamp.or(modified), before_write });
     }
     out.sort_by(|a, b| b.when.cmp(&a.when).then_with(|| a.path.cmp(&b.path)));

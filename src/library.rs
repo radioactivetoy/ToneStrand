@@ -50,10 +50,7 @@ pub enum Action {
 }
 
 fn is_preset(p: &Path) -> bool {
-    matches!(
-        p.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(),
-        Some("hlx") | Some("hxpreset")
-    )
+    matches!(p.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref(), Some("hlx") | Some("hxpreset"))
 }
 
 /// The effects in a preset file, with their colours, for the cards and the search.
@@ -168,7 +165,11 @@ impl Library {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             let w = ui.available_width() - 580.0;
-            ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("🔍 Search names, folders or effects...").desired_width(w.max(200.0)));
+            ui.add(
+                egui::TextEdit::singleline(&mut self.search)
+                    .hint_text("🔍 Search names, folders or effects...")
+                    .desired_width(w.max(200.0)),
+            );
             if let Some(s) = theme::segmented(ui, &["Name", "Newest"], self.sort) {
                 self.sort = s;
             }
@@ -279,7 +280,11 @@ impl Library {
         }
         let send = ui.add_enabled(can_send, egui::Button::new("Send to the picked pedal slot"));
         let send = send
-            .on_hover_text(if e.pedal_file { "Write this preset into the slot picked in the pedal list" } else { "Converted to the pedal's format, then written into the slot picked in the pedal list" })
+            .on_hover_text(if e.pedal_file {
+                "Write this preset into the slot picked in the pedal list"
+            } else {
+                "Converted to the pedal's format, then written into the slot picked in the pedal list"
+            })
             .on_disabled_hover_text("Connect and pick a slot in the pedal list first");
         if send.clicked() {
             actions.push(Action::SendToPedal(e.path.clone()));
@@ -315,33 +320,34 @@ impl Library {
                 ui.set_height(118.0);
                 // Stack the card's contents, whatever layout the grid around it uses.
                 ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if e.pedal_file {
-                            theme::pill(ui, "PEDAL", ORANGE);
-                        } else {
-                            theme::pill(ui, "HLX", BLUE);
-                        }
-                        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            ui.add(egui::Label::new(RichText::new(&e.name).size(15.0).strong()).truncate());
+                    ui.horizontal(|ui| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if e.pedal_file {
+                                theme::pill(ui, "PEDAL", ORANGE);
+                            } else {
+                                theme::pill(ui, "HLX", BLUE);
+                            }
+                            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                                ui.add(egui::Label::new(RichText::new(&e.name).size(15.0).strong()).truncate());
+                            });
                         });
                     });
-                });
-                if !e.setlist.is_empty() {
-                    let leaf = e.setlist.rsplit('/').next().unwrap_or(&e.setlist);
-                    ui.add(egui::Label::new(RichText::new(format!("📁 {leaf}")).small().color(accent())).truncate()).on_hover_text(&e.setlist);
-                }
-                ui.add_space(4.0);
-                // A strip of the effects, in their colours.
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(3.0, 3.0);
-                    for (_, col) in e.blocks.iter().take(12) {
-                        let (r, _) = ui.allocate_exact_size(Vec2::new(16.0, 8.0), egui::Sense::hover());
-                        ui.painter().rect_filled(r, CornerRadius::same(2), *col);
+                    if !e.setlist.is_empty() {
+                        let leaf = e.setlist.rsplit('/').next().unwrap_or(&e.setlist);
+                        ui.add(egui::Label::new(RichText::new(format!("📁 {leaf}")).small().color(accent())).truncate())
+                            .on_hover_text(&e.setlist);
                     }
-                });
-                let names: Vec<&str> = e.blocks.iter().take(4).map(|b| b.0.as_str()).collect();
-                ui.add(egui::Label::new(RichText::new(names.join(" · ")).small().color(MUTED)).wrap());
+                    ui.add_space(4.0);
+                    // A strip of the effects, in their colours.
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(3.0, 3.0);
+                        for (_, col) in e.blocks.iter().take(12) {
+                            let (r, _) = ui.allocate_exact_size(Vec2::new(16.0, 8.0), egui::Sense::hover());
+                            ui.painter().rect_filled(r, CornerRadius::same(2), *col);
+                        }
+                    });
+                    let names: Vec<&str> = e.blocks.iter().take(4).map(|b| b.0.as_str()).collect();
+                    ui.add(egui::Label::new(RichText::new(names.join(" · ")).small().color(MUTED)).wrap());
                 });
             });
         let resp = r.response.interact(egui::Sense::click_and_drag());

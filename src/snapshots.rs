@@ -106,8 +106,29 @@ pub fn family_of_device(device: i64) -> Family {
     };
     match device {
         2162694 => stomp,
-        2162699 => Family { name: "HX Stomp XL", snapshots_ctrl: 12, midi_ctrl: 11, fs_first: 3, fs_count: 8, snapshot_count: 4, cc_switches: 8, ..stomp },
-        2162693 => Family { name: "HX Effects", snapshots_ctrl: 10, midi_ctrl: 9, fs_first: 3, fs_count: 6, snapshot_count: 4, positions: 9, max_blocks: 9, cc_switches: 6, fx_loops: 4, ..stomp },
+        2162699 => Family {
+            name: "HX Stomp XL",
+            snapshots_ctrl: 12,
+            midi_ctrl: 11,
+            fs_first: 3,
+            fs_count: 8,
+            snapshot_count: 4,
+            cc_switches: 8,
+            ..stomp
+        },
+        2162693 => Family {
+            name: "HX Effects",
+            snapshots_ctrl: 10,
+            midi_ctrl: 9,
+            fs_first: 3,
+            fs_count: 6,
+            snapshot_count: 4,
+            positions: 9,
+            max_blocks: 9,
+            cc_switches: 6,
+            fx_loops: 4,
+            ..stomp
+        },
         2162689 => Family { name: "Helix Floor", ..helix },
         2162690 => Family { name: "Helix Rack", ..helix },
         2162692 => Family { name: "Helix LT", exp_count: 2, fx_loops: 2, ..helix },
@@ -229,11 +250,8 @@ pub fn rename(doc: &mut Value, index: usize, name: &str) {
 fn store_into(doc: &mut Value, index: usize) {
     let f = family(doc);
     let blocks = hlx::blocks(doc);
-    let states: Vec<(String, String, bool)> = blocks
-        .iter()
-        .filter(|b| b.key.starts_with("block"))
-        .map(|b| (b.dsp.clone(), b.key.clone(), b.enabled.unwrap_or(true)))
-        .collect();
+    let states: Vec<(String, String, bool)> =
+        blocks.iter().filter(|b| b.key.starts_with("block")).map(|b| (b.dsp.clone(), b.key.clone(), b.enabled.unwrap_or(true))).collect();
     let knobs = snapshot_knobs(doc, f);
     let values: Vec<(String, String, String, Value)> = knobs
         .into_iter()
@@ -303,11 +321,7 @@ pub fn delete(doc: &mut Value, index: usize) -> bool {
         .filter_map(|(i, _)| Some((*i, doc.pointer(&format!("/data/tone/snapshot{i}"))?.clone())))
         .collect();
     // The same snapshot stays picked; when it was the one deleted, the next one (or the last).
-    let new_cur = kept
-        .iter()
-        .position(|(i, _)| *i == cur)
-        .or_else(|| kept.iter().position(|(i, _)| *i > index))
-        .unwrap_or(kept.len() - 1);
+    let new_cur = kept.iter().position(|(i, _)| *i == cur).or_else(|| kept.iter().position(|(i, _)| *i > index)).unwrap_or(kept.len() - 1);
     let n = kept.len();
     for (k, (_, mut v)) in kept.into_iter().enumerate() {
         if let Some(o) = v.as_object_mut() {
@@ -501,7 +515,8 @@ pub fn block_switched(doc: &mut Value) {
 pub fn release(doc: &mut Value, b: &HlxBlock, knob: &str) {
     assign(doc, b, knob, None, 0.0, 1.0, None);
     for (i, _) in list(doc) {
-        if let Some(m) = doc.pointer_mut(&format!("/data/tone/snapshot{i}/controllers/{}/{}", b.dsp, b.key)).and_then(Value::as_object_mut) {
+        if let Some(m) = doc.pointer_mut(&format!("/data/tone/snapshot{i}/controllers/{}/{}", b.dsp, b.key)).and_then(Value::as_object_mut)
+        {
             m.remove(knob);
         }
     }
@@ -573,7 +588,6 @@ pub fn set_footswitch(doc: &mut Value, b: &HlxBlock, index: Option<i64>, momenta
         }
     }
 }
-
 
 /// Change which unit a preset is for. Units without parallel lanes get their
 /// lower-lane blocks moved onto the main lane where there is room.
@@ -699,7 +713,14 @@ mod unit_tests {
 
         // A Helix preset with a block on the lower lane gets a split and a merge.
         let mut doc = helix;
-        hlx::place_model(&mut doc, "dsp0", 1, 2, None, &hlx::NewModel { model: "HD2_Chorus70sChorus", stereo: false, params: &[], cab: None });
+        hlx::place_model(
+            &mut doc,
+            "dsp0",
+            1,
+            2,
+            None,
+            &hlx::NewModel { model: "HD2_Chorus70sChorus", stereo: false, params: &[], cab: None },
+        );
         hlx::ensure_split(&mut doc, "dsp0", &|_| Vec::new());
         let (_, sp, jp) = hlx::split_of(&doc, "dsp0").unwrap();
         assert_eq!((sp, jp), (2, 3));

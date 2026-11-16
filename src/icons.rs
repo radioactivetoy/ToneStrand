@@ -32,7 +32,10 @@ const COLUMNS: [(&str, Column); 19] = [
     ("amp", Column { centre: 223, left: Some(197), kinds: &["guitar amp", "bass amp", "amp clone", "amp+cab clone"] }),
     ("preamp", Column { centre: 305, left: Some(279), kinds: &["guitar pre", "bass pre", "mic pre", "clone"] }),
     ("cab", Column { centre: 388, left: Some(361), kinds: &["1x cab", "1 cab ir", "2x cab"] }),
-    ("distortion", Column { centre: 466, left: Some(439), kinds: &["distortion", "boost", "overdrive", "fuzz", "bitcrusher", "megaphone", "clone"] }),
+    (
+        "distortion",
+        Column { centre: 466, left: Some(439), kinds: &["distortion", "boost", "overdrive", "fuzz", "bitcrusher", "megaphone", "clone"] },
+    ),
     ("delay", Column { centre: 543, left: Some(516), kinds: &["analog", "digital", "tape", "multitap", "sustain", "special"] }),
     ("reverb", Column { centre: 621, left: Some(594), kinds: &["spaces", "spring", "plate", "special"] }),
     ("modulation", Column { centre: 699, left: Some(672), kinds: &["phaser", "tremolo", "flanger", "chorus", "rotary", "ring mod"] }),
@@ -156,7 +159,18 @@ fn row_for(column: &str, category: &str, symbol: &str, name: &str) -> usize {
                 2
             } else if has(&["spring", "63 "]) {
                 1
-            } else if has(&["shimmer", "particle", "ganymede", "glitz", "octo", "searchlight", "plateaux", "double tank", "cave", "dynamic"]) {
+            } else if has(&[
+                "shimmer",
+                "particle",
+                "ganymede",
+                "glitz",
+                "octo",
+                "searchlight",
+                "plateaux",
+                "double tank",
+                "cave",
+                "dynamic",
+            ]) {
                 3
             } else {
                 0
@@ -379,7 +393,15 @@ pub fn kind_label(category: &str, paired: bool) -> String {
 
 /// Paint a model's tile into `rect`. An amp + cab gets the amp's tile with a small cab tile on
 /// its lower right corner, so it reads differently from a plain amp. Returns whether it drew.
-pub fn paint_model(p: &egui::Painter, ctx: &egui::Context, rect: egui::Rect, category: &str, symbol: &str, name: &str, tint: Color32) -> bool {
+pub fn paint_model(
+    p: &egui::Painter,
+    ctx: &egui::Context,
+    rect: egui::Rect,
+    category: &str,
+    symbol: &str,
+    name: &str,
+    tint: Color32,
+) -> bool {
     let uv = egui::Rect::from_min_max(egui::Pos2::ZERO, egui::Pos2::new(1.0, 1.0));
     if is_amp_cab(category) {
         let Some(amp) = for_model(ctx, "Amp", symbol, name) else { return false };

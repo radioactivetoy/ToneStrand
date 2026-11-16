@@ -187,12 +187,7 @@ pub fn start_discovery(tx: Sender<BoxInfo>) -> Option<mdns_sd::ServiceDaemon> {
             while let Ok(event) = rx.recv() {
                 if let mdns_sd::ServiceEvent::ServiceResolved(info) = event {
                     let id = info.get_property_val_str("id").unwrap_or("").to_owned();
-                    let instance = info
-                        .get_fullname()
-                        .split("._")
-                        .next()
-                        .unwrap_or("Helrig Box")
-                        .to_owned();
+                    let instance = info.get_fullname().split("._").next().unwrap_or("Helrig Box").to_owned();
                     let addr = info
                         .get_addresses()
                         .iter()
@@ -220,10 +215,7 @@ pub fn url_host(host: &str) -> String {
 }
 
 fn agent() -> ureq::Agent {
-    ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(3))
-        .timeout(Duration::from_secs(5))
-        .build()
+    ureq::AgentBuilder::new().timeout_connect(Duration::from_secs(3)).timeout(Duration::from_secs(5)).build()
 }
 
 fn read_json(r: Result<ureq::Response, ureq::Error>) -> Result<(u16, serde_json::Value), String> {

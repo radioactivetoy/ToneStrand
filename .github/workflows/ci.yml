@@ -13,9 +13,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy
+          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
       # Tests that need HX Edit's files skip themselves when it isn't installed (as here).
+      - name: Formatting
+        run: cargo fmt --check
       - name: Clippy (warnings are errors)
         run: cargo clippy --all-targets -- -D warnings
       - name: Tests

@@ -89,12 +89,32 @@ impl ToneLib {
                 match ext(p).as_str() {
                     "nam" => {
                         let c = converted_path(p);
-                        let problem = std::fs::read_to_string(p).map_err(|e| e.to_string()).and_then(|t| crate::nam::convert(&t, opts).map(|_| ())).err();
-                        entries.push(Entry { kind: Kind::Nam, path: p.clone(), name, folder, converted: c.is_file().then_some(c), problem });
+                        let problem = std::fs::read_to_string(p)
+                            .map_err(|e| e.to_string())
+                            .and_then(|t| crate::nam::convert(&t, opts).map(|_| ()))
+                            .err();
+                        entries.push(Entry {
+                            kind: Kind::Nam,
+                            path: p.clone(),
+                            name,
+                            folder,
+                            converted: c.is_file().then_some(c),
+                            problem,
+                        });
                     }
                     "wav" if !paired.contains(p) => {
-                        let nam_wav = std::fs::read(p).ok().and_then(|b| crate::irs::wav_to_audio(&b).ok()).is_some_and(|(a, _)| crate::irs::is_nam_capture(&a));
-                        entries.push(Entry { kind: if nam_wav { Kind::NamWav } else { Kind::Ir }, path: p.clone(), name, folder, converted: None, problem: None });
+                        let nam_wav = std::fs::read(p)
+                            .ok()
+                            .and_then(|b| crate::irs::wav_to_audio(&b).ok())
+                            .is_some_and(|(a, _)| crate::irs::is_nam_capture(&a));
+                        entries.push(Entry {
+                            kind: if nam_wav { Kind::NamWav } else { Kind::Ir },
+                            path: p.clone(),
+                            name,
+                            folder,
+                            converted: None,
+                            problem: None,
+                        });
                     }
                     _ => {}
                 }
@@ -321,30 +341,39 @@ impl ToneLib {
         // Deleting files, after asking.
         if let Some(files) = self.confirm_delete.clone() {
             let mut result = None;
-            egui::Window::new("Delete files").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
-                let s = if files.len() == 1 { "" } else { "s" };
-                if crate::files::HAS_RECYCLE_BIN {
-                    ui.label(format!("Move {} file{s} to the Recycle Bin?", files.len()));
-                } else {
-                    ui.label(format!("Delete {} file{s} from your library? This can't be undone.", files.len()));
-                }
-                for f in files.iter().take(8) {
-                    ui.label(RichText::new(f.file_name().and_then(|s| s.to_str()).unwrap_or("")).small().color(MUTED));
-                }
-                ui.horizontal(|ui| {
-                    if ui.button(RichText::new(if crate::files::HAS_RECYCLE_BIN { "Move to Recycle Bin" } else { "Delete" }).color(BAD)).clicked() {
-                        result = Some(true);
+            egui::Window::new("Delete files").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(
+                ui.ctx(),
+                |ui| {
+                    let s = if files.len() == 1 { "" } else { "s" };
+                    if crate::files::HAS_RECYCLE_BIN {
+                        ui.label(format!("Move {} file{s} to the Recycle Bin?", files.len()));
+                    } else {
+                        ui.label(format!("Delete {} file{s} from your library? This can't be undone.", files.len()));
                     }
-                    if ui.button("Cancel").clicked() {
-                        result = Some(false);
+                    for f in files.iter().take(8) {
+                        ui.label(RichText::new(f.file_name().and_then(|s| s.to_str()).unwrap_or("")).small().color(MUTED));
                     }
-                });
-            });
+                    ui.horizontal(|ui| {
+                        if ui
+                            .button(RichText::new(if crate::files::HAS_RECYCLE_BIN { "Move to Recycle Bin" } else { "Delete" }).color(BAD))
+                            .clicked()
+                        {
+                            result = Some(true);
+                        }
+                        if ui.button("Cancel").clicked() {
+                            result = Some(false);
+                        }
+                    });
+                },
+            );
             if let Some(yes) = result {
                 if yes {
                     let n = files.iter().filter(|f| crate::files::delete_file(f).is_ok()).count();
                     let verb = if crate::files::HAS_RECYCLE_BIN { "Moved to the Recycle Bin:" } else { "Deleted" };
-                    actions.push(Action::Note(n == files.len(), format!("{verb} {n} of {} file{}", files.len(), if files.len() == 1 { "" } else { "s" })));
+                    actions.push(Action::Note(
+                        n == files.len(),
+                        format!("{verb} {n} of {} file{}", files.len(), if files.len() == 1 { "" } else { "s" }),
+                    ));
                     rescan = true;
                 }
                 self.confirm_delete = None;

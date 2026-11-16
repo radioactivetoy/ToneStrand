@@ -42,7 +42,13 @@ fn knobs_of(json: &serde_json::Value, b: &HlxBlock) -> Vec<String> {
 
 /// A "+ Add" menu: pick a block, then "On/Off" (when allowed) or one of its knobs.
 /// Returns (block, Some(knob)) or (block, None) for on/off.
-fn add_menu(ui: &mut egui::Ui, json: &serde_json::Value, cat: Option<&Catalog>, label: &str, allow_onoff: bool) -> Option<(HlxBlock, Option<String>)> {
+fn add_menu(
+    ui: &mut egui::Ui,
+    json: &serde_json::Value,
+    cat: Option<&Catalog>,
+    label: &str,
+    allow_onoff: bool,
+) -> Option<(HlxBlock, Option<String>)> {
     let mut out = None;
     ui.menu_button(RichText::new(label).color(accent()), |ui| {
         let blocks: Vec<HlxBlock> = hlx::blocks(json).into_iter().filter(|b| b.key.starts_with("block")).collect();
@@ -89,7 +95,13 @@ fn knob_row(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catalo
                     json.pointer(&format!("/data/tone/snapshot{i}/controllers/{}/{}/{knob}/@value", b.dsp, b.key)).cloned()
                 };
                 let shown = match v {
-                    Some(serde_json::Value::Bool(x)) => if x { "On".to_owned() } else { "Off".to_owned() },
+                    Some(serde_json::Value::Bool(x)) => {
+                        if x {
+                            "On".to_owned()
+                        } else {
+                            "Off".to_owned()
+                        }
+                    }
                     Some(n) => n.as_f64().map(|f| crate::catalog::format_value(param.as_ref(), f)).unwrap_or_else(|| "-".into()),
                     None => "-".into(),
                 };
@@ -234,7 +246,10 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
             Tab::Snapshots => {
                 let list: Vec<_> = assignments.iter().filter(|a| a.src == Source::Snapshots).collect();
                 if list.is_empty() {
-                    ui.label(RichText::new("No knob is stored per snapshot yet. Turn a knob while a snapshot is picked, or add one here.").color(MUTED));
+                    ui.label(
+                        RichText::new("No knob is stored per snapshot yet. Turn a knob while a snapshot is picked, or add one here.")
+                            .color(MUTED),
+                    );
                 }
                 for a in list {
                     knob_row(ui, json, cat, a, dirty);
@@ -305,8 +320,20 @@ const FS_LABEL_MAX: usize = 16;
 const MMC_MSGS: [&str; 8] = ["Stop", "Play", "Forward", "Rewind", "Pause", "Record", "Punch In", "Punch Out"];
 const MODIFIERS: [&str; 5] = ["None", "Shift", "Alt", "Ctrl", "Win/Cmd"];
 const LOOPER_FNS: [&str; 14] = [
-    "Play", "Stop", "Play/Stop", "Record", "Overdub", "Record/Overdub", "Play Once",
-    "Reverse", "Forward", "Forward/Reverse", "Half Speed", "Full Speed", "Half/Full Speed", "Undo",
+    "Play",
+    "Stop",
+    "Play/Stop",
+    "Record",
+    "Overdub",
+    "Record/Overdub",
+    "Play Once",
+    "Reverse",
+    "Forward",
+    "Forward/Reverse",
+    "Half Speed",
+    "Full Speed",
+    "Half/Full Speed",
+    "Undo",
 ];
 const BEHAVIORS: [&str; 2] = ["Press/Release", "Press/Hold"];
 
@@ -420,7 +447,11 @@ fn specs_for(kind: SlotKind, device: i64, snap_count: usize) -> Vec<CmdSpec> {
                     switch_label: "",
                     momentary: false,
                     fields: vec![
-                        FieldSpec::Choice { key: "@select", label: "Jack", options: enum_options(&["None", "1 (Tip)", "2 (Ring)", "1 and 2"]) },
+                        FieldSpec::Choice {
+                            key: "@select",
+                            label: "Jack",
+                            options: enum_options(&["None", "1 (Tip)", "2 (Ring)", "1 and 2"]),
+                        },
                         wait(),
                     ],
                 });
@@ -510,7 +541,11 @@ fn specs_for(kind: SlotKind, device: i64, snap_count: usize) -> Vec<CmdSpec> {
                     name: "Ext Amp",
                     switch_label: "Ext Amp",
                     momentary: false,
-                    fields: vec![FieldSpec::Choice { key: "@select", label: "Jack", options: enum_options(&["1 (Tip)", "2 (Ring)", "1 and 2"]) }],
+                    fields: vec![FieldSpec::Choice {
+                        key: "@select",
+                        label: "Jack",
+                        options: enum_options(&["1 (Tip)", "2 (Ring)", "1 and 2"]),
+                    }],
                 });
             }
             v.extend([
@@ -583,12 +618,7 @@ pub fn slots_for_family(fam: snapshots::Family) -> Vec<Vec<CmdSlot>> {
             kind: SlotKind::Instant,
         })
         .collect();
-    let fs = |n: i64| CmdSlot {
-        key: format!("commandFS{n}"),
-        short: format!("FS {n}"),
-        title: format!("FS {n}"),
-        kind: SlotKind::Switch,
-    };
+    let fs = |n: i64| CmdSlot { key: format!("commandFS{n}"), short: format!("FS {n}"), title: format!("FS {n}"), kind: SlotKind::Switch };
     let exp = |n: i64| CmdSlot {
         key: format!("commandExpPedal{n}"),
         short: format!("EXP {n}"),
@@ -597,12 +627,7 @@ pub fn slots_for_family(fam: snapshots::Family) -> Vec<Vec<CmdSlot>> {
     };
     if fam.name.starts_with("Helix") {
         let mut r2: Vec<CmdSlot> = (1..=6).map(fs).collect();
-        r2.push(CmdSlot {
-            key: "commandExpSwitch".into(),
-            short: "EXP Toe".into(),
-            title: "EXP Toe".into(),
-            kind: SlotKind::Switch,
-        });
+        r2.push(CmdSlot { key: "commandExpSwitch".into(), short: "EXP Toe".into(), title: "EXP Toe".into(), kind: SlotKind::Switch });
         let mut r3: Vec<CmdSlot> = (7..=12).map(fs).collect();
         for n in 1..=fam.exp_count {
             r3.push(exp(n));
@@ -696,7 +721,13 @@ fn set_slot_cmd_type(doc: &mut serde_json::Value, slot: &CmdSlot, spec: Option<&
                 let fk = match f {
                     FieldSpec::Range { key, .. } | FieldSpec::Choice { key, .. } => *key,
                 };
-                let def = if fk == "@channel" { 1 } else if fk == "@max" { 127 } else { 0 };
+                let def = if fk == "@channel" {
+                    1
+                } else if fk == "@max" {
+                    127
+                } else {
+                    0
+                };
                 base.insert(fk.into(), serde_json::json!(def));
                 snap_entry.insert(fk.into(), serde_json::json!(def));
             }
@@ -721,7 +752,9 @@ fn set_slot_field(doc: &mut serde_json::Value, slot_key: &str, snap: usize, fiel
     if field != "@fs_label" {
         if let Some(s) = doc.pointer_mut(&format!("/data/tone/snapshot{snap}")).and_then(serde_json::Value::as_object_mut) {
             if let Some(cmds) = s.entry("commands").or_insert_with(|| serde_json::json!({})).as_object_mut() {
-                if let Some(c) = cmds.entry(slot_key.to_owned()).or_insert_with(|| serde_json::json!({ "@fs_enabled": false })).as_object_mut() {
+                if let Some(c) =
+                    cmds.entry(slot_key.to_owned()).or_insert_with(|| serde_json::json!({ "@fs_enabled": false })).as_object_mut()
+                {
                     c.insert(field.into(), value);
                 }
             }
@@ -734,11 +767,7 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
     let device = snapshots::device(json);
     let cur_snap = snapshots::current(json);
     let snap_list = snapshots::list(json);
-    let snap_name = snap_list
-        .iter()
-        .find(|(i, _)| *i == cur_snap)
-        .map(|(_, n)| n.as_str())
-        .unwrap_or("");
+    let snap_name = snap_list.iter().find(|(i, _)| *i == cur_snap).map(|(_, n)| n.as_str()).unwrap_or("");
     let snap_badge = if snap_name.is_empty() || snap_name.eq_ignore_ascii_case(&format!("SNAPSHOT {}", cur_snap + 1)) {
         format!("Snapshot {}", cur_snap + 1)
     } else {
@@ -838,21 +867,18 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                 ui.add_space(12.0);
                 ui.label(RichText::new("Command").color(MUTED));
                 let shown = current_spec.map(|s| s.name).unwrap_or("None");
-                egui::ComboBox::from_id_salt(format!("cc-type-{}", slot.key))
-                    .selected_text(shown)
-                    .width(170.0)
-                    .show_ui(ui, |ui| {
-                        if ui.selectable_label(current_spec.is_none(), "None").clicked() && current_spec.is_some() {
-                            set_slot_cmd_type(json, &slot, None);
+                egui::ComboBox::from_id_salt(format!("cc-type-{}", slot.key)).selected_text(shown).width(170.0).show_ui(ui, |ui| {
+                    if ui.selectable_label(current_spec.is_none(), "None").clicked() && current_spec.is_some() {
+                        set_slot_cmd_type(json, &slot, None);
+                        *dirty = true;
+                    }
+                    for sp in &specs {
+                        if ui.selectable_label(current_id == sp.id, sp.name).clicked() && current_id != sp.id {
+                            set_slot_cmd_type(json, &slot, Some(sp));
                             *dirty = true;
                         }
-                        for sp in &specs {
-                            if ui.selectable_label(current_id == sp.id, sp.name).clicked() && current_id != sp.id {
-                                set_slot_cmd_type(json, &slot, Some(sp));
-                                *dirty = true;
-                            }
-                        }
-                    });
+                    }
+                });
                 if let (SlotKind::Switch, Some(map)) = (slot.kind, current_map.as_ref()) {
                     ui.add_space(12.0);
                     ui.label(RichText::new("Switch label").color(MUTED));
@@ -884,12 +910,10 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                             ui.set_width(185.0);
                             match field {
                                 FieldSpec::Choice { key, label, options } => {
-                                    let mut val = map.get(*key).and_then(serde_json::Value::as_i64).unwrap_or(if *key == "@channel" { 1 } else { 0 });
-                                    let text = options
-                                        .iter()
-                                        .find(|(v, _)| *v == val)
-                                        .map(|(_, n)| n.clone())
-                                        .unwrap_or_else(|| val.to_string());
+                                    let mut val =
+                                        map.get(*key).and_then(serde_json::Value::as_i64).unwrap_or(if *key == "@channel" { 1 } else { 0 });
+                                    let text =
+                                        options.iter().find(|(v, _)| *v == val).map(|(_, n)| n.clone()).unwrap_or_else(|| val.to_string());
                                     ui.horizontal(|ui| {
                                         ui.label(RichText::new(*label).small().color(MUTED));
                                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -935,10 +959,7 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                                         });
                                     });
                                     ui.add_space(4.0);
-                                    if ui
-                                        .add(egui::Slider::new(&mut val, *min..=*max).show_value(false).trailing_fill(true))
-                                        .changed()
-                                    {
+                                    if ui.add(egui::Slider::new(&mut val, *min..=*max).show_value(false).trailing_fill(true)).changed() {
                                         set_slot_field(json, &slot.key, cur_snap, key, serde_json::json!(val));
                                         *dirty = true;
                                     }

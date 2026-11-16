@@ -208,7 +208,11 @@ pub fn pane(
     }
     ui.add_space(4.0);
     if let Some(parent) = pane.adding.clone() {
-        let r = ui.add(egui::TextEdit::singleline(&mut pane.new_name).hint_text(if parent.is_empty() { "Folder name".to_owned() } else { format!("Folder in {parent}") }));
+        let r = ui.add(egui::TextEdit::singleline(&mut pane.new_name).hint_text(if parent.is_empty() {
+            "Folder name".to_owned()
+        } else {
+            format!("Folder in {parent}")
+        }));
         r.request_focus();
         ui.horizontal(|ui| {
             let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
@@ -244,7 +248,10 @@ pub fn pane(
 }
 
 fn ui_paint_drop(r: &egui::Response) {
-    r.ctx
-        .layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop-hint")))
-        .rect_stroke(r.rect.expand(2.0), egui::CornerRadius::same(6), egui::Stroke::new(2.0_f32, accent()), egui::StrokeKind::Outside);
+    r.ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop-hint"))).rect_stroke(
+        r.rect.expand(2.0),
+        egui::CornerRadius::same(6),
+        egui::Stroke::new(2.0_f32, accent()),
+        egui::StrokeKind::Outside,
+    );
 }

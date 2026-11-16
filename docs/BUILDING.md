@@ -63,6 +63,7 @@ from `src/`. Adding a photo: drop `<name>.png` into that folder and reference it
 ```sh
 cargo test
 cargo clippy --all-targets -- -D warnings
+cargo fmt --check   # run `cargo fmt` to fix
 ```
 
 49 tests: the session against a fake pedal (`fakepedal.rs`: handshake order, refusals,

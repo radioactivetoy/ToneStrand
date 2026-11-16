@@ -22,7 +22,8 @@ pub const TEXT: Color32 = Color32::from_rgb(0xe6, 0xe9, 0xef);
 pub const MUTED: Color32 = Color32::from_rgb(0x8b, 0x93, 0xa7);
 /// The accent colour, picked in the top bar (teal by default).
 static ACCENT_RGB: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x2ec4b6);
-pub const ACCENTS: [(u32, &str); 6] = [(0x2ec4b6, "Teal"), (0x4fb3ff, "Blue"), (0xc6e44a, "Lime"), (0xff5d8f, "Pink"), (0xff9f1c, "Orange"), (0xa879ff, "Violet")];
+pub const ACCENTS: [(u32, &str); 6] =
+    [(0x2ec4b6, "Teal"), (0x4fb3ff, "Blue"), (0xc6e44a, "Lime"), (0xff5d8f, "Pink"), (0xff9f1c, "Orange"), (0xa879ff, "Violet")];
 pub fn accent() -> Color32 {
     let v = ACCENT_RGB.load(std::sync::atomic::Ordering::Relaxed);
     Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8)
@@ -182,7 +183,13 @@ pub fn help(ui: &mut egui::Ui, text: &str) -> egui::Response {
         p.circle_filled(c, 7.5, accent().linear_multiply(0.25));
     }
     p.circle_stroke(c, 7.0, Stroke::new(1.2_f32, if hot { accent() } else { MUTED.linear_multiply(0.8) }));
-    p.text(c + egui::vec2(0.0, 0.5), egui::Align2::CENTER_CENTER, "?", egui::FontId::proportional(10.5), if hot { accent() } else { MUTED });
+    p.text(
+        c + egui::vec2(0.0, 0.5),
+        egui::Align2::CENTER_CENTER,
+        "?",
+        egui::FontId::proportional(10.5),
+        if hot { accent() } else { MUTED },
+    );
     resp.on_hover_ui(|ui| {
         ui.set_max_width(300.0);
         ui.label(text);
@@ -222,7 +229,8 @@ pub fn segmented(ui: &mut egui::Ui, labels: &[&str], current: usize) -> Option<u
                 ui.spacing_mut().item_spacing.x = 2.0;
                 for (i, l) in labels.iter().enumerate() {
                     let on = i == current;
-                    let text = egui::RichText::new(*l).size(14.5).strong().color(if on { Color32::from_rgb(0x08, 0x1a, 0x18) } else { MUTED });
+                    let text =
+                        egui::RichText::new(*l).size(14.5).strong().color(if on { Color32::from_rgb(0x08, 0x1a, 0x18) } else { MUTED });
                     let b = egui::Button::new(text)
                         .fill(if on { accent() } else { Color32::TRANSPARENT })
                         .stroke(Stroke::NONE)
@@ -245,7 +253,11 @@ pub fn pill(ui: &mut egui::Ui, text: &str, colour: Color32) {
         .corner_radius(CornerRadius::same(9))
         .inner_margin(egui::Margin::symmetric(8, 2))
         .show(ui, |ui| {
-            ui.label(egui::RichText::new(text).small().strong().color(Color32::from_rgb(colour.r() / 2 + 128, colour.g() / 2 + 128, colour.b() / 2 + 128)));
+            ui.label(egui::RichText::new(text).small().strong().color(Color32::from_rgb(
+                colour.r() / 2 + 128,
+                colour.g() / 2 + 128,
+                colour.b() / 2 + 128,
+            )));
         });
 }
 

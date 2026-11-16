@@ -219,9 +219,7 @@ impl Session {
         hello.flags = FLAG_HANDSHAKE;
         self.write(&hello)?;
         if !self.wait_incoming(HANDSHAKE_WAIT)? {
-            return Err(SessionError::Protocol(
-                "the pedal did not answer the opening handshake - try unplugging it for a moment".into(),
-            ));
+            return Err(SessionError::Protocol("the pedal did not answer the opening handshake - try unplugging it for a moment".into()));
         }
         if let Some(ch) = self.channels.get_mut(&id.device) {
             ch.reader.take_messages();
@@ -292,9 +290,7 @@ impl Session {
             payload.extend_from_slice(chunk);
             if let Err(e) = self.write(&Frame::new(id.device, id.host, payload)) {
                 if i > 0 {
-                    self.broken = Some(format!(
-                        "a transfer stopped half way ({e}); power-cycle the pedal before reconnecting"
-                    ));
+                    self.broken = Some(format!("a transfer stopped half way ({e}); power-cycle the pedal before reconnecting"));
                 }
                 return Err(e);
             }
@@ -370,11 +366,7 @@ impl Session {
             } else if pinged {
                 self.ack_channel(id)?;
             }
-            let ready = self
-                .channels
-                .get_mut(&id.device)
-                .map(|c| c.reader.take_messages())
-                .unwrap_or_default();
+            let ready = self.channels.get_mut(&id.device).map(|c| c.reader.take_messages()).unwrap_or_default();
             for v in ready {
                 match Message::from_value(v) {
                     Message::Response { txn: t, status, result } if t == txn => {
@@ -443,11 +435,7 @@ impl Session {
             .map(|a| {
                 a.iter()
                     .map(|e| match e {
-                        Value::Map(pairs, _) => pairs
-                            .first()
-                            .and_then(|(_, v)| v.as_str())
-                            .map(clean)
-                            .unwrap_or_default(),
+                        Value::Map(pairs, _) => pairs.first().and_then(|(_, v)| v.as_str()).map(clean).unwrap_or_default(),
                         other => other.as_str().map(clean).unwrap_or_default(),
                     })
                     .collect()
@@ -457,22 +445,16 @@ impl Session {
 
     pub fn presets(&mut self, setlist: i64) -> Result<Vec<String>> {
         self.open_browse();
-        let (_, v) = self.request(
-            op::LIST_PRESETS,
-            Value::map(vec![(key::SETLIST, Value::int(setlist)), (key::ARGS, Value::int(2))]),
-        )?;
+        let (_, v) = self.request(op::LIST_PRESETS, Value::map(vec![(key::SETLIST, Value::int(setlist)), (key::ARGS, Value::int(2))]))?;
         let Some(entries) = v.as_array() else {
             return Err(SessionError::Protocol("the preset list was not a list".into()));
         };
         Ok(entries
             .iter()
             .map(|e| match e {
-                Value::Map(pairs, _) => pairs
-                    .first()
-                    .and_then(|(_, v)| v.get(key::NAME))
-                    .and_then(Value::as_str)
-                    .map(clean)
-                    .unwrap_or_default(),
+                Value::Map(pairs, _) => {
+                    pairs.first().and_then(|(_, v)| v.get(key::NAME)).and_then(Value::as_str).map(clean).unwrap_or_default()
+                }
                 _ => String::new(),
             })
             .collect())
@@ -480,10 +462,7 @@ impl Session {
 
     /// Load a preset and wait until the pedal reports it as the current one.
     pub fn select_preset(&mut self, setlist: i64, index: i64) -> Result<()> {
-        self.request(
-            op::SELECT_PRESET,
-            Value::map(vec![(key::SETLIST, Value::int(setlist)), (key::PRESET_INDEX, Value::int(index))]),
-        )?;
+        self.request(op::SELECT_PRESET, Value::map(vec![(key::SETLIST, Value::int(setlist)), (key::PRESET_INDEX, Value::int(index))]))?;
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
             let _ = self.idle(Duration::from_millis(40));
@@ -506,10 +485,7 @@ impl Session {
     /// The loaded preset's document (the edit buffer).
     pub fn read_current(&mut self) -> Result<Vec<u8>> {
         let (_, v) = self.request(op::READ_PRESET, Value::Nil)?;
-        let bytes = v
-            .as_bin()
-            .map(|b| b.to_vec())
-            .ok_or_else(|| SessionError::Protocol("the pedal sent no preset document".into()))?;
+        let bytes = v.as_bin().map(|b| b.to_vec()).ok_or_else(|| SessionError::Protocol("the pedal sent no preset document".into()))?;
         crate::devpreset::DevicePreset::parse(&bytes).map_err(SessionError::Protocol)?;
         Ok(bytes)
     }
@@ -519,11 +495,7 @@ impl Session {
         self.open_browse();
         let (_, v) = self.request(
             op::FETCH_PRESET,
-            Value::map(vec![
-                (key::SETLIST, Value::int(setlist)),
-                (key::PRESET_INDEX, Value::int(index)),
-                (key::ARGS, Value::int(2)),
-            ]),
+            Value::map(vec![(key::SETLIST, Value::int(setlist)), (key::PRESET_INDEX, Value::int(index)), (key::ARGS, Value::int(2))]),
         )?;
         let Some(bytes) = v.as_bin().map(|b| b.to_vec()).filter(|b| !b.is_empty()) else {
             return Ok(None);
@@ -535,9 +507,8 @@ impl Session {
     /// Write a document straight into a slot and name it. Returns the bytes sent, to compare
     /// with what reads back.
     pub fn write_slot(&mut self, setlist: i64, index: i64, name: &str, doc: Vec<u8>) -> Result<Vec<u8>> {
-        let parsed = crate::devpreset::DevicePreset::parse(&doc).map_err(|e| {
-            SessionError::Protocol(format!("refusing to write a non-pedal preset document to the unit ({e})"))
-        })?;
+        let parsed = crate::devpreset::DevicePreset::parse(&doc)
+            .map_err(|e| SessionError::Protocol(format!("refusing to write a non-pedal preset document to the unit ({e})")))?;
         let doc = parsed.encode_checked().map_err(SessionError::Protocol)?;
         if doc.len() > u16::MAX as usize {
             return Err(SessionError::Protocol("the preset document is too large for a pedal slot".into()));
@@ -582,10 +553,7 @@ impl Session {
 
     pub fn clear_slot(&mut self, setlist: i64, index: i64) -> Result<()> {
         self.open_browse();
-        self.request(
-            op::CLEAR_SLOT,
-            Value::map(vec![(key::SETLIST, Value::int(setlist)), (key::PRESET_INDEX, Value::int(index))]),
-        )?;
+        self.request(op::CLEAR_SLOT, Value::map(vec![(key::SETLIST, Value::int(setlist)), (key::PRESET_INDEX, Value::int(index))]))?;
         self.browse_open = false;
         std::thread::sleep(SETTLE_FLASH);
         Ok(())
@@ -626,19 +594,13 @@ impl Session {
 
     /// Switch one block of the loaded preset on or off, live.
     pub fn set_enabled(&mut self, block: i64, enabled: bool) -> Result<()> {
-        self.request(
-            op::SET_ENABLED,
-            Value::map(vec![(key::BLOCK, Value::int(block)), (key::ENABLED, Value::Bool(enabled))]),
-        )?;
+        self.request(op::SET_ENABLED, Value::map(vec![(key::BLOCK, Value::int(block)), (key::ENABLED, Value::Bool(enabled))]))?;
         Ok(())
     }
 
     /// Move the pedal's editing cursor to a block; model changes need it there first.
     pub fn select_block(&mut self, block: i64) -> Result<()> {
-        self.request(
-            op::SELECT_BLOCK,
-            Value::map(vec![(key::BLOCK, Value::int(block)), (key::PATH, Value::int(0))]),
-        )?;
+        self.request(op::SELECT_BLOCK, Value::map(vec![(key::BLOCK, Value::int(block)), (key::PATH, Value::int(0))]))?;
         Ok(())
     }
 
@@ -651,11 +613,7 @@ impl Session {
                 (key::BLOCK, Value::int(block)),
                 (
                     key::OPCODE, // the model descriptor rides on key 100
-                    Value::map(vec![
-                        (23, Value::Bool(paired.is_some())),
-                        (25, Value::int(model)),
-                        (26, Value::int(paired.unwrap_or(-1))),
-                    ]),
+                    Value::map(vec![(23, Value::Bool(paired.is_some())), (25, Value::int(model)), (26, Value::int(paired.unwrap_or(-1)))]),
                 ),
             ]),
         )?;
@@ -665,13 +623,7 @@ impl Session {
     /// Put a new block into an empty slot of the loaded preset (op 39):
     /// `{98: slot, 99: {19: 6|7, 20: block body without knob values}}`.
     pub fn add_block(&mut self, block: i64, slot: Value) -> Result<()> {
-        self.request(
-            op::ADD_BLOCK,
-            Value::map(vec![
-                (key::BLOCK, Value::int(block)),
-                (99, slot),
-            ]),
-        )?;
+        self.request(op::ADD_BLOCK, Value::map(vec![(key::BLOCK, Value::int(block)), (99, slot)]))?;
         Ok(())
     }
 
@@ -935,9 +887,8 @@ pub fn pedal_name(name: &str, max_len: usize) -> String {
 /// A note for the person when a name will read differently on the pedal.
 pub fn name_note(name: &str, max_len: usize) -> Option<String> {
     let on_pedal = pedal_name(name, max_len);
-    (on_pedal != clean(name)).then(|| {
-        format!("On the pedal the name reads \"{on_pedal}\" (it keeps up to {max_len} plain letters, digits and symbols)")
-    })
+    (on_pedal != clean(name))
+        .then(|| format!("On the pedal the name reads \"{on_pedal}\" (it keeps up to {max_len} plain letters, digits and symbols)"))
 }
 
 /// A name as the pedal takes it, with the trailing zero byte it expects.

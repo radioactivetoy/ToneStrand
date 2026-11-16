@@ -6,7 +6,9 @@ use super::*;
 fn snap_chip(ui: &mut egui::Ui, n: usize, name: &str, on: bool) -> egui::Response {
     let label = if name.trim().is_empty() { format!("{n}") } else { format!("{n}  {}", name.trim()) };
     let text = RichText::new(label).monospace().size(12.5).color(if on { Color32::from_rgb(8, 22, 26) } else { TEXT });
-    ui.add(egui::Button::new(text).fill(if on { accent() } else { Color32::TRANSPARENT }).stroke(Stroke::NONE).min_size(Vec2::new(0.0, 24.0)))
+    ui.add(
+        egui::Button::new(text).fill(if on { accent() } else { Color32::TRANSPARENT }).stroke(Stroke::NONE).min_size(Vec2::new(0.0, 24.0)),
+    )
 }
 
 /// The top bar's preset strip for a .hlx preset: BPM and the snapshot chips
@@ -22,7 +24,8 @@ pub fn studio_strip_hlx(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: 
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             for (i, name) in &list {
-                let r = snap_chip(ui, i + 1, name, *i == cur).on_hover_text("Recall this snapshot. Right-click to rename, copy, paste, duplicate or delete.");
+                let r = snap_chip(ui, i + 1, name, *i == cur)
+                    .on_hover_text("Recall this snapshot. Right-click to rename, copy, paste, duplicate or delete.");
                 if r.clicked() && *i != cur {
                     snapshots::select(json, *i);
                     *dirty = true;
@@ -31,7 +34,8 @@ pub fn studio_strip_hlx(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: 
                     let mut n = name.clone();
                     ui.horizontal(|ui| {
                         ui.label("Name");
-                        let r = ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(crate::session::SNAPSHOT_NAME_MAX));
+                        let r =
+                            ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(crate::session::SNAPSHOT_NAME_MAX));
                         theme::name_hint(ui, &n, crate::session::SNAPSHOT_NAME_MAX);
                         if r.changed() {
                             snapshots::rename(json, *i, &n);
@@ -59,7 +63,8 @@ pub fn studio_strip_hlx(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: 
                     }
                 });
             }
-            if list.len() < fam.snapshot_count && ui.small_button("+").on_hover_text("Add a snapshot (a copy of the current one)").clicked() {
+            if list.len() < fam.snapshot_count && ui.small_button("+").on_hover_text("Add a snapshot (a copy of the current one)").clicked()
+            {
                 if let Some(n) = snapshots::add(json) {
                     snapshots::select(json, n);
                     *dirty = true;
@@ -70,7 +75,12 @@ pub fn studio_strip_hlx(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: 
     match action {
         Some(("copy", i)) => {
             if let Some(v) = snapshots::copy(json, i) {
-                let name = list.iter().find(|(x, _)| *x == i).map(|(_, n)| n.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| format!("Snapshot {}", i + 1));
+                let name = list
+                    .iter()
+                    .find(|(x, _)| *x == i)
+                    .map(|(_, n)| n.clone())
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or_else(|| format!("Snapshot {}", i + 1));
                 ui.data_mut(|d| d.insert_temp(clip_id, (name, v)));
             }
         }
@@ -108,7 +118,11 @@ pub fn studio_strip_device(ui: &mut egui::Ui, preset: &mut DevicePreset, dirty: 
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             for (i, name) in names.iter().enumerate() {
-                let tip = if live { "Switch the pedal to this snapshot. Right-click to rename it." } else { "Right-click to rename it or copy another snapshot into it." };
+                let tip = if live {
+                    "Switch the pedal to this snapshot. Right-click to rename it."
+                } else {
+                    "Right-click to rename it or copy another snapshot into it."
+                };
                 let r = snap_chip(ui, i + 1, name, i == cur).on_hover_text(tip);
                 if live && r.clicked() && i != cur {
                     cmds.push(Cmd::Snapshot(i as i64));
@@ -117,7 +131,8 @@ pub fn studio_strip_device(ui: &mut egui::Ui, preset: &mut DevicePreset, dirty: 
                     let mut n = name.clone();
                     ui.horizontal(|ui| {
                         ui.label("Name");
-                        let te = ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(crate::session::SNAPSHOT_NAME_MAX));
+                        let te =
+                            ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(crate::session::SNAPSHOT_NAME_MAX));
                         theme::name_hint(ui, &n, crate::session::SNAPSHOT_NAME_MAX);
                         if te.changed() {
                             preset.set_snapshot_name(i, &n);
@@ -131,7 +146,8 @@ pub fn studio_strip_device(ui: &mut egui::Ui, preset: &mut DevicePreset, dirty: 
                         ui.separator();
                         ui.label(RichText::new(format!("Make snapshot {} the same as", i + 1)).small().color(MUTED));
                         for j in (0..names.len()).filter(|j| *j != i) {
-                            let from = names.get(j).filter(|s| !s.trim().is_empty()).cloned().unwrap_or_else(|| format!("Snapshot {}", j + 1));
+                            let from =
+                                names.get(j).filter(|s| !s.trim().is_empty()).cloned().unwrap_or_else(|| format!("Snapshot {}", j + 1));
                             if ui.button(format!("{}: {from}", j + 1)).clicked() {
                                 if preset.copy_snapshot_states(j, i) {
                                     *dirty = true;

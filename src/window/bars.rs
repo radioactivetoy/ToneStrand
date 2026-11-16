@@ -153,7 +153,11 @@ impl App {
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         self.open_controls(ui);
-                        if ui.button("New preset").on_hover_text(format!("An empty preset for the {} (Ctrl+N)", crate::units::unit_name(self.unit))).clicked() {
+                        if ui
+                            .button("New preset")
+                            .on_hover_text(format!("An empty preset for the {} (Ctrl+N)", crate::units::unit_name(self.unit)))
+                            .clicked()
+                        {
                             self.new_preset();
                         }
                         let mut pick = None;
@@ -248,11 +252,20 @@ impl App {
                     let bcol = if count >= max { ORANGE } else { MUTED };
                     ui.label(RichText::new(format!("{count}/{max} blocks")).small().monospace().color(bcol));
                     if let Some(d) = used {
-                        let col = if *d > 100.0 { BAD } else if *d > 85.0 { ORANGE } else { accent() };
+                        let col = if *d > 100.0 {
+                            BAD
+                        } else if *d > 85.0 {
+                            ORANGE
+                        } else {
+                            accent()
+                        };
                         ui.label(RichText::new("DSP").small().color(MUTED)).on_hover_text("Estimated DSP use of this path");
                         let (rect, _) = ui.allocate_exact_size(Vec2::new(80.0, if n > 1 { 5.0 } else { 6.0 }), egui::Sense::hover());
                         ui.painter().rect_filled(rect, CornerRadius::same(3), card_hi());
-                        let fill = egui::Rect::from_min_size(rect.min, Vec2::new(rect.width() * (*d / 100.0).clamp(0.0, 1.0) as f32, rect.height()));
+                        let fill = egui::Rect::from_min_size(
+                            rect.min,
+                            Vec2::new(rect.width() * (*d / 100.0).clamp(0.0, 1.0) as f32, rect.height()),
+                        );
                         ui.painter().rect_filled(fill, CornerRadius::same(3), col);
                         ui.label(RichText::new(format!("{d:.0}%")).small().monospace().strong().color(col));
                     }
@@ -265,9 +278,9 @@ impl App {
     pub(super) fn status_bar(&mut self, ctx: &egui::Context) {
         let mut copied = false;
         let mut save = false;
-        egui::TopBottomPanel::bottom("status")
-            .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin::symmetric(14, 6)))
-            .show(ctx, |ui| {
+        egui::TopBottomPanel::bottom("status").frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin::symmetric(14, 6))).show(
+            ctx,
+            |ui| {
                 ui.horizontal(|ui| {
                     if let Some(b) = &self.busy {
                         ui.add(egui::Spinner::new().size(14.0).color(accent()));
@@ -299,7 +312,8 @@ impl App {
                         });
                     });
                 });
-            });
+            },
+        );
         if copied {
             self.note(LogLevel::Good, "Log copied");
         }
@@ -310,7 +324,8 @@ impl App {
 
     /// The activity log as plain text, with the program version and the pedal, for a bug report.
     fn log_text(&self) -> String {
-        let mut out = format!("ToneStrand {}\nPedal: {}\n\n", env!("CARGO_PKG_VERSION"), self.connected.as_deref().unwrap_or("not connected"));
+        let mut out =
+            format!("ToneStrand {}\nPedal: {}\n\n", env!("CARGO_PKG_VERSION"), self.connected.as_deref().unwrap_or("not connected"));
         for (_, msg) in &self.log {
             out.push_str(msg);
             out.push('\n');
@@ -320,7 +335,14 @@ impl App {
 
     /// "Save..." in the Activity list: the log as a text file.
     fn save_log(&mut self) {
-        let Some(path) = rfd::FileDialog::new().set_directory(&self.library_dir).set_file_name("ToneStrand log.txt").add_filter("Text", &["txt"]).save_file() else { return };
+        let Some(path) = rfd::FileDialog::new()
+            .set_directory(&self.library_dir)
+            .set_file_name("ToneStrand log.txt")
+            .add_filter("Text", &["txt"])
+            .save_file()
+        else {
+            return;
+        };
         match crate::files::write_atomic(&path, self.log_text().as_bytes()) {
             Ok(_) => self.note(LogLevel::Good, format!("Saved the log to {}", path.display())),
             Err(e) => self.note(LogLevel::Bad, format!("Could not save the log: {e}")),

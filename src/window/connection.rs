@@ -13,9 +13,7 @@ impl App {
             self.maybe_reconnect(ctx);
         }
         while let Ok(b) = self.box_rx.try_recv() {
-            if let Some(existing) =
-                self.boxes.iter_mut().find(|x| (!b.id.is_empty() && x.id == b.id) || x.host == b.host)
-            {
+            if let Some(existing) = self.boxes.iter_mut().find(|x| (!b.id.is_empty() && x.id == b.id) || x.host == b.host) {
                 existing.host = b.host.clone();
                 if existing.id.is_empty() {
                     existing.id = b.id.clone();
@@ -165,7 +163,8 @@ impl App {
             Event::Irs(list) => {
                 crate::nam::set_ir_names(&list);
                 // Slots not looked at yet (or holding something new) get sorted into IRs and NAM captures.
-                let unknown: Vec<(i64, String)> = list.iter().filter(|(s, n)| !self.ir_kinds.contains_key(&(*s, n.clone()))).cloned().collect();
+                let unknown: Vec<(i64, String)> =
+                    list.iter().filter(|(s, n)| !self.ir_kinds.contains_key(&(*s, n.clone()))).cloned().collect();
                 self.ir_kinds.retain(|k, _| list.contains(k));
                 crate::nam::set_slot_kinds(self.ir_kinds.iter().map(|((s, _), n)| (*s, *n)).collect());
                 self.irs = Some(list);
@@ -216,16 +215,12 @@ impl App {
                 }
                 match DevicePreset::parse(&blob) {
                     Ok(preset) => {
-                        let origin =
-                            if live { Origin::Live { setlist, index } } else { Origin::Slot { setlist, index } };
+                        let origin = if live { Origin::Live { setlist, index } } else { Origin::Slot { setlist, index } };
                         let label = slot_label(slot);
                         let title = if live { format!("Live · {label} {name}") } else { format!("{label} {name}") };
                         // There is one live tab: it follows whatever the pedal is playing.
-                        let existing = if live {
-                            self.docs.iter().position(|d| d.is_live())
-                        } else {
-                            self.docs.iter().position(|d| d.title == title)
-                        };
+                        let existing =
+                            if live { self.docs.iter().position(|d| d.is_live()) } else { self.docs.iter().position(|d| d.title == title) };
                         if let Some(i) = existing {
                             let keep = self.docs[i].selected.filter(|_| self.docs[i].name == name);
                             self.docs[i].kind = DocKind::Device { preset, origin };
@@ -323,9 +318,7 @@ impl App {
                     match boxes::pair_poll(&host, &nonce)? {
                         PairPoll::Token(t) => return Ok(t),
                         PairPoll::Waiting(_) => {}
-                        PairPoll::Closed => {
-                            return Err("the pairing window closed before the button was pressed".to_string())
-                        }
+                        PairPoll::Closed => return Err("the pairing window closed before the button was pressed".to_string()),
                     }
                 }
                 Err("the button on the box was not pressed in time".to_string())
@@ -337,7 +330,6 @@ impl App {
 
     pub(super) fn devices_card(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         side_section(ui, "CONNECT", |ui| {
-
             ui.add_space(2.0);
             let locked = self.link.is_some();
             // Connected: one line, the rest is in the DEVICE box above.
@@ -389,24 +381,22 @@ impl App {
                 ui.data_mut(|d| d.insert_temp(addr_id, true));
             }
             if show_addr {
-            ui.horizontal(|ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut self.add_box_text)
-                        .hint_text("box address, e.g. 192.168.1.40")
-                        .desired_width(170.0),
-                );
-                if ui.button("Add").clicked() && !self.add_box_text.trim().is_empty() {
-                    let host = self.add_box_text.trim().to_owned();
-                    if !self.boxes.iter().any(|b| b.host == host) {
-                        self.boxes.push(BoxInfo { name: format!("Box at {host}"), host: host.clone(), id: String::new() });
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.add_box_text).hint_text("box address, e.g. 192.168.1.40").desired_width(170.0),
+                    );
+                    if ui.button("Add").clicked() && !self.add_box_text.trim().is_empty() {
+                        let host = self.add_box_text.trim().to_owned();
+                        if !self.boxes.iter().any(|b| b.host == host) {
+                            self.boxes.push(BoxInfo { name: format!("Box at {host}"), host: host.clone(), id: String::new() });
+                        }
+                        if let Some(i) = self.boxes.iter().position(|b| b.host == host) {
+                            self.pick = Some(Pick::Box(i));
+                        }
+                        self.check_box(host);
+                        self.add_box_text.clear();
                     }
-                    if let Some(i) = self.boxes.iter().position(|b| b.host == host) {
-                        self.pick = Some(Pick::Box(i));
-                    }
-                    self.check_box(host);
-                    self.add_box_text.clear();
-                }
-            });
+                });
             }
 
             if let Some(Pick::Box(i)) = self.pick.clone() {
@@ -436,20 +426,19 @@ impl App {
                         Some(Pick::Box(i)) => self.boxes.get(*i).is_some_and(|b| self.settings.token_for(b).is_some()),
                         None => false,
                     };
-                    let btn = egui::Button::new(RichText::new("Connect").strong().color(Color32::from_rgb(8, 26, 24)))
-                        .fill(accent());
-                    if ui
-                        .add_enabled(can, btn)
-                        .on_disabled_hover_text("Pick a pedal, or a paired box, first")
-                        .clicked()
-                    {
+                    let btn = egui::Button::new(RichText::new("Connect").strong().color(Color32::from_rgb(8, 26, 24))).fill(accent());
+                    if ui.add_enabled(can, btn).on_disabled_hover_text("Pick a pedal, or a paired box, first").clicked() {
                         self.connect(ctx);
                     }
                 }
             });
             if let Some(Pick::Box(i)) = &self.pick {
                 if self.link.is_none() && self.boxes.get(*i).is_some_and(|b| self.settings.token_for(b).is_none()) {
-                    ui.label(RichText::new("This computer is not paired with the box yet: press Pair above, then the BOOT button on the box.").small().color(ORANGE));
+                    ui.label(
+                        RichText::new("This computer is not paired with the box yet: press Pair above, then the BOOT button on the box.")
+                            .small()
+                            .color(ORANGE),
+                    );
                 }
             }
             if let Some(e) = &self.last_error {
@@ -458,107 +447,99 @@ impl App {
         });
     }
 
-
     pub(super) fn box_details(&mut self, ui: &mut egui::Ui, b: &BoxInfo, locked: bool) {
-        egui::Frame::new()
-            .fill(card_hi())
-            .corner_radius(CornerRadius::same(8))
-            .inner_margin(egui::Margin::same(8))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.label(RichText::new(format!("{}  ·  {}", b.name, b.host)).strong());
-                let status = self.status.clone();
-                match &status {
-                    Some((h, Ok(st))) if *h == b.host => {
-                        ui.label(match &st.pedal {
-                            Some(p) => RichText::new(format!("Pedal attached: {p}")).color(GOOD),
-                            None => RichText::new("No pedal attached to the box").color(ORANGE),
-                        });
-                        ui.label(
-                            RichText::new(if st.relay_only { "Relay mode: on" } else { "Relay mode: off" })
-                                .color(if st.relay_only { GOOD } else { ORANGE }),
-                        );
-                        if st.client && !locked {
-                            ui.label(RichText::new("Another computer is using it right now").color(ORANGE));
-                        }
-                        if !st.relay_only {
-                            if let Some(tok) = self.settings.token_for(b) {
-                                if ui.button("Turn relay mode on").clicked() {
-                                    match boxes::set_relay(&b.host, &tok, true) {
-                                        Ok(_) => self.note(LogLevel::Good, "Relay mode is on."),
-                                        Err(e) => self.note(LogLevel::Bad, e),
-                                    }
-                                    self.check_box(b.host.clone());
+        egui::Frame::new().fill(card_hi()).corner_radius(CornerRadius::same(8)).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(RichText::new(format!("{}  ·  {}", b.name, b.host)).strong());
+            let status = self.status.clone();
+            match &status {
+                Some((h, Ok(st))) if *h == b.host => {
+                    ui.label(match &st.pedal {
+                        Some(p) => RichText::new(format!("Pedal attached: {p}")).color(GOOD),
+                        None => RichText::new("No pedal attached to the box").color(ORANGE),
+                    });
+                    ui.label(RichText::new(if st.relay_only { "Relay mode: on" } else { "Relay mode: off" }).color(if st.relay_only {
+                        GOOD
+                    } else {
+                        ORANGE
+                    }));
+                    if st.client && !locked {
+                        ui.label(RichText::new("Another computer is using it right now").color(ORANGE));
+                    }
+                    if !st.relay_only {
+                        if let Some(tok) = self.settings.token_for(b) {
+                            if ui.button("Turn relay mode on").clicked() {
+                                match boxes::set_relay(&b.host, &tok, true) {
+                                    Ok(_) => self.note(LogLevel::Good, "Relay mode is on."),
+                                    Err(e) => self.note(LogLevel::Bad, e),
                                 }
+                                self.check_box(b.host.clone());
                             }
                         }
                     }
-                    Some((h, Err(e))) if *h == b.host => {
-                        ui.label(RichText::new(e).color(BAD));
-                    }
-                    _ => {
-                        ui.horizontal(|ui| {
-                            ui.add(egui::Spinner::new().size(12.0));
-                            ui.label(RichText::new("Asking the box...").color(MUTED));
-                        });
-                    }
                 }
-                ui.horizontal_wrapped(|ui| {
-                    if ui.small_button("Check again").clicked() {
-                        self.check_box(b.host.clone());
-                    }
-                    if let Some(p) = &self.pairing {
-                        let left = boxes::PAIR_WINDOW_SECS.saturating_sub(p.started.elapsed().as_secs());
-                        ui.add(egui::Spinner::new().size(12.0).color(ORANGE));
-                        ui.label(RichText::new(format!("Press BOOT on the box now ({left}s)")).color(ORANGE).strong());
-                    } else if ui
-                        .small_button(if self.settings.token_for(b).is_some() { "Pair again" } else { "Pair" })
-                        .on_hover_text("Then press the BOOT button on the box once")
-                        .clicked()
-                    {
-                        self.start_pairing(b);
-                    }
-                    if self.settings.saved.iter().any(|s| s.host == b.host) && ui.small_button("Forget").clicked() {
-                        self.settings.saved.retain(|s| s.host != b.host);
-                        self.settings.tokens.remove(&boxes::box_key(b));
-                        self.settings.save();
-                    }
-                });
+                Some((h, Err(e))) if *h == b.host => {
+                    ui.label(RichText::new(e).color(BAD));
+                }
+                _ => {
+                    ui.horizontal(|ui| {
+                        ui.add(egui::Spinner::new().size(12.0));
+                        ui.label(RichText::new("Asking the box...").color(MUTED));
+                    });
+                }
+            }
+            ui.horizontal_wrapped(|ui| {
+                if ui.small_button("Check again").clicked() {
+                    self.check_box(b.host.clone());
+                }
+                if let Some(p) = &self.pairing {
+                    let left = boxes::PAIR_WINDOW_SECS.saturating_sub(p.started.elapsed().as_secs());
+                    ui.add(egui::Spinner::new().size(12.0).color(ORANGE));
+                    ui.label(RichText::new(format!("Press BOOT on the box now ({left}s)")).color(ORANGE).strong());
+                } else if ui
+                    .small_button(if self.settings.token_for(b).is_some() { "Pair again" } else { "Pair" })
+                    .on_hover_text("Then press the BOOT button on the box once")
+                    .clicked()
+                {
+                    self.start_pairing(b);
+                }
+                if self.settings.saved.iter().any(|s| s.host == b.host) && ui.small_button("Forget").clicked() {
+                    self.settings.saved.retain(|s| s.host != b.host);
+                    self.settings.tokens.remove(&boxes::box_key(b));
+                    self.settings.save();
+                }
             });
+        });
     }
 
     pub(super) fn pedal_card(&mut self, ui: &mut egui::Ui) {
         side_section(ui, "PRESETS", |ui| {
-
             if self.connected.is_none() {
                 ui.label(RichText::new("Connect to a pedal to see and edit its presets.").color(MUTED));
                 return;
             }
             if !self.setlists.is_empty() {
                 let current = self.setlists.get(self.setlist as usize).cloned().unwrap_or_default();
-                egui::ComboBox::from_id_salt("setlist")
-                    .selected_text(current)
-                    .width(ui.available_width() - 8.0)
-                    .show_ui(ui, |ui| {
-                        for (i, s) in self.setlists.clone().iter().enumerate() {
-                            if ui.selectable_label(i as i64 == self.setlist, s).clicked() {
-                                self.setlist = i as i64;
-                                self.chosen = None;
-                                self.send(Cmd::Presets(i as i64));
-                            }
+                egui::ComboBox::from_id_salt("setlist").selected_text(current).width(ui.available_width() - 8.0).show_ui(ui, |ui| {
+                    for (i, s) in self.setlists.clone().iter().enumerate() {
+                        if ui.selectable_label(i as i64 == self.setlist, s).clicked() {
+                            self.setlist = i as i64;
+                            self.chosen = None;
+                            self.send(Cmd::Presets(i as i64));
                         }
-                    });
+                    }
+                });
             }
             ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("🔍 Filter presets").desired_width(f32::INFINITY));
             ui.horizontal_wrapped(|ui| {
-                if ui
-                    .button("Edit loaded preset (live)")
-                    .on_hover_text("Changes are heard at once; Save on pedal keeps them")
-                    .clicked()
-                {
+                if ui.button("Edit loaded preset (live)").on_hover_text("Changes are heard at once; Save on pedal keeps them").clicked() {
                     self.send(Cmd::ReadCurrent);
                 }
-                if ui.button("Back up everything...").on_hover_text("Every setlist and all User IRs, into a new folder inside the one you pick").clicked() {
+                if ui
+                    .button("Back up everything...")
+                    .on_hover_text("Every setlist and all User IRs, into a new folder inside the one you pick")
+                    .clicked()
+                {
                     if let Some(folder) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
                         self.send(Cmd::FullBackup { folder });
                     }
@@ -579,76 +560,79 @@ impl App {
             let row_h = 24.0;
             let presets = self.presets.clone();
             let sl = self.setlist;
-            egui::ScrollArea::vertical().id_salt("presets").max_height((ui.available_height() - 10.0).max(240.0)).auto_shrink([false, true]).show(ui, |ui| {
-                for (i, name) in presets.iter().enumerate() {
-                    if !filter.is_empty() && !name.to_lowercase().contains(&filter) {
-                        continue;
-                    }
-                    let is_current = current_idx == Some(i as i64);
-                    let is_chosen = self.chosen == Some(i);
-                    let (rect, resp) =
-                        ui.allocate_exact_size(Vec2::new(ui.available_width(), row_h), egui::Sense::click());
-                    let fill = if is_chosen {
-                        accent().linear_multiply(0.22)
-                    } else if resp.hovered() {
-                        card_hi()
-                    } else {
-                        Color32::TRANSPARENT
-                    };
-                    let p = ui.painter();
-                    p.rect_filled(rect, CornerRadius::same(5), fill);
-                    if is_current {
-                        p.rect_filled(egui::Rect::from_min_size(rect.min, Vec2::new(3.0, row_h)), CornerRadius::same(2), accent());
-                    }
-                    p.text(
-                        rect.left_center() + Vec2::new(10.0, 0.0),
-                        egui::Align2::LEFT_CENTER,
-                        slot_label(i),
-                        egui::FontId::monospace(12.5),
-                        if is_current { accent() } else { MUTED },
-                    );
-                    let shown = if name.trim().is_empty() { "<empty>" } else { name.as_str() };
-                    p.text(
-                        rect.left_center() + Vec2::new(52.0, 0.0),
-                        egui::Align2::LEFT_CENTER,
-                        shown,
-                        egui::FontId::proportional(14.0),
-                        TEXT,
-                    );
-                    if resp.clicked() {
-                        self.chosen = Some(i);
-                    }
-                    if resp.double_clicked() {
-                        self.send(Cmd::Select(sl, i as i64));
-                    }
-                    resp.context_menu(|ui| {
-                        if ui.button("Load on the pedal").clicked() {
+            egui::ScrollArea::vertical()
+                .id_salt("presets")
+                .max_height((ui.available_height() - 10.0).max(240.0))
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    for (i, name) in presets.iter().enumerate() {
+                        if !filter.is_empty() && !name.to_lowercase().contains(&filter) {
+                            continue;
+                        }
+                        let is_current = current_idx == Some(i as i64);
+                        let is_chosen = self.chosen == Some(i);
+                        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), row_h), egui::Sense::click());
+                        let fill = if is_chosen {
+                            accent().linear_multiply(0.22)
+                        } else if resp.hovered() {
+                            card_hi()
+                        } else {
+                            Color32::TRANSPARENT
+                        };
+                        let p = ui.painter();
+                        p.rect_filled(rect, CornerRadius::same(5), fill);
+                        if is_current {
+                            p.rect_filled(egui::Rect::from_min_size(rect.min, Vec2::new(3.0, row_h)), CornerRadius::same(2), accent());
+                        }
+                        p.text(
+                            rect.left_center() + Vec2::new(10.0, 0.0),
+                            egui::Align2::LEFT_CENTER,
+                            slot_label(i),
+                            egui::FontId::monospace(12.5),
+                            if is_current { accent() } else { MUTED },
+                        );
+                        let shown = if name.trim().is_empty() { "<empty>" } else { name.as_str() };
+                        p.text(
+                            rect.left_center() + Vec2::new(52.0, 0.0),
+                            egui::Align2::LEFT_CENTER,
+                            shown,
+                            egui::FontId::proportional(14.0),
+                            TEXT,
+                        );
+                        if resp.clicked() {
+                            self.chosen = Some(i);
+                        }
+                        if resp.double_clicked() {
                             self.send(Cmd::Select(sl, i as i64));
-                            ui.close_menu();
                         }
-                        if ui.button("Open in editor").clicked() {
-                            self.send(Cmd::FetchSlot { setlist: sl, index: i as i64, purpose: Purpose::Edit });
-                            ui.close_menu();
-                        }
-                        if ui.button("Save to a file...").clicked() {
-                            self.send(Cmd::FetchSlot { setlist: sl, index: i as i64, purpose: Purpose::SaveToFile });
-                            ui.close_menu();
-                        }
-                        if ui.button("Rename...").clicked() {
-                            self.rename = Some((sl, i, name.clone()));
-                            ui.close_menu();
-                        }
-                        ui.separator();
-                        if ui.button(RichText::new("Clear slot").color(BAD)).clicked() {
-                            self.confirm = Some((
-                                format!("Clear {} \"{}\"? This empties the slot on the pedal.", slot_label(i), name),
-                                Cmd::Clear { setlist: sl, index: i as i64 },
-                            ));
-                            ui.close_menu();
-                        }
-                    });
-                }
-            });
+                        resp.context_menu(|ui| {
+                            if ui.button("Load on the pedal").clicked() {
+                                self.send(Cmd::Select(sl, i as i64));
+                                ui.close_menu();
+                            }
+                            if ui.button("Open in editor").clicked() {
+                                self.send(Cmd::FetchSlot { setlist: sl, index: i as i64, purpose: Purpose::Edit });
+                                ui.close_menu();
+                            }
+                            if ui.button("Save to a file...").clicked() {
+                                self.send(Cmd::FetchSlot { setlist: sl, index: i as i64, purpose: Purpose::SaveToFile });
+                                ui.close_menu();
+                            }
+                            if ui.button("Rename...").clicked() {
+                                self.rename = Some((sl, i, name.clone()));
+                                ui.close_menu();
+                            }
+                            ui.separator();
+                            if ui.button(RichText::new("Clear slot").color(BAD)).clicked() {
+                                self.confirm = Some((
+                                    format!("Clear {} \"{}\"? This empties the slot on the pedal.", slot_label(i), name),
+                                    Cmd::Clear { setlist: sl, index: i as i64 },
+                                ));
+                                ui.close_menu();
+                            }
+                        });
+                    }
+                });
             if let Some(i) = self.chosen {
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {

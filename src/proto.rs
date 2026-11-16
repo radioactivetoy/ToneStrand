@@ -235,18 +235,11 @@ impl Message {
     pub fn from_value(v: Value) -> Message {
         let txn = v.get(key::TXN).and_then(Value::as_i64);
         if let (Some(txn), Some(status)) = (txn, v.get(key::STATUS).and_then(Value::as_i64)) {
-            return Message::Response {
-                txn,
-                status,
-                result: v.get(key::RESULT).cloned().unwrap_or(Value::Nil),
-            };
+            return Message::Response { txn, status, result: v.get(key::RESULT).cloned().unwrap_or(Value::Nil) };
         }
         if let Some(event) = v.get(key::EVENT).and_then(Value::as_i64) {
             if txn.is_none() {
-                return Message::Notification {
-                    event,
-                    args: v.get(key::EVENT_ARGS).cloned().unwrap_or(Value::Nil),
-                };
+                return Message::Notification { event, args: v.get(key::EVENT_ARGS).cloned().unwrap_or(Value::Nil) };
             }
         }
         Message::Other
@@ -255,11 +248,7 @@ impl Message {
 
 /// Encode a request in the field order the pedal's editors use: txn, opcode, args.
 pub fn request(txn: i64, opcode: i64, args: Value) -> Value {
-    Value::map(vec![
-        (key::TXN, Value::int(txn)),
-        (key::OPCODE, Value::int(opcode)),
-        (key::ARGS, args),
-    ])
+    Value::map(vec![(key::TXN, Value::int(txn)), (key::OPCODE, Value::int(opcode)), (key::ARGS, args)])
 }
 
 /// Reassembles one channel's byte stream into messages. Each message has an
@@ -280,12 +269,7 @@ impl StreamReader {
         let mut out = Vec::new();
         let mut at = 0usize;
         while self.buf.len() >= at + 8 {
-            let len = u32::from_le_bytes([
-                self.buf[at + 4],
-                self.buf[at + 5],
-                self.buf[at + 6],
-                self.buf[at + 7],
-            ]) as usize;
+            let len = u32::from_le_bytes([self.buf[at + 4], self.buf[at + 5], self.buf[at + 6], self.buf[at + 7]]) as usize;
             if len > 4 * 1024 * 1024 {
                 self.buf.clear();
                 return out;
@@ -319,10 +303,7 @@ mod tests {
     #[test]
     fn opening_frame_round_trips() {
         // The first frame a client sends after claiming the interface.
-        let raw = [
-            0x0c, 0x00, 0x00, 0x28, 0x01, 0x10, 0xef, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01,
-            0x00, 0x21, 0x00, 0x10, 0x00, 0x00,
-        ];
+        let raw = [0x0c, 0x00, 0x00, 0x28, 0x01, 0x10, 0xef, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x01, 0x00, 0x21, 0x00, 0x10, 0x00, 0x00];
         let (frames, rest) = Frame::decode_stream(&raw);
         assert!(rest.is_empty());
         assert_eq!(frames.len(), 1);

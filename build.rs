@@ -7,7 +7,9 @@ fn main() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/models/icons");
     println!("cargo:rerun-if-changed=assets/models");
     let mut names: Vec<String> = std::fs::read_dir(&dir)
-        .map(|rd| rd.flatten().filter_map(|e| e.file_name().into_string().ok()).filter(|n| n.to_ascii_lowercase().ends_with(".png")).collect())
+        .map(|rd| {
+            rd.flatten().filter_map(|e| e.file_name().into_string().ok()).filter(|n| n.to_ascii_lowercase().ends_with(".png")).collect()
+        })
         .unwrap_or_default();
     names.sort();
     let mut code = String::from("/// (file name, PNG bytes) of every model photo.\npub static PHOTOS: &[(&str, &[u8])] = &[\n");

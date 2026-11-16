@@ -237,9 +237,19 @@ fn shape_problem(cfg: &Value) -> Option<String> {
     if !head_ok {
         return Some("it needs a 16-tap head with a bias".into());
     }
-    for k in ["conv_pre_film", "conv_post_film", "input_mixin_pre_film", "input_mixin_post_film", "activation_pre_film", "activation_post_film", "layer1x1_post_film", "head1x1_post_film"] {
+    for k in [
+        "conv_pre_film",
+        "conv_post_film",
+        "input_mixin_pre_film",
+        "input_mixin_post_film",
+        "activation_pre_film",
+        "activation_post_film",
+        "layer1x1_post_film",
+        "head1x1_post_film",
+    ] {
         if let Some(v) = la.get(k) {
-            let off = v.is_null() || v.as_bool() == Some(false) || (v.is_object() && !v.get("active").and_then(Value::as_bool).unwrap_or(false));
+            let off =
+                v.is_null() || v.as_bool() == Some(false) || (v.is_object() && !v.get("active").and_then(Value::as_bool).unwrap_or(false));
             if !off {
                 return Some("it uses FiLM conditioning".into());
             }
@@ -370,7 +380,8 @@ pub fn convert(text: &str, opts: Options) -> Result<Converted, String> {
     if let Some(why) = model.get("config").and_then(shape_problem) {
         return Err(format!("not an A2 Lite capture the block can run: {why}"));
     }
-    let w: Vec<f64> = model.get("weights").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
+    let w: Vec<f64> =
+        model.get("weights").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_f64).collect()).unwrap_or_default();
     if w.len() != N_WEIGHTS {
         return Err(format!("it has {} weights; A2 Lite has {N_WEIGHTS}", w.len()));
     }
@@ -456,7 +467,12 @@ pub fn convert_file(src: &Path, out_dir: &Path, opts: Options) -> Result<String,
     if name_len > 16 {
         notes.push("the pedal shows only the first 16 characters of the name".into());
     }
-    Ok(format!("{} -> {}  ({})", src.file_name().and_then(|s| s.to_str()).unwrap_or("?"), out.file_name().and_then(|s| s.to_str()).unwrap_or("?"), notes.join(", ")))
+    Ok(format!(
+        "{} -> {}  ({})",
+        src.file_name().and_then(|s| s.to_str()).unwrap_or("?"),
+        out.file_name().and_then(|s| s.to_str()).unwrap_or("?"),
+        notes.join(", ")
+    ))
 }
 
 #[cfg(test)]

@@ -215,10 +215,8 @@ pub fn remove_block(doc: &mut Value, b: &HlxBlock) {
     }
     if b.path == 1 {
         if let Some((_, sp, _)) = split_of(doc, &b.dsp) {
-            let mut lane_b: Vec<HlxBlock> = blocks(doc)
-                .into_iter()
-                .filter(|x| x.dsp == b.dsp && x.path == 1 && x.key.starts_with("block"))
-                .collect();
+            let mut lane_b: Vec<HlxBlock> =
+                blocks(doc).into_iter().filter(|x| x.dsp == b.dsp && x.path == 1 && x.key.starts_with("block")).collect();
             lane_b.sort_by_key(|x| x.position);
             for (i, lb) in lane_b.iter().enumerate() {
                 if let Some(obj) = block_mut(doc, lb) {
@@ -250,10 +248,8 @@ pub fn move_to(doc: &mut Value, b: &HlxBlock, path: i64, to: i64) {
     }
     if moved_from_lower_to_empty_main {
         if let Some((_, sp, _)) = split_of(doc, &b.dsp) {
-            let mut lane_b: Vec<HlxBlock> = blocks(doc)
-                .into_iter()
-                .filter(|x| x.dsp == b.dsp && x.path == 1 && x.key.starts_with("block"))
-                .collect();
+            let mut lane_b: Vec<HlxBlock> =
+                blocks(doc).into_iter().filter(|x| x.dsp == b.dsp && x.path == 1 && x.key.starts_with("block")).collect();
             lane_b.sort_by_key(|x| x.position);
             for (i, lb) in lane_b.iter().enumerate() {
                 if let Some(obj) = block_mut(doc, lb) {
@@ -295,15 +291,10 @@ pub fn split_of(doc: &Value, dsp: &str) -> Option<(String, i64, i64)> {
 /// How many slot positions the parallel lane (`@path == 1`) holds on this DSP path.
 pub fn lower_slots_of(doc: &Value, dsp: &str) -> i64 {
     let Some((_, sp, jp)) = split_of(doc, dsp) else { return 0 };
-    let lane_b: Vec<i64> = blocks(doc)
-        .into_iter()
-        .filter(|b| b.dsp == dsp && b.path == 1 && b.key.starts_with("block"))
-        .map(|b| b.position)
-        .collect();
+    let lane_b: Vec<i64> =
+        blocks(doc).into_iter().filter(|b| b.dsp == dsp && b.path == 1 && b.key.starts_with("block")).map(|b| b.position).collect();
     let occupied = lane_b.iter().max().map(|&m| (m - sp + 1).max(1)).unwrap_or(0);
-    let stored = doc
-        .pointer(&format!("/data/tone/{dsp}/split/@lower_slots"))
-        .and_then(Value::as_i64);
+    let stored = doc.pointer(&format!("/data/tone/{dsp}/split/@lower_slots")).and_then(Value::as_i64);
     match stored {
         Some(n) => n.max(occupied).max(1),
         None if occupied > 0 => occupied,
@@ -333,7 +324,8 @@ pub fn ensure_split(doc: &mut Value, dsp: &str, defaults: &dyn Fn(&str) -> Vec<P
 /// has enough slots to cover all its blocks, without overriding a merge position
 /// placed earlier on the primary path.
 pub fn fit_split(doc: &mut Value, dsp: &str) {
-    let lane_b: Vec<i64> = blocks(doc).iter().filter(|b| b.dsp == dsp && b.path == 1 && b.key.starts_with("block")).map(|b| b.position).collect();
+    let lane_b: Vec<i64> =
+        blocks(doc).iter().filter(|b| b.dsp == dsp && b.path == 1 && b.key.starts_with("block")).map(|b| b.position).collect();
     let (Some(min), Some(max)) = (lane_b.iter().min().copied(), lane_b.iter().max().copied()) else { return };
     let Some((_, mut sp, jp)) = split_of(doc, dsp) else { return };
     if min < sp {
@@ -376,17 +368,14 @@ pub fn fit_lanes(doc: &mut Value, dsp: &str, positions: i64, max_blocks: i64, sh
     let max_lower = if shared_slots { (max_blocks - 1).max(1) } else { positions };
     let lower_slots = lower_slots_of(doc, dsp).clamp(1, max_lower);
     set_lower_slots(doc, dsp, lower_slots);
-    let main_cols = if shared_slots {
-        (max_blocks - lower_slots).clamp(1, positions)
-    } else {
-        positions
-    };
+    let main_cols = if shared_slots { (max_blocks - lower_slots).clamp(1, positions) } else { positions };
     let max_sp = main_cols.min(positions - lower_slots).max(0);
     if sp > max_sp {
         let shift = sp - max_sp;
         sp = max_sp;
         set_split_position(doc, dsp, false, sp);
-        let lower_blocks: Vec<HlxBlock> = blocks(doc).into_iter().filter(|b| b.dsp == dsp && b.path == 1 && b.key.starts_with("block")).collect();
+        let lower_blocks: Vec<HlxBlock> =
+            blocks(doc).into_iter().filter(|b| b.dsp == dsp && b.path == 1 && b.key.starts_with("block")).collect();
         for b in lower_blocks {
             if let Some(obj) = block_mut(doc, &b) {
                 obj.insert("@position".into(), json!((b.position - shift).clamp(sp, sp + lower_slots - 1)));
@@ -398,7 +387,8 @@ pub fn fit_lanes(doc: &mut Value, dsp: &str, positions: i64, max_blocks: i64, sh
         set_split_position(doc, dsp, true, clamped_jp);
     }
     if shared_slots {
-        let main_blocks: Vec<HlxBlock> = blocks(doc).into_iter().filter(|b| b.dsp == dsp && b.path == 0 && b.key.starts_with("block")).collect();
+        let main_blocks: Vec<HlxBlock> =
+            blocks(doc).into_iter().filter(|b| b.dsp == dsp && b.path == 0 && b.key.starts_with("block")).collect();
         let mut limit = main_cols - 1;
         for b in main_blocks.into_iter().rev() {
             if b.position > limit && limit >= 0 {
@@ -417,15 +407,7 @@ pub fn fit_lanes(doc: &mut Value, dsp: &str, positions: i64, max_blocks: i64, sh
 /// Moving the split shifts parallel-lane blocks with it; moving the merge
 /// changes where the parallel lane rejoins the primary lane without altering
 /// the parallel lane's length.
-pub fn move_split_or_join(
-    doc: &mut Value,
-    dsp: &str,
-    merge: bool,
-    position: i64,
-    positions: i64,
-    max_blocks: i64,
-    shared_slots: bool,
-) {
+pub fn move_split_or_join(doc: &mut Value, dsp: &str, merge: bool, position: i64, positions: i64, max_blocks: i64, shared_slots: bool) {
     let Some((_, sp, jp)) = split_of(doc, dsp) else { return };
     let lower_slots = lower_slots_of(doc, dsp);
     set_lower_slots(doc, dsp, lower_slots);
@@ -438,10 +420,8 @@ pub fn move_split_or_join(
         let new_sp = position.clamp(0, max_sp);
         let delta = new_sp - sp;
         if delta != 0 {
-            let lower_blocks: Vec<HlxBlock> = blocks(doc)
-                .into_iter()
-                .filter(|b| b.dsp == dsp && b.path == 1 && b.key.starts_with("block"))
-                .collect();
+            let lower_blocks: Vec<HlxBlock> =
+                blocks(doc).into_iter().filter(|b| b.dsp == dsp && b.path == 1 && b.key.starts_with("block")).collect();
             for b in lower_blocks {
                 if let Some(obj) = block_mut(doc, &b) {
                     obj.insert("@position".into(), json!((b.position + delta).clamp(new_sp, new_sp + lower_slots - 1)));
@@ -524,7 +504,8 @@ pub fn add_split_at(doc: &mut Value, dsp: &str, at: Option<i64>, defaults: &dyn 
     }
     let fam = crate::snapshots::family(doc);
     let max_pos = if fam.shared_slots { (fam.max_blocks - 1).max(1) } else { fam.positions };
-    let used: Vec<i64> = blocks(doc).iter().filter(|b| b.dsp == dsp && b.path == 0 && b.key.starts_with("block")).map(|b| b.position).collect();
+    let used: Vec<i64> =
+        blocks(doc).iter().filter(|b| b.dsp == dsp && b.path == 0 && b.key.starts_with("block")).map(|b| b.position).collect();
     let at = at.map(|a| a.clamp(0, (max_pos - 1).max(0))).unwrap_or_else(|| (0..max_pos).find(|p| !used.contains(p)).unwrap_or(0));
     make_split(doc, dsp, at, (at + 1).min(POSITIONS), defaults);
     set_lower_slots(doc, dsp, 1);

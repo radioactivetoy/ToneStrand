@@ -7,303 +7,324 @@ use super::*;
 pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<usize>, picker: &mut Option<PickerState>) {
     let DeviceEdit { preset, live, cmds, cat, dirty } = ed;
     if chain_part() {
+        let slots = preset.slots();
+        let mut toggle = None;
+        let mut menu_change: Option<usize> = None;
+        let mut menu_remove: Option<usize> = None;
+        let mut dev_drop_cell: Option<(SlotDrag, i64, usize, usize)> = None;
+        let dev_drop = &mut dev_drop_cell;
 
-    let slots = preset.slots();
-    let mut toggle = None;
-    let mut menu_change: Option<usize> = None;
-    let mut menu_remove: Option<usize> = None;
-    let mut dev_drop_cell: Option<(SlotDrag, i64, usize, usize)> = None;
-    let dev_drop = &mut dev_drop_cell;
-
-    // Each path: the main row between input and output, and a lower row
-    // between split and merge when it holds anything.
-    let mut paths: Vec<i64> = slots.iter().map(|s| s.path).collect();
-    paths.dedup();
-    for path in paths {
-        let in_path: Vec<&SlotView> = slots.iter().filter(|s| s.path == path).collect();
-        let pos = |k: Kind| in_path.iter().find(|s| s.kind == k).map(|s| s.position);
-        let (inp, out, split, join) = (pos(Kind::Input), pos(Kind::Output), pos(Kind::Split), pos(Kind::Join));
-        // The lower lane is the stretch between the split and merge slots; the
-        // main lane is everything between input and output that is not in it.
-        let split_slot = in_path.iter().find(|s| s.kind == Kind::Split).copied();
-        let join_slot = in_path.iter().find(|s| s.kind == Kind::Join).copied();
-        let lower: Vec<&SlotView> = match (split, join) {
-            (Some(a), Some(b)) if a < b => in_path.iter().copied().filter(|s| s.position > a && s.position < b).collect(),
-            _ => Vec::new(),
-        };
-        let main: Vec<&SlotView> = in_path
-            .iter()
-            .copied()
-            .filter(|s| {
-                let inside = match (inp, out) {
-                    (Some(a), Some(b)) => s.position > a && s.position < b,
-                    _ => true,
-                };
-                inside && !matches!(s.kind, Kind::Input | Kind::Output | Kind::Split | Kind::Join) && !lower.iter().any(|l| l.global == s.global)
-            })
-            .take(chain::COLS)
-            .collect();
-        let lower_used = lower.iter().any(|s| s.kind != Kind::Empty);
-        // How much of this path's DSP the blocks use.
-        let used = cat.map(|c| slots_dsp(c, &in_path)).unwrap_or(0.0);
-        let free = 100.0 - used;
-        // Split and merge columns, from the main-lane slot each attaches before.
-        let cols = main.len().clamp(1, chain::COLS);
-        let col_before = |attach: Option<i64>| attach.map(|a| main.iter().filter(|s| (s.position as i64) < a).count());
-        let split_col = split_slot.and_then(|s| col_before(preset.attach(s.path, s.position))).unwrap_or(0).min(cols.saturating_sub(1));
-        let merge_col = join_slot
-            .and_then(|s| col_before(preset.attach(s.path, s.position)))
-            .unwrap_or(cols)
-            .clamp(split_col, cols);
-        let lower_selected = selected.is_some_and(|g| lower.iter().any(|s| s.global == g) || split_slot.is_some_and(|s| s.global == g) || join_slot.is_some_and(|s| s.global == g));
-        // The lane shows while the path is split (the pedal's own flag), or holds or is being edited.
-        let show_lower = !lower.is_empty() && (lower_used || lower_selected || preset.split_active(path));
-        // On units whose two lanes share the slots, a full path has no room for a lower lane.
-        let dev_fam = snapshots::family_of_device(crate::nam::unit());
-        let path_full = in_path.iter().filter(|s| s.kind == Kind::Block).count() as i64 >= dev_fam.max_blocks;
-        let last_used_lower = lower
-            .iter()
-            .rposition(|s| s.kind != Kind::Empty)
-            .map(|i| split_col + i + 1)
-            .unwrap_or(split_col + 1);
-        let _ = last_used_lower;
-        // The lower lane is drawn packed: its effects in order from the split, then one free place.
-        // (The pedal keeps them in numbered slots with gaps; only their order matters.)
-        let lower_view: Vec<&SlotView> = lower
-            .iter()
-            .copied()
-            .filter(|s| s.kind != Kind::Empty)
-            .chain(lower.iter().copied().find(|s| s.kind == Kind::Empty))
-            .collect();
-        let lower_end = (split_col + lower_view.len()).max(split_col + 1);
-
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("PATH {}", path + 1)).small().strong().color(MUTED));
-        });
-        let in_global = in_path.iter().find(|s| s.kind == Kind::Input).map(|s| s.global);
-        let out_global = in_path.iter().find(|s| s.kind == Kind::Output).map(|s| s.global);
-        let to_cell = |s: &SlotView| -> chain::Cell {
-            if s.kind == Kind::Empty {
-                return chain::Cell::Empty;
-            }
-            let (title, cname, colour) = s.model.map(|m| describe(cat, m)).unwrap_or((s.kind.label().to_owned(), String::new(), MUTED));
-            // An amp carrying its cab reads "Amp+Cab" (a cab carrying a second one, "Dual Cab").
-            let kind = crate::icons::kind_label(&cname, s.paired.is_some());
-            let cname_for_icon = kind.clone();
-            let subtitle = kind;
-            // The NAM block shows the capture it plays.
-            let detail = match (s.model, cat) {
-                (Some(m), Some(k)) if k.symbol(m).is_some_and(crate::nam::is_nam_symbol) => k
-                    .info(m)
-                    .and_then(|i| i.params.iter().position(|p| p.id == "MinFreq"))
-                    .and_then(|ix| s.values.get(ix))
-                    .and_then(|v| v.as_f64())
-                    .map(nam_detail),
-                _ => None,
+        // Each path: the main row between input and output, and a lower row
+        // between split and merge when it holds anything.
+        let mut paths: Vec<i64> = slots.iter().map(|s| s.path).collect();
+        paths.dedup();
+        for path in paths {
+            let in_path: Vec<&SlotView> = slots.iter().filter(|s| s.path == path).collect();
+            let pos = |k: Kind| in_path.iter().find(|s| s.kind == k).map(|s| s.position);
+            let (inp, out, split, join) = (pos(Kind::Input), pos(Kind::Output), pos(Kind::Split), pos(Kind::Join));
+            // The lower lane is the stretch between the split and merge slots; the
+            // main lane is everything between input and output that is not in it.
+            let split_slot = in_path.iter().find(|s| s.kind == Kind::Split).copied();
+            let join_slot = in_path.iter().find(|s| s.kind == Kind::Join).copied();
+            let lower: Vec<&SlotView> = match (split, join) {
+                (Some(a), Some(b)) if a < b => in_path.iter().copied().filter(|s| s.position > a && s.position < b).collect(),
+                _ => Vec::new(),
             };
-            let symbol = s.model.zip(cat).and_then(|(m, k)| k.symbol(m)).unwrap_or_default().to_owned();
-            chain::Cell::Block { title, subtitle, colour, on: s.enabled.unwrap_or(true), detail, category: cname_for_icon, symbol }
-        };
-        let lower_at = |col: usize| -> Option<&SlotView> { col.checked_sub(split_col).and_then(|i| lower_view.get(i).copied()) };
-        let sel_now = match *selected {
-            Some(g) if Some(g) == in_global => chain::Selected::Input,
-            Some(g) if Some(g) == out_global => chain::Selected::Output,
-            Some(g) if split_slot.is_some_and(|s| s.global == g) => chain::Selected::Split,
-            Some(g) if join_slot.is_some_and(|s| s.global == g) => chain::Selected::Merge,
-            Some(g) => match main.iter().position(|s| s.global == g) {
-                Some(c) => chain::Selected::Cell(0, c),
-                None => match lower_view.iter().position(|s| s.global == g) {
-                    Some(i) => chain::Selected::Cell(1, i + split_col),
-                    None => chain::Selected::None,
+            let main: Vec<&SlotView> = in_path
+                .iter()
+                .copied()
+                .filter(|s| {
+                    let inside = match (inp, out) {
+                        (Some(a), Some(b)) => s.position > a && s.position < b,
+                        _ => true,
+                    };
+                    inside
+                        && !matches!(s.kind, Kind::Input | Kind::Output | Kind::Split | Kind::Join)
+                        && !lower.iter().any(|l| l.global == s.global)
+                })
+                .take(chain::COLS)
+                .collect();
+            let lower_used = lower.iter().any(|s| s.kind != Kind::Empty);
+            // How much of this path's DSP the blocks use.
+            let used = cat.map(|c| slots_dsp(c, &in_path)).unwrap_or(0.0);
+            let free = 100.0 - used;
+            // Split and merge columns, from the main-lane slot each attaches before.
+            let cols = main.len().clamp(1, chain::COLS);
+            let col_before = |attach: Option<i64>| attach.map(|a| main.iter().filter(|s| (s.position as i64) < a).count());
+            let split_col = split_slot.and_then(|s| col_before(preset.attach(s.path, s.position))).unwrap_or(0).min(cols.saturating_sub(1));
+            let merge_col = join_slot.and_then(|s| col_before(preset.attach(s.path, s.position))).unwrap_or(cols).clamp(split_col, cols);
+            let lower_selected = selected.is_some_and(|g| {
+                lower.iter().any(|s| s.global == g) || split_slot.is_some_and(|s| s.global == g) || join_slot.is_some_and(|s| s.global == g)
+            });
+            // The lane shows while the path is split (the pedal's own flag), or holds or is being edited.
+            let show_lower = !lower.is_empty() && (lower_used || lower_selected || preset.split_active(path));
+            // On units whose two lanes share the slots, a full path has no room for a lower lane.
+            let dev_fam = snapshots::family_of_device(crate::nam::unit());
+            let path_full = in_path.iter().filter(|s| s.kind == Kind::Block).count() as i64 >= dev_fam.max_blocks;
+            let last_used_lower = lower.iter().rposition(|s| s.kind != Kind::Empty).map(|i| split_col + i + 1).unwrap_or(split_col + 1);
+            let _ = last_used_lower;
+            // The lower lane is drawn packed: its effects in order from the split, then one free place.
+            // (The pedal keeps them in numbered slots with gaps; only their order matters.)
+            let lower_view: Vec<&SlotView> = lower
+                .iter()
+                .copied()
+                .filter(|s| s.kind != Kind::Empty)
+                .chain(lower.iter().copied().find(|s| s.kind == Kind::Empty))
+                .collect();
+            let lower_end = (split_col + lower_view.len()).max(split_col + 1);
+
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("PATH {}", path + 1)).small().strong().color(MUTED));
+            });
+            let in_global = in_path.iter().find(|s| s.kind == Kind::Input).map(|s| s.global);
+            let out_global = in_path.iter().find(|s| s.kind == Kind::Output).map(|s| s.global);
+            let to_cell = |s: &SlotView| -> chain::Cell {
+                if s.kind == Kind::Empty {
+                    return chain::Cell::Empty;
+                }
+                let (title, cname, colour) = s.model.map(|m| describe(cat, m)).unwrap_or((s.kind.label().to_owned(), String::new(), MUTED));
+                // An amp carrying its cab reads "Amp+Cab" (a cab carrying a second one, "Dual Cab").
+                let kind = crate::icons::kind_label(&cname, s.paired.is_some());
+                let cname_for_icon = kind.clone();
+                let subtitle = kind;
+                // The NAM block shows the capture it plays.
+                let detail = match (s.model, cat) {
+                    (Some(m), Some(k)) if k.symbol(m).is_some_and(crate::nam::is_nam_symbol) => k
+                        .info(m)
+                        .and_then(|i| i.params.iter().position(|p| p.id == "MinFreq"))
+                        .and_then(|ix| s.values.get(ix))
+                        .and_then(|v| v.as_f64())
+                        .map(nam_detail),
+                    _ => None,
+                };
+                let symbol = s.model.zip(cat).and_then(|(m, k)| k.symbol(m)).unwrap_or_default().to_owned();
+                chain::Cell::Block { title, subtitle, colour, on: s.enabled.unwrap_or(true), detail, category: cname_for_icon, symbol }
+            };
+            let lower_at = |col: usize| -> Option<&SlotView> { col.checked_sub(split_col).and_then(|i| lower_view.get(i).copied()) };
+            let sel_now = match *selected {
+                Some(g) if Some(g) == in_global => chain::Selected::Input,
+                Some(g) if Some(g) == out_global => chain::Selected::Output,
+                Some(g) if split_slot.is_some_and(|s| s.global == g) => chain::Selected::Split,
+                Some(g) if join_slot.is_some_and(|s| s.global == g) => chain::Selected::Merge,
+                Some(g) => match main.iter().position(|s| s.global == g) {
+                    Some(c) => chain::Selected::Cell(0, c),
+                    None => match lower_view.iter().position(|s| s.global == g) {
+                        Some(i) => chain::Selected::Cell(1, i + split_col),
+                        None => chain::Selected::None,
+                    },
                 },
-            },
-            None => chain::Selected::None,
-        };
-        let diagram = chain::Chain {
-            id: &format!("dev{path}"),
-            main: main.iter().map(|s| to_cell(s)).collect(),
-            lower: show_lower.then(|| (0..lower_end).map(|c| lower_at(c).map(to_cell).unwrap_or(chain::Cell::Empty)).collect()),
-            split: split_col,
-            merge: merge_col,
-            selected: sel_now,
-            can_add: cat.is_some(),
-            can_extend_lower: false,
-            can_add_lower: cat.is_some() && !path_full,
-            cols,
-            width: ui.available_width(),
-            can_split: !path_full,
-        };
-        let hits = egui::ScrollArea::horizontal().id_salt(format!("dchain-{path}")).show(ui, |ui| diagram.show(ui)).inner;
-        let slot_at = |lane: usize, col: usize| -> Option<&SlotView> {
-            if lane == 0 {
-                main.get(col).copied()
-            } else {
-                lower_at(col)
-            }
-        };
-        for hit in hits {
-            match hit {
-                chain::Hit::Click(lane, col) => {
-                    if let Some(s) = slot_at(lane, col) {
-                        *selected = Some(s.global);
-                        if s.kind == Kind::Empty && cat.is_some() {
-                            *picker = Some(PickerState { block: s.wire_block(), slot: s.global, path: s.path, position: s.position, free, ..Default::default() });
-                        }
-                    }
+                None => chain::Selected::None,
+            };
+            let diagram = chain::Chain {
+                id: &format!("dev{path}"),
+                main: main.iter().map(|s| to_cell(s)).collect(),
+                lower: show_lower.then(|| (0..lower_end).map(|c| lower_at(c).map(to_cell).unwrap_or(chain::Cell::Empty)).collect()),
+                split: split_col,
+                merge: merge_col,
+                selected: sel_now,
+                can_add: cat.is_some(),
+                can_extend_lower: false,
+                can_add_lower: cat.is_some() && !path_full,
+                cols,
+                width: ui.available_width(),
+                can_split: !path_full,
+            };
+            let hits = egui::ScrollArea::horizontal().id_salt(format!("dchain-{path}")).show(ui, |ui| diagram.show(ui)).inner;
+            let slot_at = |lane: usize, col: usize| -> Option<&SlotView> {
+                if lane == 0 {
+                    main.get(col).copied()
+                } else {
+                    lower_at(col)
                 }
-                chain::Hit::DoubleClick(lane, col) | chain::Hit::Toggle(lane, col) => {
-                    if let Some(s) = slot_at(lane, col).filter(|s| s.enabled.is_some()) {
-                        toggle = Some(s.global);
-                    }
-                }
-                chain::Hit::Change(lane, col) => menu_change = slot_at(lane, col).map(|s| s.global),
-                chain::Hit::Remove(lane, col) => menu_remove = slot_at(lane, col).map(|s| s.global),
-                chain::Hit::GapSplit(col) => {
-                    // Split before this column, merging again one place later.
-                    if let (Some(sp), Some(jp)) = (split_slot, join_slot) {
-                        let attach_at = |c: usize| main.get(c).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
-                        let sa = attach_at(col);
-                        let ja = attach_at((col + 1).min(cols));
-                        // The pedal refuses a split that would sit after the merge, even for a
-                        // moment: move whichever keeps the split before the merge first.
-                        let old_join = preset.attach(jp.path, jp.position).unwrap_or(i64::MAX);
-                        let join_first = sa >= old_join;
-                        preset.set_attach(sp.path, sp.position, sa);
-                        preset.set_attach(jp.path, jp.position, ja);
-                        if live {
-                            if join_first {
-                                cmds.push(Cmd::MoveJoin { block: 20 * jp.path + ja });
-                                cmds.push(Cmd::MoveSplit { block: 20 * sp.path + sa });
-                            } else {
-                                cmds.push(Cmd::MoveSplit { block: 20 * sp.path + sa });
-                                cmds.push(Cmd::MoveJoin { block: 20 * jp.path + ja });
-                            }
-                        }
-                        *dirty = true;
-                        *selected = Some(sp.global);
-                    }
-                }
-                chain::Hit::GapAdd(col) | chain::Hit::GapSendReturn(col, _) => {
-                    // The free place nearest the line that was clicked.
-                    let free_at = (0..main.len())
-                        .filter(|c| main[*c].kind == Kind::Empty)
-                        .min_by_key(|c| (*c as i64 - col as i64).abs() * 2 + if *c < col { 1 } else { 0 });
-                    match free_at.map(|c| main[c]) {
-                        Some(s) => {
+            };
+            for hit in hits {
+                match hit {
+                    chain::Hit::Click(lane, col) => {
+                        if let Some(s) = slot_at(lane, col) {
                             *selected = Some(s.global);
-                            let (category, search) = match hit {
-                                chain::Hit::GapSendReturn(_, k) => ("Send/Return".to_owned(), loop_search(k)),
-                                _ => (String::new(), String::new()),
-                            };
-                            *picker = Some(PickerState { block: s.wire_block(), slot: s.global, path: s.path, position: s.position, free, category, search, ..Default::default() });
-                        }
-                        None => {
-                            note(ui.ctx(), "No free place on this path: remove or move an effect first.");
+                            if s.kind == Kind::Empty && cat.is_some() {
+                                *picker = Some(PickerState {
+                                    block: s.wire_block(),
+                                    slot: s.global,
+                                    path: s.path,
+                                    position: s.position,
+                                    free,
+                                    ..Default::default()
+                                });
+                            }
                         }
                     }
-                }
-                chain::Hit::Drop(from, to) => {
-                    if let (Some(a), Some(b)) = (slot_at(from.0, from.1), slot_at(to.0, to.1)) {
-                        *dev_drop = Some((SlotDrag { path: a.path, position: a.position, global: a.global }, b.path, b.position, b.global));
+                    chain::Hit::DoubleClick(lane, col) | chain::Hit::Toggle(lane, col) => {
+                        if let Some(s) = slot_at(lane, col).filter(|s| s.enabled.is_some()) {
+                            toggle = Some(s.global);
+                        }
                     }
-                }
-                chain::Hit::ExtendLower => {
-                    if let Some(s) = lower.get(lower_end.saturating_sub(split_col)) {
-                        if let Some(jp) = join_slot.filter(|_| merge_col == lower_end) {
-                            let next_col = (lower_end + 1).min(cols);
-                            let attach = main.get(next_col).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
+                    chain::Hit::Change(lane, col) => menu_change = slot_at(lane, col).map(|s| s.global),
+                    chain::Hit::Remove(lane, col) => menu_remove = slot_at(lane, col).map(|s| s.global),
+                    chain::Hit::GapSplit(col) => {
+                        // Split before this column, merging again one place later.
+                        if let (Some(sp), Some(jp)) = (split_slot, join_slot) {
+                            let attach_at = |c: usize| main.get(c).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
+                            let sa = attach_at(col);
+                            let ja = attach_at((col + 1).min(cols));
+                            // The pedal refuses a split that would sit after the merge, even for a
+                            // moment: move whichever keeps the split before the merge first.
+                            let old_join = preset.attach(jp.path, jp.position).unwrap_or(i64::MAX);
+                            let join_first = sa >= old_join;
+                            preset.set_attach(sp.path, sp.position, sa);
+                            preset.set_attach(jp.path, jp.position, ja);
+                            if live {
+                                if join_first {
+                                    cmds.push(Cmd::MoveJoin { block: 20 * jp.path + ja });
+                                    cmds.push(Cmd::MoveSplit { block: 20 * sp.path + sa });
+                                } else {
+                                    cmds.push(Cmd::MoveSplit { block: 20 * sp.path + sa });
+                                    cmds.push(Cmd::MoveJoin { block: 20 * jp.path + ja });
+                                }
+                            }
+                            *dirty = true;
+                            *selected = Some(sp.global);
+                        }
+                    }
+                    chain::Hit::GapAdd(col) | chain::Hit::GapSendReturn(col, _) => {
+                        // The free place nearest the line that was clicked.
+                        let free_at = (0..main.len())
+                            .filter(|c| main[*c].kind == Kind::Empty)
+                            .min_by_key(|c| (*c as i64 - col as i64).abs() * 2 + if *c < col { 1 } else { 0 });
+                        match free_at.map(|c| main[c]) {
+                            Some(s) => {
+                                *selected = Some(s.global);
+                                let (category, search) = match hit {
+                                    chain::Hit::GapSendReturn(_, k) => ("Send/Return".to_owned(), loop_search(k)),
+                                    _ => (String::new(), String::new()),
+                                };
+                                *picker = Some(PickerState {
+                                    block: s.wire_block(),
+                                    slot: s.global,
+                                    path: s.path,
+                                    position: s.position,
+                                    free,
+                                    category,
+                                    search,
+                                    ..Default::default()
+                                });
+                            }
+                            None => {
+                                note(ui.ctx(), "No free place on this path: remove or move an effect first.");
+                            }
+                        }
+                    }
+                    chain::Hit::Drop(from, to) => {
+                        if let (Some(a), Some(b)) = (slot_at(from.0, from.1), slot_at(to.0, to.1)) {
+                            *dev_drop =
+                                Some((SlotDrag { path: a.path, position: a.position, global: a.global }, b.path, b.position, b.global));
+                        }
+                    }
+                    chain::Hit::ExtendLower => {
+                        if let Some(s) = lower.get(lower_end.saturating_sub(split_col)) {
+                            if let Some(jp) = join_slot.filter(|_| merge_col == lower_end) {
+                                let next_col = (lower_end + 1).min(cols);
+                                let attach = main.get(next_col).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
+                                preset.set_attach(jp.path, jp.position, attach);
+                                if live {
+                                    cmds.push(Cmd::MoveJoin { block: 20 * jp.path + attach });
+                                }
+                            }
+                            *dirty = true;
+                            *selected = Some(s.global);
+                            if s.kind == Kind::Empty && cat.is_some() {
+                                *picker = Some(PickerState {
+                                    block: s.wire_block(),
+                                    slot: s.global,
+                                    path: s.path,
+                                    position: s.position,
+                                    free,
+                                    ..Default::default()
+                                });
+                            }
+                        }
+                    }
+                    chain::Hit::DropExtend(from) => {
+                        if let (Some(a), Some(b)) = (slot_at(from.0, from.1), lower.get(lower_end.saturating_sub(split_col)).copied()) {
+                            if let Some(jp) = join_slot.filter(|_| merge_col == lower_end) {
+                                let next_col = (lower_end + 1).min(cols);
+                                let attach = main.get(next_col).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
+                                preset.set_attach(jp.path, jp.position, attach);
+                                if live {
+                                    cmds.push(Cmd::MoveJoin { block: 20 * jp.path + attach });
+                                }
+                            }
+                            *dev_drop =
+                                Some((SlotDrag { path: a.path, position: a.position, global: a.global }, b.path, b.position, b.global));
+                        }
+                    }
+                    chain::Hit::MoveSplit(col) => {
+                        if let Some(sp) = split_slot {
+                            let target = col.min(merge_col).min(cols.saturating_sub(1));
+                            let attach = main.get(target).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
+                            preset.set_attach(sp.path, sp.position, attach);
+                            if live {
+                                cmds.push(Cmd::MoveSplit { block: 20 * sp.path + attach });
+                            }
+                            *selected = Some(sp.global);
+                            *dirty = true;
+                        }
+                    }
+                    chain::Hit::MoveMerge(col) => {
+                        if let Some(jp) = join_slot {
+                            let target = col.clamp(split_col, cols);
+                            let attach = main.get(target).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
                             preset.set_attach(jp.path, jp.position, attach);
                             if live {
                                 cmds.push(Cmd::MoveJoin { block: 20 * jp.path + attach });
                             }
-                        }
-                        *dirty = true;
-                        *selected = Some(s.global);
-                        if s.kind == Kind::Empty && cat.is_some() {
-                            *picker = Some(PickerState { block: s.wire_block(), slot: s.global, path: s.path, position: s.position, free, ..Default::default() });
+                            *selected = Some(jp.global);
+                            *dirty = true;
                         }
                     }
+                    chain::Hit::Input => *selected = in_global,
+                    chain::Hit::Output => *selected = out_global,
+                    chain::Hit::Split => *selected = split_slot.map(|s| s.global),
+                    chain::Hit::Merge => *selected = join_slot.map(|s| s.global),
                 }
-                chain::Hit::DropExtend(from) => {
-                    if let (Some(a), Some(b)) = (slot_at(from.0, from.1), lower.get(lower_end.saturating_sub(split_col)).copied()) {
-                        if let Some(jp) = join_slot.filter(|_| merge_col == lower_end) {
-                            let next_col = (lower_end + 1).min(cols);
-                            let attach = main.get(next_col).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
-                            preset.set_attach(jp.path, jp.position, attach);
-                            if live {
-                                cmds.push(Cmd::MoveJoin { block: 20 * jp.path + attach });
-                            }
-                        }
-                        *dev_drop = Some((SlotDrag { path: a.path, position: a.position, global: a.global }, b.path, b.position, b.global));
-                    }
+            }
+            ui.add_space(6.0);
+        }
+        // A block dropped on another position of its path moves there.
+        if let Some((from, path, pos, global)) = dev_drop_cell.take() {
+            if from.path == path && from.global != global {
+                if live {
+                    cmds.push(Cmd::MoveBlock { from: 20 * from.path + from.position as i64, to: 20 * path + pos as i64 });
                 }
-                chain::Hit::MoveSplit(col) => {
-                    if let Some(sp) = split_slot {
-                        let target = col.min(merge_col).min(cols.saturating_sub(1));
-                        let attach = main.get(target).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
-                        preset.set_attach(sp.path, sp.position, attach);
-                        if live {
-                            cmds.push(Cmd::MoveSplit { block: 20 * sp.path + attach });
-                        }
-                        *selected = Some(sp.global);
-                        *dirty = true;
-                    }
-                }
-                chain::Hit::MoveMerge(col) => {
-                    if let Some(jp) = join_slot {
-                        let target = col.clamp(split_col, cols);
-                        let attach = main.get(target).map(|s| s.position as i64).unwrap_or_else(|| out.unwrap_or(9) as i64);
-                        preset.set_attach(jp.path, jp.position, attach);
-                        if live {
-                            cmds.push(Cmd::MoveJoin { block: 20 * jp.path + attach });
-                        }
-                        *selected = Some(jp.global);
-                        *dirty = true;
-                    }
-                }
-                chain::Hit::Input => *selected = in_global,
-                chain::Hit::Output => *selected = out_global,
-                chain::Hit::Split => *selected = split_slot.map(|s| s.global),
-                chain::Hit::Merge => *selected = join_slot.map(|s| s.global),
+                preset.swap_slots(path, from.position, pos);
+                *selected = Some(global);
+                *dirty = true;
             }
         }
-        ui.add_space(6.0);
-    }
-    // A block dropped on another position of its path moves there.
-    if let Some((from, path, pos, global)) = dev_drop_cell.take() {
-        if from.path == path && from.global != global {
-            if live {
-                cmds.push(Cmd::MoveBlock { from: 20 * from.path + from.position as i64, to: 20 * path + pos as i64 });
+        if let Some(g) = menu_remove.filter(|g| *g < slots.len()) {
+            let s = &slots[g];
+            if s.kind == Kind::Block {
+                if live {
+                    cmds.push(Cmd::ClearBlock { block: s.wire_block() });
+                }
+                preset.clear_slot(s.path, s.position);
+                *selected = Some(g);
+                *dirty = true;
             }
-            preset.swap_slots(path, from.position, pos);
-            *selected = Some(global);
-            *dirty = true;
         }
-    }
-    if let Some(g) = menu_remove.filter(|g| *g < slots.len()) {
-        let s = &slots[g];
-        if s.kind == Kind::Block {
-            if live {
-                cmds.push(Cmd::ClearBlock { block: s.wire_block() });
-            }
-            preset.clear_slot(s.path, s.position);
+        if let (Some(g), Some(c)) = (menu_change.filter(|g| *g < slots.len()), cat) {
             *selected = Some(g);
+            *picker = Some(change_picker(c, &slots, &slots[g]));
+        }
+        if let Some(g) = toggle {
+            let s = &slots[g];
+            let on = !s.enabled.unwrap_or(true);
+            preset.set_enabled(s.path, s.position, on);
             *dirty = true;
+            if live {
+                cmds.push(Cmd::SetEnabled { block: s.wire_block(), enabled: on });
+            }
         }
-    }
-    if let (Some(g), Some(c)) = (menu_change.filter(|g| *g < slots.len()), cat) {
-        *selected = Some(g);
-        *picker = Some(change_picker(c, &slots, &slots[g]));
-    }
-    if let Some(g) = toggle {
-        let s = &slots[g];
-        let on = !s.enabled.unwrap_or(true);
-        preset.set_enabled(s.path, s.position, on);
-        *dirty = true;
-        if live {
-            cmds.push(Cmd::SetEnabled { block: s.wire_block(), enabled: on });
-        }
-    }
     }
     if !panel_part() {
         return;
@@ -385,7 +406,9 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                         (Some(a), Some(b)) => x.position > a && x.position < b,
                         _ => true,
                     };
-                    inside && !matches!(x.kind, Kind::Input | Kind::Output | Kind::Split | Kind::Join) && !lower_positions.contains(&x.position)
+                    inside
+                        && !matches!(x.kind, Kind::Input | Kind::Output | Kind::Split | Kind::Join)
+                        && !lower_positions.contains(&x.position)
                 })
                 .take(chain::COLS)
                 .collect();
@@ -405,7 +428,11 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                     cur -= 1;
                     moved = true;
                 }
-                if ui.add(egui::DragValue::new(&mut cur).range(min_c..=max_c)).on_hover_text("Which chain position it sits before (or drag the dot on the path)").changed() {
+                if ui
+                    .add(egui::DragValue::new(&mut cur).range(min_c..=max_c))
+                    .on_hover_text("Which chain position it sits before (or drag the dot on the path)")
+                    .changed()
+                {
                     moved = true;
                 }
                 if ui.add_enabled(cur < max_c, egui::Button::new("▶").small()).on_hover_text("Move later in the chain").clicked() {
@@ -512,17 +539,20 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
 /// footswitch, snapshots or MIDI, with its range (and CC), to change or remove,
 /// and adding a knob. Edits are kept in the preset (written when it's saved or
 /// sent); on the live preset they are also sent to the pedal at once.
-pub fn device_controllers(ui: &mut egui::Ui, preset: &mut DevicePreset, live: bool, cmds: &mut Vec<Cmd>, cat: Option<&Catalog>, dirty: &mut bool) {
+pub fn device_controllers(
+    ui: &mut egui::Ui,
+    preset: &mut DevicePreset,
+    live: bool,
+    cmds: &mut Vec<Cmd>,
+    cat: Option<&Catalog>,
+    dirty: &mut bool,
+) {
     let fam = snapshots::family_of_device(crate::nam::unit());
     let mut list = preset.controllers();
     let slots = preset.slots();
     let name_of_ctl = |c: i64| snapshots::Source::from_code(c, fam).map(|s| s.label()).unwrap_or_else(|| format!("Controller {c}"));
-    let snap_names: Vec<String> = preset
-        .snapshot_names()
-        .into_iter()
-        .enumerate()
-        .map(|(i, n)| if n.trim().is_empty() { format!("{}", i + 1) } else { n })
-        .collect();
+    let snap_names: Vec<String> =
+        preset.snapshot_names().into_iter().enumerate().map(|(i, n)| if n.trim().is_empty() { format!("{}", i + 1) } else { n }).collect();
     let mut changed = false;
     let mut remove: Option<usize> = None;
     theme::card(ui, |ui| {
@@ -576,13 +606,16 @@ pub fn device_controllers(ui: &mut egui::Ui, preset: &mut DevicePreset, live: bo
         ui.data_mut(|d| d.insert_temp(tab_id, tab));
         ui.add_space(4.0);
         if count(tab) == 0 {
-            ui.label(RichText::new(match tab {
-                0 => "Nothing is on a footswitch.",
-                1 => "No knob is on an expression pedal.",
-                2 => "No knob changes with the snapshots.",
-                3 => "No knob is on a MIDI CC.",
-                _ => "Nothing here.",
-            }).color(MUTED));
+            ui.label(
+                RichText::new(match tab {
+                    0 => "Nothing is on a footswitch.",
+                    1 => "No knob is on an expression pedal.",
+                    2 => "No knob changes with the snapshots.",
+                    3 => "No knob is on a MIDI CC.",
+                    _ => "Nothing here.",
+                })
+                .color(MUTED),
+            );
         }
         // Footswitches: which effects they switch on and off.
         if tab == 0 && !fs_blocks.is_empty() {
@@ -728,11 +761,20 @@ pub fn device_controllers(ui: &mut egui::Ui, preset: &mut DevicePreset, live: bo
                                         };
                                         let code = src.code(fam);
                                         let snaps = (0..preset.snapshot_names().len())
-                                            .map(|_| (code == fam.snapshots_ctrl).then(|| (false, preset.knob_value(s.wire_block(), k, false).unwrap_or(Value::Nil))))
+                                            .map(|_| {
+                                                (code == fam.snapshots_ctrl)
+                                                    .then(|| (false, preset.knob_value(s.wire_block(), k, false).unwrap_or(Value::Nil)))
+                                            })
                                             .collect();
                                         let cc = if code == fam.midi_ctrl { 1 } else { 4 };
                                         if live {
-                                            cmds.push(Cmd::AssignController { block: s.wire_block(), cab: false, index: k as i64, controller: code, cc });
+                                            cmds.push(Cmd::AssignController {
+                                                block: s.wire_block(),
+                                                cab: false,
+                                                index: k as i64,
+                                                controller: code,
+                                                cc,
+                                            });
                                         } else {
                                             let mut c = crate::devpreset::Ctl::knob(code, s.wire_block(), k);
                                             (c.min, c.max, c.cc, c.snaps) = (typed(lo), typed(hi), cc, snaps);

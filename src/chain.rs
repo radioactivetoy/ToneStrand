@@ -28,7 +28,15 @@ pub enum Cell {
     Empty,
     /// `detail`: one more line under the name (e.g. the NAM capture it plays).
     /// category and symbol pick its icon.
-    Block { title: String, subtitle: String, colour: Color32, on: bool, detail: Option<String>, category: String, symbol: String },
+    Block {
+        title: String,
+        subtitle: String,
+        colour: Color32,
+        on: bool,
+        detail: Option<String>,
+        category: String,
+        symbol: String,
+    },
 }
 
 /// Something the person did in the diagram.
@@ -108,7 +116,13 @@ fn draw_block(ui: &egui::Ui, rect: Rect, cell: &Cell, selected: bool, hovered: b
     match cell {
         Cell::Empty => {
             let small = Rect::from_center_size(rect.center(), Vec2::new(46.0, bh()));
-            let col = if selected { accent() } else if hovered { MUTED } else { crate::theme::line() };
+            let col = if selected {
+                accent()
+            } else if hovered {
+                MUTED
+            } else {
+                crate::theme::line()
+            };
             p.rect_filled(small, CornerRadius::same(8), bg());
             p.rect_stroke(small, CornerRadius::same(8), Stroke::new(1.0_f32, col), egui::StrokeKind::Inside);
             if can_add {
@@ -116,7 +130,8 @@ fn draw_block(ui: &egui::Ui, rect: Rect, cell: &Cell, selected: bool, hovered: b
             }
         }
         Cell::Block { title, subtitle, colour, on, detail, category, symbol } => {
-            let look = StudioBlock { title, subtitle, colour: *colour, on: *on, detail: detail.as_deref(), category, symbol, selected, hovered };
+            let look =
+                StudioBlock { title, subtitle, colour: *colour, on: *on, detail: detail.as_deref(), category, symbol, selected, hovered };
             draw_studio_block(ui, rect, look);
         }
     }
@@ -148,9 +163,19 @@ fn draw_studio_block(ui: &egui::Ui, rect: Rect, look: StudioBlock) {
     let r = CornerRadius::same(rad as u8);
     // A glow around the picked block, a soft ring on hover.
     if selected {
-        p.rect_stroke(rect.expand(4.0), CornerRadius::same(15), Stroke::new(4.0_f32, accent().gamma_multiply(0.35)), egui::StrokeKind::Outside);
+        p.rect_stroke(
+            rect.expand(4.0),
+            CornerRadius::same(15),
+            Stroke::new(4.0_f32, accent().gamma_multiply(0.35)),
+            egui::StrokeKind::Outside,
+        );
     } else if hovered {
-        p.rect_stroke(rect.expand(3.0), CornerRadius::same(14), Stroke::new(3.0_f32, colour.gamma_multiply(0.3)), egui::StrokeKind::Outside);
+        p.rect_stroke(
+            rect.expand(3.0),
+            CornerRadius::same(14),
+            Stroke::new(3.0_f32, colour.gamma_multiply(0.3)),
+            egui::StrokeKind::Outside,
+        );
     }
     // Flat, like the rest of the window: the effect type's colour (dull grey when off).
     let fill = if on { mix(colour, bg(), 0.18) } else { mix(panel(), card_hi(), 0.3) };
@@ -238,11 +263,7 @@ fn draw_loop_marker(ui: &egui::Ui, rect: Rect, title: &str, on: bool, selected: 
     }
     let arrow = |tip: Pos2, up: bool| {
         let d = if up { -1.0 } else { 1.0 };
-        p.add(egui::Shape::convex_polygon(
-            vec![tip, tip + Vec2::new(-5.0, -7.0 * d), tip + Vec2::new(5.0, -7.0 * d)],
-            col,
-            Stroke::NONE,
-        ));
+        p.add(egui::Shape::convex_polygon(vec![tip, tip + Vec2::new(-5.0, -7.0 * d), tip + Vec2::new(5.0, -7.0 * d)], col, Stroke::NONE));
     };
     let t = title.trim();
     let (kind, label) = if let Some(rest) = t.strip_prefix("FX Loop") {
@@ -307,10 +328,14 @@ const TERMINAL_R: f32 = 21.0;
 fn io_box(ui: &egui::Ui, rect: Rect, text: &str, selected: bool, hovered: bool) {
     let p = ui.painter();
     // A small round terminal; click it for the input or output settings.
-        let c = rect.center();
-        p.circle_filled(c, TERMINAL_R, if hovered { card_hi() } else { panel() });
-        p.circle_stroke(c, TERMINAL_R, Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, if selected { accent() } else { crate::theme::line() }));
-        p.text(c, egui::Align2::CENTER_CENTER, text, egui::FontId::monospace(11.5), if hovered || selected { TEXT } else { MUTED });
+    let c = rect.center();
+    p.circle_filled(c, TERMINAL_R, if hovered { card_hi() } else { panel() });
+    p.circle_stroke(
+        c,
+        TERMINAL_R,
+        Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, if selected { accent() } else { crate::theme::line() }),
+    );
+    p.text(c, egui::Align2::CENTER_CENTER, text, egui::FontId::monospace(11.5), if hovered || selected { TEXT } else { MUTED });
 }
 
 impl Chain<'_> {
@@ -324,7 +349,7 @@ impl Chain<'_> {
         let view = self.width;
         let fit = (view - 8.0 - 2.0 * IO_W - (total_cols as f32 + 1.0) * GAP) / total_cols.max(1) as f32;
         BW.with(|c| c.set(fit.clamp(86.0, 170.0)));
-        let width =2.0 * IO_W + (total_cols as f32 + 1.0) * GAP + total_cols as f32 * bw();
+        let width = 2.0 * IO_W + (total_cols as f32 + 1.0) * GAP + total_cols as f32 * bw();
         let height = rows as f32 * bh() + (rows - 1) as f32 * ROW_GAP + 8.0;
         let (area, _) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::hover());
         let left = area.left();
@@ -422,7 +447,11 @@ impl Chain<'_> {
                         chosen = Some(Hit::GapAdd(c));
                     }
                     ui.separator();
-                    if ui.button("Add an FX loop here (send + return)...").on_hover_text("One block that sends out and returns: the usual way to add pedals in a loop").clicked() {
+                    if ui
+                        .button("Add an FX loop here (send + return)...")
+                        .on_hover_text("One block that sends out and returns: the usual way to add pedals in a loop")
+                        .clicked()
+                    {
                         chosen = Some(Hit::GapSendReturn(c, 0));
                     }
                     if ui.button("Add a send here...").clicked() {
@@ -467,7 +496,12 @@ impl Chain<'_> {
                     r.dnd_set_drag_payload(DragCell(lane, col));
                 }
                 if r.dnd_hover_payload::<DragCell>().is_some() {
-                    ui.painter().rect_stroke(rect.expand(2.0), CornerRadius::same(11), Stroke::new(2.0_f32, ORANGE), egui::StrokeKind::Outside);
+                    ui.painter().rect_stroke(
+                        rect.expand(2.0),
+                        CornerRadius::same(11),
+                        Stroke::new(2.0_f32, ORANGE),
+                        egui::StrokeKind::Outside,
+                    );
                 }
                 if let Some(from) = r.dnd_release_payload::<DragCell>() {
                     if (from.0, from.1) != (lane, col) {
@@ -545,7 +579,13 @@ impl Chain<'_> {
                 let send = format!("Send{n}");
                 if named.iter().any(|(c2, t2)| c2 > c && *t2 == send) {
                     let r = cell_rect(0, *c);
-                    p.text(r.center_bottom() + Vec2::new(0.0, 4.0), egui::Align2::CENTER_TOP, "before its send", egui::FontId::proportional(10.5), BAD);
+                    p.text(
+                        r.center_bottom() + Vec2::new(0.0, 4.0),
+                        egui::Align2::CENTER_TOP,
+                        "before its send",
+                        egui::FontId::proportional(10.5),
+                        BAD,
+                    );
                 }
             }
         }
@@ -602,11 +642,7 @@ impl Chain<'_> {
 
         // One more "+" just after the lower lane, so it can hold more effects.
         if self.lower.is_some() && self.can_extend_lower {
-            let ex_x = if lower_end < total_cols {
-                col_x(left, lower_end) + bw() / 2.0
-            } else {
-                col_x(left, lower_end) + IO_W / 2.0
-            };
+            let ex_x = if lower_end < total_cols { col_x(left, lower_end) + bw() / 2.0 } else { col_x(left, lower_end) + IO_W / 2.0 };
             let rect = Rect::from_center_size(Pos2::new(ex_x, low_y), Vec2::new(46.0, bh() - 16.0));
             let r = ui.interact(rect, ui.id().with((self.id, "extend")), egui::Sense::click());
             let col = if r.hovered() || r.dnd_hover_payload::<DragCell>().is_some() { accent() } else { crate::theme::line() };
@@ -636,7 +672,11 @@ impl Chain<'_> {
                 let id = ui.id().with((self.id, if is_split { "split" } else { "merge" }));
                 let r = ui.interact(rect, id, egui::Sense::click_and_drag());
                 let active = self.selected == sel || r.hovered() || r.dragged();
-                ui.painter().circle_filled(c, if active { 8.0 } else { 6.5 }, if self.selected == sel || r.dragged() { accent() } else { Color32::from_gray(170) });
+                ui.painter().circle_filled(
+                    c,
+                    if active { 8.0 } else { 6.5 },
+                    if self.selected == sel || r.dragged() { accent() } else { Color32::from_gray(170) },
+                );
                 ui.painter().circle_stroke(c, 7.5, Stroke::new(2.0_f32, bg()));
                 if r.dragged() {
                     if let Some(pos) = ui.input(|i| i.pointer.interact_pos()) {
