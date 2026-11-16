@@ -381,6 +381,7 @@ impl App {
             egui::Window::new("Rename IR").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
                 ui.label(format!("Slot {}", slot + 1));
                 let r = ui.add(egui::TextEdit::singleline(&mut name).char_limit(crate::session::IR_NAME_MAX).desired_width(260.0));
+                ui.horizontal(|ui| theme::name_hint(ui, &name, crate::session::IR_NAME_MAX));
                 let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
                 ui.horizontal(|ui| {
                     if theme::primary_button(ui, "Rename").clicked() || enter {

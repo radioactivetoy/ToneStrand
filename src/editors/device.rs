@@ -48,7 +48,10 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                         }
                     }
                 });
-                let r = ui.add(egui::TextEdit::singleline(&mut n).desired_width(80.0).char_limit(10));
+                let r = ui.add(egui::TextEdit::singleline(&mut n).desired_width(80.0).char_limit(crate::session::SNAPSHOT_NAME_MAX));
+                if r.has_focus() {
+                    theme::name_hint(ui, &n, crate::session::SNAPSHOT_NAME_MAX);
+                }
                 if r.changed() {
                     preset.set_snapshot_name(i, &n);
                     *dirty = true;

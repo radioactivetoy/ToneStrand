@@ -931,7 +931,11 @@ impl App {
             match &mut doc.kind {
                 DocKind::Hlx { json } => {
                     let mut name = hlx::name(json);
-                    if ui.add(egui::TextEdit::singleline(&mut name).font(font).desired_width(w)).changed() {
+                    let r = ui.add(egui::TextEdit::singleline(&mut name).font(font).desired_width(w));
+                    if r.has_focus() {
+                        theme::name_hint(ui, &name, crate::session::PRESET_NAME_MAX);
+                    }
+                    if r.changed() {
                         hlx::set_name(json, &name);
                         doc.title = name;
                         doc.dirty = true;
@@ -941,11 +945,13 @@ impl App {
                     }
                 }
                 DocKind::Device { origin, .. } => {
-                    if ui
-                        .add(egui::TextEdit::singleline(&mut doc.name).font(font).desired_width(w).char_limit(16))
-                        .on_hover_text("The name it gets on the pedal when you write or save it")
-                        .changed()
-                    {
+                    let r = ui
+                        .add(egui::TextEdit::singleline(&mut doc.name).font(font).desired_width(w).char_limit(crate::session::PRESET_NAME_MAX))
+                        .on_hover_text("The name it gets on the pedal when you write or save it");
+                    if r.has_focus() {
+                        theme::name_hint(ui, &doc.name, crate::session::PRESET_NAME_MAX);
+                    }
+                    if r.changed() {
                         doc.dirty = true;
                     }
                     match origin {
@@ -1204,8 +1210,8 @@ impl App {
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
                     ui.label(format!("New name for {}:", slot_label(idx)));
-                    let r = ui.add(egui::TextEdit::singleline(&mut name).char_limit(16));
-                    ui.label(RichText::new("Up to 16 characters").small().color(MUTED));
+                    let r = ui.add(egui::TextEdit::singleline(&mut name).char_limit(crate::session::PRESET_NAME_MAX));
+                    ui.horizontal(|ui| theme::name_hint(ui, &name, crate::session::PRESET_NAME_MAX));
                     ui.horizontal(|ui| {
                         if theme::primary_button(ui, "Rename").clicked()
                             || (r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))

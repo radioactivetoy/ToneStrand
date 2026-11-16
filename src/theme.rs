@@ -193,6 +193,17 @@ pub fn help(ui: &mut egui::Ui, text: &str) -> egui::Response {
     })
 }
 
+/// Beside a name that goes to the pedal: how much of its limit is used ("12/16"), and, when
+/// the pedal will show it differently (accents lost, odd symbols dropped, cut short), how.
+pub fn name_hint(ui: &mut egui::Ui, text: &str, max: usize) {
+    let n = text.chars().count();
+    ui.label(egui::RichText::new(format!("{n}/{max}")).small().monospace().color(if n >= max { ORANGE } else { MUTED }));
+    let shown = crate::session::pedal_name(text, max);
+    if shown != crate::session::clean(text) {
+        ui.label(egui::RichText::new(format!("reads \"{shown}\" on the pedal")).small().color(MUTED));
+    }
+}
+
 /// A section title with a "?" beside it.
 pub fn section_help(ui: &mut egui::Ui, title: &str, text: &str) {
     ui.horizontal(|ui| {

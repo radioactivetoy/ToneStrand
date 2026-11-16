@@ -67,7 +67,11 @@ fn snapshot_bar(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mut boo
                 let mut n = name.clone();
                 ui.add_space(12.0);
                 ui.label(RichText::new("Name").color(MUTED));
-                if ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(10)).changed() {
+                let r = ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(crate::session::SNAPSHOT_NAME_MAX));
+                if r.has_focus() {
+                    theme::name_hint(ui, &n, crate::session::SNAPSHOT_NAME_MAX);
+                }
+                if r.changed() {
                     snapshots::rename(json, cur, &n);
                     *dirty = true;
                 }

@@ -31,7 +31,9 @@ pub fn studio_strip_hlx(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: 
                     let mut n = name.clone();
                     ui.horizontal(|ui| {
                         ui.label("Name");
-                        if ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(10)).changed() {
+                        let r = ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(crate::session::SNAPSHOT_NAME_MAX));
+                        theme::name_hint(ui, &n, crate::session::SNAPSHOT_NAME_MAX);
+                        if r.changed() {
                             snapshots::rename(json, *i, &n);
                             *dirty = true;
                         }
@@ -115,7 +117,8 @@ pub fn studio_strip_device(ui: &mut egui::Ui, preset: &mut DevicePreset, dirty: 
                     let mut n = name.clone();
                     ui.horizontal(|ui| {
                         ui.label("Name");
-                        let te = ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(10));
+                        let te = ui.add(egui::TextEdit::singleline(&mut n).desired_width(110.0).char_limit(crate::session::SNAPSHOT_NAME_MAX));
+                        theme::name_hint(ui, &n, crate::session::SNAPSHOT_NAME_MAX);
                         if te.changed() {
                             preset.set_snapshot_name(i, &n);
                             *dirty = true;
