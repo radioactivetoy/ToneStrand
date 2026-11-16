@@ -511,6 +511,47 @@ impl App {
         }
     }
 
+    /// Window-wide keys: Ctrl+W closes the tab, Ctrl+O opens a file, Ctrl+N starts a new
+    /// preset, Ctrl+Tab / Ctrl+Shift+Tab move between tabs. (Ctrl+S, Ctrl+Z and Ctrl+Y are
+    /// handled with the preset's bar.) They are left alone while a text field has the keyboard
+    /// or a question is showing.
+    fn shortcuts(&mut self, ctx: &egui::Context) {
+        if ctx.wants_keyboard_input() || self.close_ask.is_some() || self.confirm.is_some() || self.unit_report.is_some() {
+            return;
+        }
+        let ctrl = egui::Modifiers::COMMAND;
+        let (close, open, new, prev, next) = ctx.input_mut(|i| {
+            (
+                i.consume_key(ctrl, egui::Key::W),
+                i.consume_key(ctrl, egui::Key::O),
+                i.consume_key(ctrl, egui::Key::N),
+                // The shifted one first: Ctrl+Tab alone must not match it.
+                i.consume_key(ctrl | egui::Modifiers::SHIFT, egui::Key::Tab),
+                i.consume_key(ctrl, egui::Key::Tab),
+            )
+        });
+        if open {
+            self.view = View::Editor;
+            self.open_file_dialog();
+        }
+        if new {
+            self.view = View::Editor;
+            self.new_preset();
+        }
+        if self.view != View::Editor || self.docs.is_empty() {
+            return;
+        }
+        let n = self.docs.len();
+        let here = self.active.min(n - 1);
+        if close {
+            self.request_close_tab(here);
+        } else if prev {
+            self.active = (here + n - 1) % n;
+        } else if next {
+            self.active = (here + 1) % n;
+        }
+    }
+
     /// Close a tab, asking first when it has changes that aren't saved.
     fn request_close_tab(&mut self, i: usize) {
         if self.docs.get(i).is_some_and(Doc::needs_save) {
@@ -1387,6 +1428,7 @@ impl eframe::App for App {
             }
         }
         self.guard_quit(ctx);
+        self.shortcuts(ctx);
         self.poll(ctx);
         self.auto_pick();
         // The hidden Tests page.

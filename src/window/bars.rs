@@ -59,7 +59,7 @@ impl App {
                         theme::pill(ui, &format!("{}  {}", slot_label((*idx).max(0) as usize), name), accent());
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Open file...").clicked() {
+                        if ui.button("Open file...").on_hover_text("Open a preset file (Ctrl+O)").clicked() {
                             if let Some(p) = rfd::FileDialog::new()
                                 .set_directory(&self.library_dir)
                                 .add_filter("Presets", &["hlx", "hxpreset"])
@@ -72,7 +72,7 @@ impl App {
                         let mut make: Option<i64> = None;
                         if ui
                             .button("New preset")
-                            .on_hover_text(format!("An empty preset for the {}", crate::units::unit_name(self.unit)))
+                            .on_hover_text(format!("An empty preset for the {} (Ctrl+N)", crate::units::unit_name(self.unit)))
                             .clicked()
                         {
                             make = Some(self.unit);
@@ -201,10 +201,10 @@ impl App {
                         theme::pill(ui, &format!("playing {}  {}", slot_label((*idx).max(0) as usize), name), accent());
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Open file...").clicked() {
+                        if ui.button("Open file...").on_hover_text("Open a preset file (Ctrl+O)").clicked() {
                             self.open_file_dialog();
                         }
-                        if ui.button("New preset").on_hover_text(format!("An empty preset for the {}", crate::units::unit_name(self.unit))).clicked() {
+                        if ui.button("New preset").on_hover_text(format!("An empty preset for the {} (Ctrl+N)", crate::units::unit_name(self.unit))).clicked() {
                             self.new_preset();
                         }
                         let mut pick = None;
