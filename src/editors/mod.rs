@@ -211,6 +211,10 @@ pub struct PickerState {
     pub category: String,
     pub sub: String,
     pub search: String,
+    /// The effect the pointer was last over (its description shows under the list).
+    pub hover: Option<String>,
+    /// The search box has been given the focus (once, when the window opens).
+    pub focused: bool,
 }
 
 /// The "Add a block" window: categories on the left, variants as tabs,
@@ -218,6 +222,7 @@ pub struct PickerState {
 /// Returns where it goes, the model and the paired cab once one is picked.
 pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: &Catalog) -> Option<(PickerState, i64, Option<i64>)> {
     let st = state.as_mut()?;
+    let enter = ctx.input(|i| i.key_pressed(egui::Key::Enter));
     let mut picked = None;
     let mut open = true;
     let all_groups = cat.picker_groups();
@@ -239,11 +244,25 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("position {}", st.block)).color(MUTED));
+                ui.label(RichText::new(format!("Path {}, slot {}", st.path + 1, st.position + 1)).color(MUTED));
                 let col = if st.free < 15.0 { BAD } else { GOOD };
                 ui.label(RichText::new(format!("{:.0}% DSP free", st.free.max(0.0))).color(col));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.add(egui::TextEdit::singleline(&mut st.search).hint_text("🔍 Search effects").desired_width(220.0));
+                    // A visible box, and the cursor in it from the start: type to search,
+                    // Enter takes the first match, Esc closes.
+                    let r = egui::Frame::new()
+                        .fill(bg())
+                        .stroke(Stroke::new(1.0_f32, line()))
+                        .corner_radius(CornerRadius::same(6))
+                        .inner_margin(egui::Margin::symmetric(6, 2))
+                        .show(ui, |ui| {
+                            ui.add(egui::TextEdit::singleline(&mut st.search).frame(false).hint_text("Search effects").desired_width(210.0))
+                        })
+                        .inner;
+                    if !st.focused {
+                        r.request_focus();
+                        st.focused = true;
+                    }
                 });
             });
             ui.separator();
@@ -262,12 +281,15 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                     ui.painter().rect_filled(r, CornerRadius::same(2), *col);
                                     ui.add_space(9.0);
                                 }
-                                if ui.selectable_label(sel, format!("{name}  ")).clicked() {
+                                if ui.selectable_label(sel, name.as_str()).clicked() {
                                     st.category = name.clone();
                                     st.sub.clear();
                                     st.search.clear();
                                 }
-                                ui.label(RichText::new(count.to_string()).small().color(MUTED));
+                                // The counts line up on the right.
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    ui.label(RichText::new(count.to_string()).small().color(MUTED));
+                                });
                             });
                         }
                     });
@@ -288,14 +310,25 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                         ui.horizontal(|ui| {
                             for g in &groups {
                                 let label = if g.sub.is_empty() { "All".to_owned() } else { format!("{}  {}", g.sub, g.models.len()) };
-                                if ui.selectable_label(g.sub == st.sub, label).clicked() {
+                                let tip = match g.sub.as_str() {
+                                    "Mono" => "Mono versions: one signal in, one out",
+                                    "Stereo" => "Stereo versions: two signals in and out",
+                                    "Legacy" => "Older versions of these effects",
+                                    _ => "",
+                                };
+                                let r = ui.selectable_label(g.sub == st.sub, label);
+                                let r = if tip.is_empty() { r } else { r.on_hover_text(tip) };
+                                if r.clicked() {
                                     st.sub = g.sub.clone();
                                 }
                             }
                         });
                         ui.add_space(4.0);
                     }
-                    egui::ScrollArea::vertical().id_salt("pick-models").max_height(440.0).auto_shrink([false, false]).show(ui, |ui| {
+                    // The first effect that fits: Enter takes it while searching.
+                    let mut first: Option<(i64, Option<i64>)> = None;
+                    let mut row_no = 0usize;
+                    egui::ScrollArea::vertical().id_salt("pick-models").max_height(340.0).auto_shrink([false, false]).show(ui, |ui| {
                         for g in groups.iter().filter(|g| !search.is_empty() || groups.len() == 1 || g.sub == st.sub) {
                             let loops = snapshots::family_of_device(crate::nam::unit()).fx_loops;
                             for m in g
@@ -327,8 +360,27 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                 let fits = cost <= st.free + 0.01;
                                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), egui::Sense::click());
                                 let p = ui.painter();
+                                // A faint stripe on every other row guides the eye to the DSP figure.
+                                if row_no % 2 == 1 {
+                                    p.rect_filled(rect, CornerRadius::same(6), Color32::from_white_alpha(5));
+                                }
+                                row_no += 1;
                                 if resp.hovered() && fits {
                                     p.rect_filled(rect, CornerRadius::same(6), card_hi());
+                                }
+                                if first.is_none() && fits {
+                                    first = Some((m.number, paired));
+                                    if !search.is_empty() {
+                                        p.rect_stroke(
+                                            rect,
+                                            CornerRadius::same(6),
+                                            Stroke::new(1.0_f32, accent().gamma_multiply(0.6)),
+                                            egui::StrokeKind::Inside,
+                                        );
+                                    }
+                                }
+                                if resp.hovered() {
+                                    st.hover = cat.symbol(m.number).map(str::to_owned);
                                 }
                                 // The effect's own kind (Fuzz, Tape, Plate, Chorus...) from the Stadium icons;
                                 // a colour square only when its type has none.
@@ -379,9 +431,30 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                             }
                         }
                     });
+                    // Enter takes the first match of a search.
+                    if enter && !search.is_empty() && picked.is_none() {
+                        if let Some((n, p)) = first {
+                            picked = Some((st.clone(), n, p));
+                        }
+                    }
+                    // What the effect under the pointer is, in a few lines.
+                    ui.separator();
+                    let shown = st.hover.clone().or_else(|| first.and_then(|(n, _)| cat.symbol(n).map(str::to_owned)));
+                    ui.allocate_ui(Vec2::new(ui.available_width(), 84.0), |ui| {
+                        ui.set_min_height(84.0);
+                        match shown.as_deref() {
+                            Some(sym) => crate::modelinfo::summary(ui, sym),
+                            None => {
+                                ui.label(RichText::new("Point at an effect to see what it is.").small().color(MUTED));
+                            }
+                        }
+                    });
                 });
             });
         });
+    if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        open = false;
+    }
     if !open || picked.is_some() {
         *state = None;
     }

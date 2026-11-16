@@ -145,6 +145,29 @@ pub fn side(ui: &mut egui::Ui, symbol: &str, width: f32, cab: Option<&str>) {
 }
 
 /// A tooltip for the effect picker: photo, based-on line and the first lines of the description.
+/// A compact description for a pane under a list: the picture beside what it is based on and
+/// the first lines of its description.
+pub fn summary(ui: &mut egui::Ui, symbol: &str) {
+    let Some(i) = info(symbol) else {
+        ui.label(RichText::new("No description for this effect.").small().color(MUTED));
+        return;
+    };
+    ui.horizontal_top(|ui| {
+        if let Some(t) = photo(ui.ctx(), symbol) {
+            image(ui, &t, Vec2::new(120.0, 66.0));
+        }
+        ui.vertical(|ui| {
+            if let Some(b) = &i.based_on {
+                ui.label(RichText::new(format!("Based on {b}")).strong());
+            }
+            if let Some(d) = i.description.as_deref().and_then(|d| d.split("\n\n").next()) {
+                let short: String = if d.chars().count() > 230 { d.chars().take(230).collect::<String>() + "…" } else { d.to_owned() };
+                ui.label(RichText::new(short).small().color(MUTED));
+            }
+        });
+    });
+}
+
 pub fn hover(ui: &mut egui::Ui, symbol: &str) {
     let Some(i) = info(symbol) else { return };
     if let Some(t) = photo(ui.ctx(), symbol) {
