@@ -1077,7 +1077,7 @@ impl App {
                     ui.label(RichText::new("HX Edit was not found").size(16.0).strong().color(ORANGE));
                     ui.label(
                         RichText::new(
-                            "ToneStrand takes effect names, knob ranges and pictures from the HX Edit program on this computer. \
+                            "ToneStrand takes effect names, knob names and ranges from the HX Edit program on this computer. \
                              Without it most of the editor is empty. Install HX Edit, or choose the folder it is in.",
                         )
                         .color(MUTED),

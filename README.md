@@ -6,6 +6,12 @@ Helix Floor / LT / Rack), connected over **USB** or wirelessly through a **Helri
 Written in Rust with [egui](https://github.com/emilk/egui) / eframe. One self-contained
 program; no account, no cloud, nothing leaves your computer.
 
+> **Requires Line 6's HX Edit.** ToneStrand needs [HX Edit](https://line6.com/software/)
+> installed on the same computer, with no exceptions. It reads the effect names, knob names and
+> ranges, and categories from HX Edit's own files; the pedal itself only stores numbers.
+> Without HX Edit the editor is mostly empty. Nothing from HX Edit is copied into this
+> repository.
+
 ![The ToneStrand editor connected to an HX Stomp: the pedal's presets on the left, the loaded preset's signal chain on top, the selected amp's knobs below](docs/images/editor.png)
 
 *Editing the preset loaded on an HX Stomp, connected through a Helrig Box: the pedal's preset
@@ -46,7 +52,7 @@ The effect pictures and names come from Line 6; see "Third-party material" below
 
 ## Requirements
 
-- **HX Edit installed** on the same computer. ToneStrand reads effect names, knob names and
+- **HX Edit installed** on the same computer (required). ToneStrand reads effect names, knob names and
   ranges from HX Edit's resource files at start-up (`Helix.sym`, `*.models`,
   `HelixControls.json`, ...). Nothing from HX Edit is copied into this repository. If HX Edit
   is in an unusual place, set its folder in Settings.
