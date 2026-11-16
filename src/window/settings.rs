@@ -245,8 +245,8 @@ impl App {
                         changed |= ui.checkbox(&mut self.settings.show_sample, "Open the sample preset at every start").changed();
                         changed |= ui.checkbox(&mut self.settings.start_in_library, "Start on the library page").changed();
                         ui.horizontal(|ui| {
-                            changed |= ui.checkbox(&mut self.settings.auto_reconnect, "Connect again when a USB pedal is plugged back in").changed();
-                            theme::help(ui, "After the pedal drops out (unplugged, or it stopped answering and then left the USB list), ToneStrand connects to it once when it reappears. It doesn't do this after you press Disconnect, or for a Helrig Box.");
+                            changed |= ui.checkbox(&mut self.settings.auto_reconnect, "Connect again when the link drops").changed();
+                            theme::help(ui, "After the link drops (the pedal unplugged, it stopped answering, or the Helrig Box went away), ToneStrand tries again a few times, a little later each time; a USB pedal that has left the list is waited for. It does not do this after you press Disconnect.");
                         });
                         ui.horizontal(|ui| {
                             changed |= ui.checkbox(&mut self.settings.reopen_tabs, "Reopen last session's presets at start").changed();

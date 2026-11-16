@@ -215,11 +215,10 @@ pub struct App {
     restore: Option<backups::RestoreState>,
     restore_all: Option<restore_all::RestoreAllState>,
     compare: Option<compare_window::CompareState>,
-    /// The USB pedal the current (or last) link was made to; None for a Helrig Box.
-    last_usb: Option<u16>,
-    /// A USB pedal that dropped out: its product id, and whether it has left the USB list
-    /// since (so it coming back means it was plugged in again). Reconnected once.
-    reconnect: Option<(u16, bool)>,
+    /// What the current (or last) link was made to: a USB pedal or a Helrig Box.
+    last_target: Option<Target>,
+    /// A link that dropped and is being made again: tries so far and when the next one is due.
+    reconnect: Option<connection::Reconnect>,
     /// The person pressed Disconnect: never reconnect by itself after that.
     user_disconnected: bool,
     /// "Not now" was clicked on the card that explains HX Edit is missing.
@@ -316,7 +315,7 @@ impl App {
             restore: None,
             restore_all: None,
             compare: None,
-            last_usb: None,
+            last_target: None,
             reconnect: None,
             user_disconnected: false,
             catalog_card_hidden: false,

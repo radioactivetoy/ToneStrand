@@ -10,8 +10,8 @@ impl App {
         if self.usb_scanned.is_none_or(|t| t.elapsed() > Duration::from_secs(3)) {
             self.usb = wire::list_usb_pedals();
             self.usb_scanned = Some(Instant::now());
-            self.maybe_reconnect(ctx);
         }
+        self.maybe_reconnect(ctx);
         while let Ok(b) = self.box_rx.try_recv() {
             if let Some(existing) = self.boxes.iter_mut().find(|x| (!b.id.is_empty() && x.id == b.id) || x.host == b.host) {
                 existing.host = b.host.clone();
@@ -77,25 +77,38 @@ impl App {
     /// After a USB pedal dropped out: once it has left the USB list and shows up again (it
     /// was unplugged and plugged back in), connect to it once more. Never for a Helrig Box,
     /// and never after the person pressed Disconnect.
+    /// Make a dropped link again: a few tries, further and further apart. A USB pedal that has
+    /// left the USB list is waited for (that costs no tries); a link that dropped while the
+    /// pedal is still there, and a Helrig Box, are tried again after a short pause.
     fn maybe_reconnect(&mut self, ctx: &egui::Context) {
-        let Some((pid, gone)) = self.reconnect else { return };
-        if self.link.is_some() || !self.settings.auto_reconnect {
+        if !self.settings.auto_reconnect || self.user_disconnected {
             self.reconnect = None;
             return;
         }
-        let present = self.usb.iter().any(|p| p.pid == pid);
-        if !present {
-            self.reconnect = Some((pid, true));
-        } else if gone {
-            self.reconnect = None;
-            self.note(LogLevel::Info, "The pedal is back; connecting again");
-            self.start_link(Target::Usb { pid }, ctx);
+        let Some(r) = self.reconnect.as_mut() else { return };
+        if r.trying || self.link.is_some() || Instant::now() < r.next {
+            return;
         }
+        if let Target::Usb { pid } = &r.target {
+            if !self.usb.iter().any(|p| p.pid == *pid) {
+                r.waiting = true;
+                return;
+            }
+            if r.waiting {
+                r.waiting = false;
+                self.note(LogLevel::Info, "The pedal is back; connecting again");
+            }
+        }
+        let Some(r) = self.reconnect.as_mut() else { return };
+        r.trying = true;
+        let target = r.target.clone();
+        self.start_link(target, ctx);
     }
 
     pub(super) fn on_event(&mut self, e: Event) {
         match e {
             Event::Connected(name) => {
+                self.reconnect = None;
                 self.last_error = None;
                 if !self.settings.hide_getting_started {
                     self.settings.hide_getting_started = true;
@@ -118,9 +131,28 @@ impl App {
                 self.connecting = false;
                 self.busy = None;
                 self.link = None;
-                self.reconnect = None;
                 self.last_error = Some(why.clone());
-                self.note(LogLevel::Bad, format!("Could not connect: {why}"));
+                match self.reconnect.as_mut().filter(|r| r.trying) {
+                    Some(r) => {
+                        r.trying = false;
+                        r.tries += 1;
+                        if r.tries >= RECONNECT_TRIES {
+                            self.reconnect = None;
+                            self.note(LogLevel::Bad, format!("Could not connect again: {why}. Gave up; connect by hand."));
+                        } else {
+                            r.next = Instant::now() + reconnect_delay(r.tries);
+                            let (n, wait) = (r.tries, reconnect_delay(r.tries).as_secs());
+                            self.note(
+                                LogLevel::Info,
+                                format!("Could not connect again ({why}); try {} of {RECONNECT_TRIES} in {wait} s", n + 1),
+                            );
+                        }
+                    }
+                    None => {
+                        self.reconnect = None;
+                        self.note(LogLevel::Bad, format!("Could not connect: {why}"));
+                    }
+                }
             }
             Event::Disconnected(why) => {
                 self.busy = None;
@@ -143,9 +175,9 @@ impl App {
                 }
                 self.note(LogLevel::Info, why);
                 if self.settings.auto_reconnect && !self.user_disconnected {
-                    if let Some(pid) = self.last_usb {
-                        self.reconnect = Some((pid, false));
-                        self.note(LogLevel::Info, "It will connect again when the pedal is plugged back in");
+                    if let Some(t) = self.last_target.clone() {
+                        self.reconnect = Some(Reconnect::new(t));
+                        self.note(LogLevel::Info, "It will try to connect again");
                     }
                 }
             }
@@ -284,10 +316,7 @@ impl App {
     }
 
     fn start_link(&mut self, target: Target, ctx: &egui::Context) {
-        self.last_usb = match &target {
-            Target::Usb { pid } => Some(*pid),
-            Target::Box { .. } => None,
-        };
+        self.last_target = Some(target.clone());
         let c = ctx.clone();
         self.link = Some(device::connect(target, move || c.request_repaint()));
         self.connecting = true;
@@ -753,3 +782,40 @@ impl App {
 
 /// What is being dragged in the pedal's preset list: the slot it came from.
 struct PresetDrag(usize);
+
+/// How many times a dropped link is tried again, and how long to wait before each.
+const RECONNECT_TRIES: u32 = 5;
+
+pub(super) struct Reconnect {
+    target: Target,
+    /// Failed tries so far.
+    tries: u32,
+    next: Instant,
+    /// A try is under way.
+    trying: bool,
+    /// The USB pedal is not in the list; waiting for it to come back.
+    waiting: bool,
+}
+
+impl Reconnect {
+    fn new(target: Target) -> Reconnect {
+        Reconnect { target, tries: 0, next: Instant::now() + reconnect_delay(0), trying: false, waiting: false }
+    }
+}
+
+/// 3 s, 6 s, 12 s, 24 s, 48 s.
+fn reconnect_delay(tries: u32) -> Duration {
+    Duration::from_secs(3 << tries.min(4))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reconnect_waits_longer_each_time_then_gives_up() {
+        let secs: Vec<u64> = (0..RECONNECT_TRIES).map(|t| reconnect_delay(t).as_secs()).collect();
+        assert_eq!(secs, vec![3, 6, 12, 24, 48]);
+        assert_eq!(reconnect_delay(9).as_secs(), 48, "never longer than the last step");
+    }
+}

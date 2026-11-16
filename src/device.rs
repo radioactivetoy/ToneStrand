@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use crate::session::{Session, IR_NAME_MAX, PRESET_NAME_MAX, SNAPSHOT_NAME_MAX};
 use crate::wire::{BoxWire, UsbWire, Wire};
 
+#[derive(Clone)]
 pub enum Target {
     Usb { pid: u16 },
     Box { host: String, token: String, label: String },
