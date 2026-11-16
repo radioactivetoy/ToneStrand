@@ -804,6 +804,11 @@ pub fn loop_jacks(unit: &str, title: &str) -> Option<String> {
             if pair { " (the stereo pair)" } else { "" }
         )),
         "HX Stomp" => Some("Jacks: the stereo SEND jack and the RETURN / AUX IN jacks (L/MONO, RIGHT) on the sides".to_owned()),
+        "HX Stomp XL" => Some("Jacks: the stereo SEND jack and the RETURN / AUX IN jacks (L/MONO, RIGHT) on the rear panel".to_owned()),
+        "HX Effects" if nums.iter().all(|c| matches!(c, '1' | '2')) => {
+            Some(format!("Jacks: the SEND and RETURN jacks of row {n} (marked 1 and 2) on the rear panel"))
+        }
+        "HX Effects" => Some("Jacks: the rear panel marks SEND / RETURN rows 1 and 2 only".to_owned()),
         _ => None,
     }
 }
@@ -818,7 +823,8 @@ mod jack_tests {
         assert!(loop_jacks("Helix Rack", "Return 3/4").unwrap().contains("3 and 4"));
         assert!(loop_jacks("Helix LT", "Return 2").unwrap().contains("RETURN 2"));
         assert!(loop_jacks("HX Stomp", "FX Loop 1").unwrap().contains("SEND"));
-        assert!(loop_jacks("HX Effects", "Send 1").is_none());
+        assert!(loop_jacks("HX Effects", "Send 2").unwrap().contains("row 2"));
+        assert!(loop_jacks("HX Stomp XL", "Return 1").unwrap().contains("rear"));
         assert!(loop_jacks("Helix LT", "Delay").is_none());
     }
 }
