@@ -622,6 +622,14 @@ impl App {
                         ui.close_menu();
                         self.open_restore();
                     }
+                    if ui
+                        .button("Restore the whole pedal...")
+                        .on_hover_text("Write back a folder made by \"Back up the whole pedal\": every preset and IR in it, after showing what it holds")
+                        .clicked()
+                    {
+                        ui.close_menu();
+                        self.open_restore_all();
+                    }
                 });
                 theme::help(ui, "Drag a preset onto another slot to copy, swap or move it. Whatever it replaces is backed up first.");
             });

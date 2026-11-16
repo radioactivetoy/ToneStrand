@@ -110,6 +110,13 @@ pub enum Cmd {
     FullBackup {
         folder: std::path::PathBuf,
     },
+    /// Write a whole-pedal backup back: presets as (setlist, slot, name, document) and IRs as
+    /// (slot, name, audio). Every slot replaced is backed up into `backup` first.
+    RestoreAll {
+        presets: Vec<(i64, i64, String, Vec<u8>)>,
+        irs: Vec<(i64, String, Vec<u8>)>,
+        backup: PathBuf,
+    },
     /// Read the names of the pedal's User IRs.
     ListIrs,
     /// Write IRs into slots: (slot from 0, name, 8,192 bytes of audio).
@@ -577,6 +584,98 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                         send(Event::Done(format!("Backed up {summary}")));
                     } else {
                         send(Event::Error(format!("Backed up {summary}; {} failed: {}", run.failed.len(), run.failed.join(", "))));
+                    }
+                }
+                Cmd::RestoreAll { presets, irs, backup } => {
+                    // Every document must have the shape of this pedal's presets before anything is written.
+                    let now = s
+                        .read_current()
+                        .map_err(|e| e.to_string())
+                        .and_then(|b| crate::devpreset::DevicePreset::parse(&b))
+                        .map_err(|e| format!("can't read the loaded preset to check the backup against ({e}); nothing was written"))?;
+                    for (_, index, name, doc) in &presets {
+                        let new = crate::devpreset::DevicePreset::parse(doc)
+                            .map_err(|e| format!("\"{name}\" isn't readable ({e}); nothing was written"))?;
+                        if new.layout() != now.layout() {
+                            return Err(format!(
+                                "\"{name}\" ({}) was made for another unit (its paths have {:?} slots, this pedal's {:?}); nothing was written",
+                                crate::proto::slot_label(*index as usize),
+                                new.layout(),
+                                now.layout()
+                            ));
+                        }
+                    }
+                    let (np, ni) = (presets.len(), irs.len());
+                    let mut run = BackupRun::default();
+                    let mut stopped = false;
+                    let mut written = 0;
+                    let mut sets = std::collections::BTreeSet::new();
+                    for (i, (sl, index, name, doc)) in presets.into_iter().enumerate() {
+                        send(Event::Busy(format!("Restoring preset {}/{np}: {name}", i + 1)));
+                        let label = crate::proto::slot_label(index as usize);
+                        let outcome: Result<bool, String> = (|| {
+                            backup_slot(s, &backup, sl, index)?;
+                            let sent = s.write_slot(sl, index, &name, doc).map_err(|e| e.to_string())?;
+                            if reads_back_same(s, sl, index, &sent)? {
+                                Ok(true)
+                            } else {
+                                Err("it reads back different from what was sent".into())
+                            }
+                        })();
+                        sets.insert(sl);
+                        let before = run.saved;
+                        let stop = run.record(&label, outcome);
+                        written += run.saved - before;
+                        if stop {
+                            stopped = true;
+                            break;
+                        }
+                    }
+                    let mut irs_written = 0;
+                    if !stopped && ni > 0 {
+                        match s.list_irs() {
+                            Ok(in_use) => {
+                                for (i, (slot, name, audio)) in irs.into_iter().enumerate() {
+                                    send(Event::Busy(format!("Restoring IR {}/{ni}: {name}", i + 1)));
+                                    let outcome: Result<bool, String> = (|| {
+                                        backup_ir(s, &backup, slot, &in_use)?;
+                                        s.import_ir(slot, &name, &audio).map_err(|e| e.to_string())?;
+                                        Ok(true)
+                                    })();
+                                    let before = run.saved;
+                                    let stop = run.record(&format!("IR {}", slot + 1), outcome);
+                                    irs_written += run.saved - before;
+                                    if stop {
+                                        stopped = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            Err(e) => run.failed.push(format!("IRs (can't read the IR list to back it up: {e}; none were written)")),
+                        }
+                    }
+                    for sl in sets {
+                        if let Ok(p) = s.presets(sl) {
+                            send(Event::Presets(sl, p));
+                        }
+                    }
+                    if irs_written > 0 {
+                        if let Ok(l) = s.list_irs() {
+                            send(Event::Irs(l));
+                        }
+                    }
+                    // The loaded preset may be one of those written.
+                    if let Ok(i) = read_live(s, send) {
+                        last_index = i;
+                    }
+                    let summary = format!("{written} of {np} presets and {irs_written} of {ni} IRs restored");
+                    if stopped {
+                        return Err(format!("{summary}, then stopped: {} in a row failed: {}", run.in_a_row, run.failed.join(", ")));
+                    }
+                    if run.failed.is_empty() {
+                        send(Event::Done(format!("{summary}. The replaced presets were kept in {}", backup.display())));
+                    } else {
+                        send(Event::Error(format!("{summary}; {} failed: {}", run.failed.len(), run.failed.join(", "))));
                     }
                 }
                 Cmd::AssignController { block, cab, index, controller, cc } => {
