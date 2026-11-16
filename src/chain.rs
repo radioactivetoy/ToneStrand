@@ -232,22 +232,10 @@ fn draw_studio_block(ui: &egui::Ui, rect: Rect, look: StudioBlock) {
     }
     // The name, bold, at the bottom (two lines at most).
     let tc = if on { Color32::WHITE } else { MUTED };
-    // A long name steps down in size until it fits whole (the hover tip always has it in full).
+    // A long name steps down in size until it fits whole (the hover tip always has it in full);
+    // the lane's other names follow it, so a row reads evenly.
     let rows = if detail.is_some() && !wide { 1 } else { 2 };
-    let mut g = None;
-    // (the smallest step may use a third line when there is room under the icon).
-    for (size, extra) in [(14.5_f32, 0), (13.5, 0), (12.5, 0), (11.5, 0), (10.5, usize::from(rows == 2))] {
-        let mut job = egui::text::LayoutJob::simple(title.to_owned(), egui::FontId::proportional(size), tc, rect.width() - 20.0);
-        job.wrap.max_rows = rows + extra;
-        job.wrap.break_anywhere = false;
-        let laid = p.layout_job(job);
-        let fits = !laid.elided;
-        g = Some(laid);
-        if fits {
-            break;
-        }
-    }
-    let g = g.expect("at least one size was tried");
+    let (g, _) = fit_name(p, title, tc, rect.width() - 20.0, rows, NAME_SIZE.with(|c| c.get()).unwrap_or(14.5));
     let at = Pos2::new(rect.left() + 10.0, rect.bottom() - 9.0 - g.size().y);
     // A faint shadow behind the name keeps it readable on bright colours.
     p.galley_with_override_text_color(at + Vec2::new(0.0, 1.0), g.clone(), Color32::from_black_alpha(140));
@@ -487,6 +475,17 @@ impl Chain<'_> {
             lanes.push((1, l));
         }
         for (lane, cells) in lanes {
+            // One name size for the whole lane, so a row of effects reads evenly.
+            let lane_size = cells
+                .iter()
+                .filter_map(|c| match c {
+                    Cell::Block { title, category, .. } if category != "Send/Return" => {
+                        Some(fit_name(ui.painter(), title, TEXT, bw() - 20.0, 2, 14.5).1)
+                    }
+                    _ => None,
+                })
+                .fold(14.5_f32, f32::min);
+            NAME_SIZE.with(|c| c.set(Some(lane_size)));
             let range = if lane == 0 { 0..cols } else { self.split..lower_end };
             // The lower lane shows its effects and one free place after them; past that the
             // line runs on to the merge without empty boxes.
@@ -721,4 +720,38 @@ impl Chain<'_> {
         }
         hits
     }
+}
+
+/// Name sizes tried in turn, largest first; the smallest may use a third line.
+const NAME_SIZES: [(f32, usize); 5] = [(14.5, 0), (13.5, 0), (12.5, 0), (11.5, 0), (10.5, 1)];
+
+thread_local! {
+    /// The size the effect names of the lane being drawn share (set by `Chain::show`).
+    static NAME_SIZE: std::cell::Cell<Option<f32>> = const { std::cell::Cell::new(None) };
+}
+
+/// Lay out an effect's name at the largest size (no bigger than `max_size`) at which it fits
+/// whole in `rows` lines (the smallest size gets one more when `rows` is 2). Returns the text
+/// and the size used.
+fn fit_name(
+    p: &egui::Painter,
+    title: &str,
+    colour: Color32,
+    width: f32,
+    rows: usize,
+    max_size: f32,
+) -> (std::sync::Arc<egui::Galley>, f32) {
+    let mut last = None;
+    for (size, extra) in NAME_SIZES.into_iter().filter(|(s, _)| *s <= max_size) {
+        let mut job = egui::text::LayoutJob::simple(title.to_owned(), egui::FontId::proportional(size), colour, width);
+        job.wrap.max_rows = rows + if rows == 2 { extra } else { 0 };
+        job.wrap.break_anywhere = false;
+        let laid = p.layout_job(job);
+        let fits = !laid.elided;
+        last = Some((laid, size));
+        if fits {
+            break;
+        }
+    }
+    last.expect("at least one size was tried")
 }

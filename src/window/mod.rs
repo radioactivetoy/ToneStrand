@@ -1548,19 +1548,36 @@ impl App {
             }
         };
 
+        let live = doc.is_live();
         match mode {
             1 => {
                 header(ui, doc, true);
-                if doc.is_live() && sent_recently {
+                if live && sent_recently {
                     // A live change just went to the pedal (a failure shows in red in the status bar).
                     ui.label(RichText::new("sent").small().color(GOOD));
                     ui.ctx().request_repaint_after(Duration::from_millis(200));
                 }
                 undo_buttons(ui, doc, true, &mut history);
-                save_buttons(ui, true, &mut save);
+                if live {
+                    // The pedal is where a live preset is kept ("Save on pedal"); the file and
+                    // library copies are quieter.
+                    ui.menu_button("File", |ui| {
+                        if ui.button("Save as a file...").on_hover_text("Keep a copy of this preset as a file on this computer").clicked() {
+                            save = Some(true);
+                            ui.close_menu();
+                        }
+                        if ui.button("Save to library").on_hover_text("Keep a copy in your preset library on this computer").clicked() {
+                            to_library = true;
+                            ui.close_menu();
+                        }
+                    });
+                } else {
+                    save_buttons(ui, true, &mut save);
+                }
             }
             _ => {
-                if ui.button("📚 Save to library").on_hover_text("Keep a copy in your preset library on this computer").clicked() {
+                if !live && ui.button("📚 Save to library").on_hover_text("Keep a copy in your preset library on this computer").clicked()
+                {
                     to_library = true;
                 }
                 pedal_row(ui, doc, &mut cmds, &mut confirm);
