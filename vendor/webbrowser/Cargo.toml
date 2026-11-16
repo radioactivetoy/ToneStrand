@@ -1,0 +1,9 @@
+[package]
+name = "webbrowser"
+version = "1.0.3"
+edition = "2021"
+description = "Small stand-in: opens a link with the system's default handler (Windows: ShellExecuteW in shell32)."
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"

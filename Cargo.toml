@@ -1,0 +1,33 @@
+[package]
+name = "tonestrand"
+version = "0.2.0"
+edition = "2021"
+description = "ToneStrand: preset editor for Helix-family pedals, over USB or through a Helrig Box"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "accesskit"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
+mdns-sd = "0.13"
+nusb = "0.1"
+futures-lite = "2"
+rfd = "0.15"
+png = "0.17"
+ureq = { version = "2", default-features = false, features = ["json"] }
+dirs = "5"
+flate2 = "1.1"
+
+[profile.release]
+opt-level = 3
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[patch.crates-io]
+webbrowser = { path = "vendor/webbrowser" }
+autocfg = { path = "vendor/autocfg" }

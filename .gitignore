@@ -1,0 +1,6 @@
+/target
+*.log
+/shots
+*.png.tmp
+.DS_Store
+Thumbs.db

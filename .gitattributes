@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.wav binary
+*.nam binary
+*.hxpreset binary
+*.hxb binary
+*.png binary
+*.jpg binary
