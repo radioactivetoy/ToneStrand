@@ -322,12 +322,17 @@ impl ToneLib {
         if let Some(files) = self.confirm_delete.clone() {
             let mut result = None;
             egui::Window::new("Delete files").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, Vec2::ZERO).show(ui.ctx(), |ui| {
-                ui.label(format!("Delete {} file{} from your library? This can't be undone.", files.len(), if files.len() == 1 { "" } else { "s" }));
+                let s = if files.len() == 1 { "" } else { "s" };
+                if crate::files::HAS_RECYCLE_BIN {
+                    ui.label(format!("Move {} file{s} to the Recycle Bin?", files.len()));
+                } else {
+                    ui.label(format!("Delete {} file{s} from your library? This can't be undone.", files.len()));
+                }
                 for f in files.iter().take(8) {
                     ui.label(RichText::new(f.file_name().and_then(|s| s.to_str()).unwrap_or("")).small().color(MUTED));
                 }
                 ui.horizontal(|ui| {
-                    if ui.button(RichText::new("Delete").color(BAD)).clicked() {
+                    if ui.button(RichText::new(if crate::files::HAS_RECYCLE_BIN { "Move to Recycle Bin" } else { "Delete" }).color(BAD)).clicked() {
                         result = Some(true);
                     }
                     if ui.button("Cancel").clicked() {
@@ -337,8 +342,9 @@ impl ToneLib {
             });
             if let Some(yes) = result {
                 if yes {
-                    let n = files.iter().filter(|f| std::fs::remove_file(f).is_ok()).count();
-                    actions.push(Action::Note(true, format!("Deleted {n} file{}", if n == 1 { "" } else { "s" })));
+                    let n = files.iter().filter(|f| crate::files::delete_file(f).is_ok()).count();
+                    let verb = if crate::files::HAS_RECYCLE_BIN { "Moved to the Recycle Bin:" } else { "Deleted" };
+                    actions.push(Action::Note(n == files.len(), format!("{verb} {n} of {} file{}", files.len(), if files.len() == 1 { "" } else { "s" })));
                     rescan = true;
                 }
                 self.confirm_delete = None;

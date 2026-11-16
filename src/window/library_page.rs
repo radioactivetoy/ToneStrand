@@ -108,14 +108,11 @@ impl App {
                     }
                 }
                 library::Action::Delete(p) => {
-                    if self.settings.confirm_delete {
+                    // Without a Recycle Bin the delete is final, so it is always asked about.
+                    if self.settings.confirm_delete || !crate::files::HAS_RECYCLE_BIN {
                         self.pending_delete = Some(p);
                     } else {
-                        match std::fs::remove_file(&p) {
-                            Ok(_) => self.note(LogLevel::Good, "Deleted"),
-                            Err(e) => self.note(LogLevel::Bad, format!("Could not delete: {e}")),
-                        }
-                        self.scan_library();
+                        self.delete_library_file(&p);
                     }
                 }
                 library::Action::MoveTo(p, setlist) => {
@@ -184,9 +181,14 @@ impl App {
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
-                    ui.label(format!("Delete {} from your library? This cannot be undone.", p.file_name().and_then(|s| s.to_str()).unwrap_or("")));
+                    let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                    if crate::files::HAS_RECYCLE_BIN {
+                        ui.label(format!("Move {name} to the Recycle Bin?"));
+                    } else {
+                        ui.label(format!("Delete {name} from your library? This cannot be undone."));
+                    }
                     ui.horizontal(|ui| {
-                        if ui.button(RichText::new("Delete").color(BAD)).clicked() {
+                        if ui.button(RichText::new(if crate::files::HAS_RECYCLE_BIN { "Move to Recycle Bin" } else { "Delete" }).color(BAD)).clicked() {
                             result = Some(true);
                         }
                         if ui.button("Cancel").clicked() {
@@ -196,15 +198,20 @@ impl App {
                 });
             if let Some(yes) = result {
                 if yes {
-                    match std::fs::remove_file(&p) {
-                        Ok(_) => self.note(LogLevel::Good, "Deleted"),
-                        Err(e) => self.note(LogLevel::Bad, format!("Could not delete: {e}")),
-                    }
-                    self.scan_library();
+                    self.delete_library_file(&p);
                 }
                 self.pending_delete = None;
             }
         }
+    }
+
+    /// Delete a library preset: to the Recycle Bin where there is one.
+    fn delete_library_file(&mut self, p: &Path) {
+        match crate::files::delete_file(p) {
+            Ok(_) => self.note(LogLevel::Good, if crate::files::HAS_RECYCLE_BIN { "Moved to the Recycle Bin" } else { "Deleted" }),
+            Err(e) => self.note(LogLevel::Bad, format!("Could not delete: {e}")),
+        }
+        self.scan_library();
     }
 
     /// Keep a copy of an open preset in the library (in the setlist being shown there).

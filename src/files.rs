@@ -50,9 +50,89 @@ pub fn copy_into(from: &Path, dir: &Path) -> std::io::Result<PathBuf> {
     Ok(to)
 }
 
+/// Whether `delete_file` can put files in a recycle bin on this system (Windows only so
+/// far). Elsewhere it deletes for good, so callers always ask first.
+pub const HAS_RECYCLE_BIN: bool = cfg!(windows);
+
+/// Remove a file the person chose to delete: to the Recycle Bin on Windows (so it can be
+/// taken back), for good elsewhere. On Windows a file that can't be recycled is left alone
+/// and an error returned; it is never deleted for good as a fallback.
+pub fn delete_file(path: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    {
+        recycle(path)
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::remove_file(path)
+    }
+}
+
+#[cfg(windows)]
+fn recycle(path: &Path) -> std::io::Result<()> {
+    use std::io::{Error, ErrorKind};
+    use std::os::windows::ffi::OsStrExt;
+
+    #[repr(C)]
+    struct ShFileOpStruct {
+        hwnd: *mut core::ffi::c_void,
+        func: u32,
+        from: *const u16,
+        to: *const u16,
+        flags: u16,
+        aborted: i32,
+        mappings: *mut core::ffi::c_void,
+        title: *const u16,
+    }
+    #[link(name = "shell32")]
+    extern "system" {
+        fn SHFileOperationW(op: *mut ShFileOpStruct) -> i32;
+    }
+    const FO_DELETE: u32 = 3;
+    const FOF_SILENT: u16 = 0x0004;
+    const FOF_ALLOWUNDO: u16 = 0x0040;
+    const FOF_NOERRORUI: u16 = 0x0400;
+
+    // The shell only recycles a full path; a relative one would be deleted for good.
+    let full = std::path::absolute(path)?;
+    if !full.is_absolute() || !full.is_file() {
+        return Err(Error::new(ErrorKind::NotFound, format!("{} is not a file", path.display())));
+    }
+    // A list of paths ends with two zero characters.
+    let mut from: Vec<u16> = full.as_os_str().encode_wide().collect();
+    from.extend([0, 0]);
+    let mut op = ShFileOpStruct {
+        hwnd: core::ptr::null_mut(),
+        func: FO_DELETE,
+        from: from.as_ptr(),
+        to: core::ptr::null(),
+        flags: FOF_ALLOWUNDO | FOF_SILENT | FOF_NOERRORUI,
+        aborted: 0,
+        mappings: core::ptr::null_mut(),
+        title: core::ptr::null(),
+    };
+    let code = unsafe { SHFileOperationW(&mut op) };
+    if code != 0 || op.aborted != 0 || full.exists() {
+        return Err(Error::other(format!("could not move {} to the Recycle Bin (code {code})", path.display())));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Moves a scratch file to the real Recycle Bin, so it is left out of normal runs:
+    /// `cargo test -- --ignored recycles_to_the_bin`.
+    #[test]
+    #[ignore]
+    fn recycles_to_the_bin() {
+        let p = std::env::temp_dir().join(format!("tonestrand-recycle-test-{}.txt", std::process::id()));
+        std::fs::write(&p, b"x").unwrap();
+        delete_file(&p).unwrap();
+        assert!(!p.exists());
+        assert!(delete_file(&p).is_err());
+    }
 
     fn scratch(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("tonestrand-files-{tag}-{}", std::process::id()));
