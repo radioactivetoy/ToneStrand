@@ -82,8 +82,13 @@ fn setlist_from(v: &Value, fallback: &str) -> Result<Setlist, String> {
         let mut data = obj.clone();
         data.remove("schema");
         data.insert("tone".into(), tone.clone());
-        data.insert("schema".into(), Value::Null);
-        let hlx = serde_json::json!({ "data": Value::Object(data), "meta": Value::Null, "schema": "L6Preset", "version": 6 });
+        // The wrapper HX Edit writes: the outer meta is a small fixed record, not null.
+        let hlx = serde_json::json!({
+            "data": Value::Object(data),
+            "meta": { "original": 0, "pbn": 0, "premium": 0 },
+            "schema": "L6Preset",
+            "version": 6
+        });
         out.push(Preset { slot, name: pname.to_owned(), hlx });
     }
     Ok(Setlist { name, presets: out, skipped })
@@ -110,7 +115,7 @@ pub fn read_hxb(b: &[u8]) -> Result<Contents, String> {
     }
     let index = u64le(b, 8) as usize;
     let count = u64le(b, 16) as usize;
-    if !(1..=4096).contains(&count) || index < 48 || index + 36 * count > b.len() {
+    if !(1..=4096).contains(&count) || index < 48 || index.checked_add(36 * count).is_none_or(|end| end > b.len()) {
         return Err("its index is damaged or cut short".into());
     }
     struct Entry {
@@ -132,7 +137,7 @@ pub fn read_hxb(b: &[u8]) -> Result<Contents, String> {
         }
         let (offset, stored, compressed, size) =
             (u64le(b, o + 4) as usize, u64le(b, o + 12) as usize, u32le(b, o + 20) != 0, u64le(b, o + 24));
-        if offset < 48 || offset + stored > b.len() || size > CEILING {
+        if offset < 48 || offset.checked_add(stored).is_none_or(|end| end > b.len()) || size > CEILING {
             return Err(format!("entry {tag} points outside the file"));
         }
         entries.push(Entry { tag, offset, stored, compressed, size });
@@ -305,5 +310,43 @@ mod tests {
         let s = read_hls(file.to_string().as_bytes()).unwrap();
         assert_eq!(s.presets.len(), 2);
         assert_eq!(s.presets[1].name, "Lead");
+    }
+}
+
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    #[test]
+    fn a_crafted_index_is_refused_not_a_crash() {
+        let mut b = vec![0u8; 48 + 72];
+        b[..4].copy_from_slice(b"AF6L");
+        b[4..8].copy_from_slice(&1u32.to_le_bytes());
+        b[8..16].copy_from_slice(&48u64.to_le_bytes());
+        b[16..24].copy_from_slice(&2u64.to_le_bytes());
+        // Entry 1: an offset and size that add up past the end of a usize.
+        let o = 48 + 36;
+        b[o..o + 4].copy_from_slice(b"nn01");
+        b[o + 4..o + 12].copy_from_slice(&u64::MAX.to_le_bytes());
+        b[o + 12..o + 20].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert!(read_hxb(&b).is_err());
+        // An index offset near the top is refused too.
+        b[8..16].copy_from_slice(&u64::MAX.to_le_bytes());
+        assert!(read_hxb(&b).is_err());
+    }
+
+    #[test]
+    fn a_backup_preset_gets_the_usual_wrapper() {
+        let json = serde_json::json!({"data": {"meta": {"name": "GIG"}, "presets": [
+            {"meta": {"name": "Clean"}, "device": 2162694, "tone": {"dsp0": {}}}]}});
+        let s = setlist_from(&json, "x").unwrap();
+        let hlx = &s.presets[0].hlx;
+        assert_eq!(hlx["meta"], serde_json::json!({"original": 0, "pbn": 0, "premium": 0}));
+        assert!(hlx["data"].get("schema").is_none());
+    }
+
+    #[test]
+    fn hlx_text_with_a_byte_order_mark_reads() {
+        assert!(crate::hlx::parse_text("\u{feff}{\"data\": {\"tone\": {}}}").is_ok());
     }
 }

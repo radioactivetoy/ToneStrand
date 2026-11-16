@@ -119,9 +119,7 @@ impl App {
                         self.note(LogLevel::Bad, "Sending .hlx presets needs HX Edit's effect list (see Settings).");
                         continue;
                     };
-                    let json = std::fs::read_to_string(&p)
-                        .map_err(|e| e.to_string())
-                        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).map_err(|e| e.to_string()));
+                    let json = std::fs::read_to_string(&p).map_err(|e| e.to_string()).and_then(|t| crate::hlx::parse_text(&t));
                     let mut json = match json {
                         Ok(j) => j,
                         Err(e) => {

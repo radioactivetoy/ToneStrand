@@ -755,3 +755,8 @@ pub fn clear_split(doc: &mut Value) {
         }
     }
 }
+
+/// Read a .hlx file's text as JSON, tolerating the byte-order mark some editors add.
+pub fn parse_text(text: &str) -> Result<Value, String> {
+    serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| e.to_string())
+}

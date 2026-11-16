@@ -472,6 +472,11 @@ impl DevicePreset {
         }
     }
 
+    /// How many slots each path has: the shape that tells which unit a document is for.
+    pub fn layout(&self) -> Vec<usize> {
+        (0..8).map_while(|d| self.tone.at(&[key::PATH0 + d, key::SLOTS]).and_then(Value::as_array).map(|a| a.len())).collect()
+    }
+
     /// Whether a path is split (the split's own "active" flag, set when it's placed).
     pub fn split_active(&self, path: i64) -> bool {
         let Some(Value::Array(items, _)) = self.tone.at(&[path, key::SLOTS]) else { return false };

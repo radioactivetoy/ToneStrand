@@ -390,6 +390,20 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     send(Event::Done("Preset read".into()));
                 }
                 Cmd::WriteSlot { setlist: sl, index, name, doc, backup } => {
+                    // A document for another unit has other paths and slots: the pedal's own loaded
+                    // preset shows the shape this one has to have.
+                    if let (Ok(now), Ok(new)) = (
+                        s.read_current().map_err(|e| e.to_string()).and_then(|b| crate::devpreset::DevicePreset::parse(&b)),
+                        crate::devpreset::DevicePreset::parse(&doc),
+                    ) {
+                        if now.layout() != new.layout() {
+                            return Err(format!(
+                                "\"{name}\" has {:?} slots per path but this pedal's presets have {:?}: it was made for another unit, so nothing was written",
+                                new.layout(),
+                                now.layout()
+                            ));
+                        }
+                    }
                     send(Event::Busy("Backing up the slot...".into()));
                     if let Some(note) = backup_slot(s, &backup, sl, index)? {
                         send(Event::Info(note));

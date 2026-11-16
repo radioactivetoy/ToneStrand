@@ -481,10 +481,7 @@ impl App {
                 Err(e) => return self.note(LogLevel::Bad, format!("Could not open {}: {e}", path.display())),
             }
         } else {
-            match std::fs::read_to_string(path)
-                .map_err(|e| e.to_string())
-                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).map_err(|e| e.to_string()))
-            {
+            match std::fs::read_to_string(path).map_err(|e| e.to_string()).and_then(|s| crate::hlx::parse_text(&s)) {
                 Ok(json) if json.pointer("/data/tone").is_some() => DocKind::Hlx { json },
                 Ok(_) => return self.note(LogLevel::Bad, "That file is not a Helix preset (.hlx)."),
                 Err(e) => return self.note(LogLevel::Bad, format!("Could not open {}: {e}", path.display())),
@@ -1521,8 +1518,11 @@ impl App {
             }
             DocKind::Hlx { json } => {
                 let label = chosen.map(|c| format!("Send to {}", slot_label(c))).unwrap_or_else(|| "Send to pedal...".into());
+                let other_unit = crate::snapshots::device(json) != crate::nam::unit();
                 let hover = if !connected {
                     "Connect to a pedal first"
+                } else if other_unit {
+                    "This preset is for another unit: reopen it so it is converted to the connected pedal (or pick that unit at the top)"
                 } else if chosen.is_none() {
                     "Pick a slot in the pedal list first"
                 } else if cat.is_none() {
@@ -1531,7 +1531,7 @@ impl App {
                     "Convert this preset to the pedal's format and write it into the picked slot (it's read back to check)"
                 };
                 if ui
-                    .add_enabled(connected && chosen.is_some() && cat.is_some(), egui::Button::new(label))
+                    .add_enabled(connected && !other_unit && chosen.is_some() && cat.is_some(), egui::Button::new(label))
                     .on_hover_text(hover)
                     .on_disabled_hover_text(hover)
                     .clicked()
