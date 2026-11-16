@@ -6,6 +6,12 @@ Helix Floor / LT / Rack), connected over **USB** or wirelessly through a **Helri
 Written in Rust with [egui](https://github.com/emilk/egui) / eframe. One self-contained
 program; no account, no cloud, nothing leaves your computer.
 
+![The ToneStrand editor with the sample preset: signal chain on top, the selected amp's knobs below](docs/images/editor.png)
+
+*The editor with the built-in sample preset: the signal chain on top (the lower lane is a
+parallel path), the selected effect's knobs below, snapshots and the DSP meter in the bar.
+The effect pictures and names come from Line 6; see "Third-party material" below.*
+
 ## What it does
 
 - **Live editing** of the preset loaded on the pedal: every knob, switch, effect swap, move,
