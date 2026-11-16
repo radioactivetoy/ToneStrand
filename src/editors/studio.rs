@@ -5,7 +5,7 @@ use super::*;
 /// One snapshot chip of the Studio top bar ("1 CLEAN"); `on` when it is the current one.
 fn snap_chip(ui: &mut egui::Ui, n: usize, name: &str, on: bool) -> egui::Response {
     let label = if name.trim().is_empty() { format!("{n}") } else { format!("{n}  {}", name.trim()) };
-    let text = RichText::new(label).monospace().size(12.5).color(if on { Color32::from_rgb(8, 22, 26) } else { TEXT });
+    let text = RichText::new(label).monospace().size(12.5).color(if on { on_accent() } else { ink() });
     ui.add(
         egui::Button::new(text).fill(if on { accent() } else { Color32::TRANSPARENT }).stroke(Stroke::NONE).min_size(Vec2::new(0.0, 24.0)),
     )
@@ -57,7 +57,7 @@ pub fn studio_strip_hlx(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: 
                         ui.close_menu();
                     }
                     ui.separator();
-                    if ui.add_enabled(list.len() > 1, egui::Button::new(RichText::new("Delete").color(BAD))).clicked() {
+                    if ui.add_enabled(list.len() > 1, egui::Button::new(RichText::new("Delete").color(bad()))).clicked() {
                         action = Some(("delete", *i));
                         ui.close_menu();
                     }
@@ -144,7 +144,7 @@ pub fn studio_strip_device(ui: &mut egui::Ui, preset: &mut DevicePreset, dirty: 
                     });
                     if !live {
                         ui.separator();
-                        ui.label(RichText::new(format!("Make snapshot {} the same as", i + 1)).small().color(MUTED));
+                        ui.label(RichText::new(format!("Make snapshot {} the same as", i + 1)).small().color(muted()));
                         for j in (0..names.len()).filter(|j| *j != i) {
                             let from =
                                 names.get(j).filter(|s| !s.trim().is_empty()).cloned().unwrap_or_else(|| format!("Snapshot {}", j + 1));

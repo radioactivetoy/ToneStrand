@@ -78,7 +78,7 @@ impl App {
             }
             if !recent.is_empty() {
                 ui.separator();
-                ui.label(RichText::new("Recent").small().color(MUTED));
+                ui.label(RichText::new("Recent").small().color(muted()));
                 for p in &recent {
                     let path = Path::new(p);
                     let name = path.file_name().and_then(|s| s.to_str()).unwrap_or(p);
@@ -152,14 +152,14 @@ impl App {
                     // The pedal: one click opens the connection options (USB, Helrig Boxes, pairing).
                     ui.add_space(8.0);
                     let (dot, text) = match (&self.connected, self.connecting) {
-                        (Some(n), _) => (GOOD, n.clone()),
-                        (None, true) => (ORANGE, "Connecting...".to_owned()),
-                        _ => (MUTED, format!("{} · not connected", crate::units::unit_name(self.unit))),
+                        (Some(n), _) => (good(), n.clone()),
+                        (None, true) => (orange(), "Connecting...".to_owned()),
+                        _ => (muted(), format!("{} · not connected", crate::units::unit_name(self.unit))),
                     };
                     // A status light (painted: the font has no round bullet), then the menu.
                     let (rect, _) = ui.allocate_exact_size(Vec2::splat(12.0), egui::Sense::hover());
                     ui.painter().circle_filled(rect.center(), 4.5, dot);
-                    let label = RichText::new(text.clone()).color(if self.connected.is_some() { TEXT } else { MUTED });
+                    let label = RichText::new(text.clone()).color(if self.connected.is_some() { ink() } else { muted() });
                     let r = ui.menu_button(label, |ui| {
                         ui.set_min_width(340.0);
                         self.devices_card(ui, ctx);
@@ -201,7 +201,7 @@ impl App {
                         if let Some(d) = pick {
                             self.set_unit(d);
                         }
-                        ui.label(RichText::new("Unit").color(MUTED));
+                        ui.label(RichText::new("Unit").color(muted()));
                     });
                 });
             });
@@ -264,7 +264,7 @@ impl App {
         }
         let bpm = doc.kind.doc().tempo();
         if let Some(mut t) = bpm {
-            ui.label(RichText::new("BPM").color(MUTED));
+            ui.label(RichText::new("BPM").color(muted()));
             if ui.add(egui::DragValue::new(&mut t).range(30.0..=240.0).speed(0.5).fixed_decimals(1)).changed() {
                 doc.kind.doc_mut().set_tempo(t);
                 doc.dirty = true;
@@ -277,18 +277,18 @@ impl App {
             for (pi, (count, max, used)) in paths.iter().enumerate() {
                 ui.horizontal(|ui| {
                     let label = if n > 1 { format!("PATH {}", pi + 1) } else { "PATH 1".into() };
-                    ui.label(RichText::new(label).small().strong().color(MUTED));
-                    let bcol = if count >= max { ORANGE } else { MUTED };
+                    ui.label(RichText::new(label).small().strong().color(muted()));
+                    let bcol = if count >= max { orange() } else { muted() };
                     ui.label(RichText::new(format!("{count}/{max} blocks")).small().monospace().color(bcol));
                     if let Some(d) = used {
                         let col = if *d > 100.0 {
-                            BAD
+                            bad()
                         } else if *d > 85.0 {
-                            ORANGE
+                            orange()
                         } else {
                             accent()
                         };
-                        ui.label(RichText::new("DSP").small().color(MUTED)).on_hover_text("Estimated DSP use of this path");
+                        ui.label(RichText::new("DSP").small().color(muted())).on_hover_text("Estimated DSP use of this path");
                         let (rect, _) = ui.allocate_exact_size(Vec2::new(80.0, if n > 1 { 5.0 } else { 6.0 }), egui::Sense::hover());
                         ui.painter().rect_filled(rect, CornerRadius::same(3), card_hi());
                         let fill = egui::Rect::from_min_size(
@@ -320,12 +320,12 @@ impl App {
                         ui.separator();
                     }
                     if let Some((lvl, msg)) = self.log.back() {
-                        ui.label(RichText::new(msg).color(level_colour(*lvl, MUTED)));
+                        ui.label(RichText::new(msg).color(level_colour(*lvl, muted())));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         // Problems since the log was last opened turn the button red, so they are not missed.
                         let label = if unseen > 0 {
-                            RichText::new(format!("Activity ({unseen} problem{})", if unseen == 1 { "" } else { "s" })).color(BAD)
+                            RichText::new(format!("Activity ({unseen} problem{})", if unseen == 1 { "" } else { "s" })).color(bad())
                         } else {
                             RichText::new("Activity")
                         };
@@ -345,7 +345,7 @@ impl App {
                             });
                             egui::ScrollArea::vertical().max_height(320.0).stick_to_bottom(true).show(ui, |ui| {
                                 for (lvl, msg) in &self.log {
-                                    ui.label(RichText::new(msg).color(level_colour(*lvl, TEXT)));
+                                    ui.label(RichText::new(msg).color(level_colour(*lvl, ink())));
                                 }
                             });
                         });

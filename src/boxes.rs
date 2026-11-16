@@ -68,6 +68,8 @@ pub struct Settings {
     pub tone_library: Option<String>,
     /// The accent colour (0xRRGGBB).
     pub accent: u32,
+    /// "dark", "light" or "system" (follow the computer).
+    pub theme: String,
     /// The window as it was left: position and size (points), when not maximized.
     pub window: Option<[f32; 4]>,
     /// The window was maximized when it was closed (the usual: also the start-up default).
@@ -105,6 +107,7 @@ impl Default for Settings {
             nam_out_dir: None,
             tone_library: None,
             accent: 0x2ec4b6,
+            theme: "dark".into(),
             window: None,
             window_maximized: true,
             recent: Vec::new(),

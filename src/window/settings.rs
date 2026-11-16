@@ -10,9 +10,9 @@ impl App {
                 egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                     ui.set_max_width(760.0);
                     ui.label(RichText::new("Settings").size(22.0).strong());
-                    ui.label(RichText::new("Changes are saved right away.").color(MUTED));
+                    ui.label(RichText::new("Changes are saved right away.").color(muted()));
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(RichText::new("Jump to").small().color(MUTED));
+                        ui.label(RichText::new("Jump to").small().color(muted()));
                         for name in ["Libraries", "Effects", "Unit", "NAM", "Boxes", "Behaviour", "Display"] {
                             if ui.small_button(name).clicked() {
                                 ui.data_mut(|d| d.insert_temp(egui::Id::new("settings-jump"), name.to_owned()));
@@ -51,7 +51,7 @@ impl App {
                             }
                         });
                         let files = self.library.len();
-                        ui.label(RichText::new(format!("{files} preset file{} in the top folder", if files == 1 { "" } else { "s" })).small().color(MUTED));
+                        ui.label(RichText::new(format!("{files} preset file{} in the top folder", if files == 1 { "" } else { "s" })).small().color(muted()));
                     });
                     if let Some(d) = new_dir {
                         self.set_library_dir(d);
@@ -96,11 +96,11 @@ impl App {
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
                             match &self.catalog {
-                                Some(c) => theme::pill(ui, &format!("Loaded  •  {} models", c.model_count()), GOOD),
-                                None => theme::pill(ui, "Not found", ORANGE),
+                                Some(c) => theme::pill(ui, &format!("Loaded  •  {} models", c.model_count()), good()),
+                                None => theme::pill(ui, "Not found", orange()),
                             }
                             let shown = self.settings.hx_edit.clone().unwrap_or_else(|| "Looking in the usual place".into());
-                            ui.label(RichText::new(shown).small().color(MUTED));
+                            ui.label(RichText::new(shown).small().color(muted()));
                         });
                         ui.horizontal(|ui| {
                             if ui.button("Choose folder...").clicked() {
@@ -173,7 +173,7 @@ impl App {
                             );
                         });
                         if self.settings.nam_lite && !crate::nam::UNITS.contains(&self.unit) {
-                            ui.label(RichText::new(format!("Not shown for the {}: the firmware is for the HX Stomp, HX Stomp XL and HX Effects.", crate::units::unit_name(self.unit))).small().color(ORANGE));
+                            ui.label(RichText::new(format!("Not shown for the {}: the firmware is for the HX Stomp, HX Stomp XL and HX Effects.", crate::units::unit_name(self.unit))).small().color(orange()));
                         }
                         ui.add_space(6.0);
                         ui.horizontal(|ui| {
@@ -204,13 +204,13 @@ impl App {
                             .changed();
                         ui.add_space(4.0);
                         if self.settings.saved.is_empty() && self.settings.tokens.is_empty() {
-                            ui.label(RichText::new("No paired boxes yet. Pair one from the left panel.").color(MUTED));
+                            ui.label(RichText::new("No paired boxes yet. Pair one from the left panel.").color(muted()));
                         }
                         let mut forget = None;
                         for (i, b) in self.settings.saved.iter().enumerate() {
                             ui.horizontal(|ui| {
                                 ui.label(RichText::new(&b.name).strong());
-                                ui.label(RichText::new(&b.host).small().color(MUTED));
+                                ui.label(RichText::new(&b.host).small().color(muted()));
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     if ui.small_button("Forget").clicked() {
                                         forget = Some(i);
@@ -226,7 +226,7 @@ impl App {
                         }
                         if !self.settings.tokens.is_empty() {
                             ui.add_space(4.0);
-                            if ui.button(RichText::new("Forget all pairings").color(BAD)).clicked() {
+                            if ui.button(RichText::new("Forget all pairings").color(bad())).clicked() {
                                 self.settings.tokens.clear();
                                 self.settings.saved.clear();
                                 changed = true;
@@ -261,13 +261,24 @@ impl App {
                     theme::card(ui, |ui| {
                         theme::section(ui, "Display");
                         ui.horizontal(|ui| {
+                            ui.label("Theme");
+                            for (label, value) in [("Dark", "dark"), ("Light", "light"), ("Follow the computer", "system")] {
+                                if ui.selectable_label(self.settings.theme == value, label).clicked() && self.settings.theme != value {
+                                    self.settings.theme = value.to_owned();
+                                    theme::set_light(theme::wants_light(value, ui.ctx()));
+                                    theme::apply(ui.ctx());
+                                    changed = true;
+                                }
+                            }
+                        });
+                        ui.horizontal(|ui| {
                             ui.label("Accent colour");
                             for (rgb, name) in theme::ACCENTS.iter() {
                                 let col = egui::Color32::from_rgb((rgb >> 16) as u8, (rgb >> 8) as u8, *rgb as u8);
                                 let (rect, r) = ui.allocate_exact_size(egui::Vec2::splat(20.0), egui::Sense::click());
                                 ui.painter().circle_filled(rect.center(), 8.0, col);
                                 if theme::accent_rgb() == *rgb {
-                                    ui.painter().circle_stroke(rect.center(), 10.0, egui::Stroke::new(1.5_f32, theme::TEXT));
+                                    ui.painter().circle_stroke(rect.center(), 10.0, egui::Stroke::new(1.5_f32, theme::ink()));
                                 }
                                 if r.on_hover_text(*name).clicked() && theme::accent_rgb() != *rgb {
                                     theme::set_accent(*rgb);
@@ -315,8 +326,8 @@ impl App {
                             if let Some(t) = theme::logo(ui.ctx(), theme::Logo::WithName) {
                                 ui.add(egui::Image::new(&t).fit_to_exact_size(Vec2::new(300.0, 121.0)));
                             }
-                            ui.label(RichText::new(format!("ToneStrand {}", env!("CARGO_PKG_VERSION"))).color(MUTED));
-                            ui.label(RichText::new("Preset editor for Helix-family pedals, over USB or a Helrig Box").small().color(MUTED));
+                            ui.label(RichText::new(format!("ToneStrand {}", env!("CARGO_PKG_VERSION"))).color(muted()));
+                            ui.label(RichText::new("Preset editor for Helix-family pedals, over USB or a Helrig Box").small().color(muted()));
                         });
                     });
                 });

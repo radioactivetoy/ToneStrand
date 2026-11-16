@@ -65,7 +65,7 @@ fn blocks_of(path: &Path, pedal_file: bool, cat: Option<&Catalog>) -> (Option<St
             .filter(|s| s.kind == Kind::Block)
             .filter_map(|s| s.model)
             .map(|m| match cat {
-                Some(c) => (c.model_name(m), c.category(m).map(|x| x.1).unwrap_or(MUTED)),
+                Some(c) => (c.model_name(m), c.category(m).map(|x| x.1).unwrap_or(muted())),
                 None => (format!("Model {m}"), theme::number_colour(m)),
             })
             .collect();
@@ -79,7 +79,7 @@ fn blocks_of(path: &Path, pedal_file: bool, cat: Option<&Catalog>) -> (Option<St
             .map(|b| match cat {
                 Some(c) => (
                     c.info_for_symbol(&b.model).map(|i| crate::realnames::show(&i.name)).unwrap_or_else(|| hlx::pretty_model(&b.model)),
-                    c.category_of_symbol(&b.model).map(|x| x.1).unwrap_or(MUTED),
+                    c.category_of_symbol(&b.model).map(|x| x.1).unwrap_or(muted()),
                 ),
                 None => (hlx::pretty_model(&b.model), family_colour(hlx::family(&b.model))),
             })
@@ -157,16 +157,16 @@ impl Library {
         let mut actions = Vec::new();
         ui.horizontal(|ui| {
             ui.label(RichText::new("Your library").size(24.0).strong());
-            ui.label(RichText::new("Presets kept on this computer").color(MUTED));
+            ui.label(RichText::new("Presets kept on this computer").color(muted()));
             if !can_send {
-                ui.label(RichText::new("· To send presets to the pedal, connect and pick a slot in the pedal list").small().color(MUTED));
+                ui.label(RichText::new("· To send presets to the pedal, connect and pick a slot in the pedal list").small().color(muted()));
             }
         });
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             let w = ui.available_width() - 580.0;
             theme::search_box(ui, &mut self.search, "Search names, folders or effects...", w.max(200.0));
-            ui.label(RichText::new("Sort").small().color(MUTED));
+            ui.label(RichText::new("Sort").small().color(muted()));
             if let Some(s) = theme::segmented(ui, &["Name", "Newest"], self.sort) {
                 self.sort = s;
             }
@@ -232,7 +232,7 @@ impl Library {
                 };
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(title).strong());
-                    ui.label(RichText::new(format!("{} presets", shown.len())).color(MUTED));
+                    ui.label(RichText::new(format!("{} presets", shown.len())).color(muted()));
                 });
                 ui.add_space(6.0);
                 if shown.is_empty() {
@@ -240,7 +240,7 @@ impl Library {
                         ui.vertical_centered(|ui| {
                             ui.add_space(20.0);
                             ui.label(RichText::new("Nothing here yet").size(17.0).strong());
-                            ui.label(RichText::new("Open a preset in the editor and choose \"Save to library\", or import files.").color(MUTED));
+                            ui.label(RichText::new("Open a preset in the editor and choose \"Save to library\", or import files.").color(muted()));
                             ui.add_space(20.0);
                         });
                     });
@@ -300,7 +300,7 @@ impl Library {
             }
         });
         ui.separator();
-        if ui.button(RichText::new("Delete...").color(BAD)).clicked() {
+        if ui.button(RichText::new("Delete...").color(bad())).clicked() {
             actions.push(Action::Delete(e.path.clone()));
             ui.close_menu();
         }
@@ -320,9 +320,9 @@ impl Library {
                     ui.horizontal(|ui| {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if e.pedal_file {
-                                theme::pill(ui, "PEDAL", ORANGE);
+                                theme::pill(ui, "PEDAL", orange());
                             } else {
-                                theme::pill(ui, "HLX", BLUE);
+                                theme::pill(ui, "HLX", blue());
                             }
                             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                                 ui.add(egui::Label::new(RichText::new(&e.name).size(15.0).strong()).truncate());
@@ -346,7 +346,7 @@ impl Library {
                         }
                     });
                     let names: Vec<&str> = e.blocks.iter().take(4).map(|b| b.0.as_str()).collect();
-                    ui.add(egui::Label::new(RichText::new(names.join(" · ")).small().color(MUTED)).wrap());
+                    ui.add(egui::Label::new(RichText::new(names.join(" · ")).small().color(muted())).wrap());
                 });
             });
         let resp = r.response.interact(egui::Sense::click_and_drag());
@@ -361,16 +361,16 @@ impl Library {
     fn row(&self, ui: &mut egui::Ui, e: &Entry, can_send: bool, actions: &mut Vec<Action>) {
         let r = ui.horizontal(|ui| {
             if e.pedal_file {
-                theme::pill(ui, "PEDAL", ORANGE);
+                theme::pill(ui, "PEDAL", orange());
             } else {
-                theme::pill(ui, "HLX", BLUE);
+                theme::pill(ui, "HLX", blue());
             }
             ui.label(RichText::new(&e.name).strong());
             if !e.setlist.is_empty() {
                 ui.label(RichText::new(&e.setlist).small().color(accent()));
             }
             let names: Vec<&str> = e.blocks.iter().take(6).map(|b| b.0.as_str()).collect();
-            ui.label(RichText::new(names.join(" · ")).small().color(MUTED));
+            ui.label(RichText::new(names.join(" · ")).small().color(muted()));
         });
         let resp = r.response.interact(egui::Sense::click_and_drag());
         resp.dnd_set_drag_payload(vec![e.path.clone()]);

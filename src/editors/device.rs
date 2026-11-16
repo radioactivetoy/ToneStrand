@@ -72,7 +72,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
             let lower_end = (split_col + lower_view.len()).max(split_col + 1);
 
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("PATH {}", path + 1)).small().strong().color(MUTED));
+                ui.label(RichText::new(format!("PATH {}", path + 1)).small().strong().color(muted()));
             });
             let in_global = in_path.iter().find(|s| s.kind == Kind::Input).map(|s| s.global);
             let out_global = in_path.iter().find(|s| s.kind == Kind::Output).map(|s| s.global);
@@ -80,7 +80,8 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                 if s.kind == Kind::Empty {
                     return chain::Cell::Empty;
                 }
-                let (title, cname, colour) = s.model.map(|m| describe(cat, m)).unwrap_or((s.kind.label().to_owned(), String::new(), MUTED));
+                let (title, cname, colour) =
+                    s.model.map(|m| describe(cat, m)).unwrap_or((s.kind.label().to_owned(), String::new(), muted()));
                 // An amp carrying its cab reads "Amp+Cab" (a cab carrying a second one, "Dual Cab").
                 let kind = crate::icons::kind_label(&cname, s.paired.is_some());
                 let cname_for_icon = kind.clone();
@@ -346,7 +347,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
 
     let Some(sel) = selected.filter(|s| *s < slots.len()) else {
         ui.add_space(20.0);
-        ui.vertical_centered(|ui| ui.label(RichText::new("Pick a block in the chain to see its knobs.").color(MUTED)));
+        ui.vertical_centered(|ui| ui.label(RichText::new("Pick a block in the chain to see its knobs.").color(muted())));
         return;
     };
     let s = slots[sel].clone();
@@ -356,7 +357,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
             if s.kind == Kind::Empty {
                 block_header(ui, line(), "Empty slot", &format!("position {}", s.wire_block()));
             } else {
-                let (name, cname, col) = s.model.map(|m| describe(cat, m)).unwrap_or((s.kind.label().to_owned(), "".into(), MUTED));
+                let (name, cname, col) = s.model.map(|m| describe(cat, m)).unwrap_or((s.kind.label().to_owned(), "".into(), muted()));
                 let based = s.model.zip(cat).and_then(|(m, c)| c.symbol(m)).and_then(crate::modelinfo::based_on);
                 let symbol = s.model.zip(cat).and_then(|(m, c)| c.symbol(m)).unwrap_or_default().to_owned();
                 let kind = crate::icons::kind_label(&cname, s.paired.is_some());
@@ -374,7 +375,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                     }
                 }
                 if matches!(s.kind, Kind::Block | Kind::Empty) {
-                    if s.kind == Kind::Block && ui.button(RichText::new("Remove").color(BAD)).clicked() {
+                    if s.kind == Kind::Block && ui.button(RichText::new("Remove").color(bad())).clicked() {
                         if live {
                             cmds.push(Cmd::ClearBlock { block: s.wire_block() });
                         }
@@ -389,14 +390,14 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                             }
                         }
                         None => {
-                            ui.label(RichText::new("Effect list needs HX Edit's files").small().color(MUTED));
+                            ui.label(RichText::new("Effect list needs HX Edit's files").small().color(muted()));
                         }
                     }
                 }
             });
         });
         if s.kind == Kind::Empty {
-            ui.label(RichText::new("Use Add effect to put something here.").color(MUTED));
+            ui.label(RichText::new("Use Add effect to put something here.").color(muted()));
             return;
         }
         if matches!(s.kind, Kind::Input | Kind::Output) {
@@ -435,7 +436,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
             let mut cur = (if merge { jp_col } else { sp_col }).clamp(min_c, max_c);
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Position").color(MUTED));
+                ui.label(RichText::new("Position").color(muted()));
                 let mut moved = false;
                 if ui.add_enabled(cur > min_c, egui::Button::new("◀").small()).on_hover_text("Move earlier in the chain").clicked() {
                     cur -= 1;
@@ -465,7 +466,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
         }
         ui.add_space(8.0);
         if s.values.is_empty() {
-            ui.label(RichText::new("This block has no knobs.").color(MUTED));
+            ui.label(RichText::new("This block has no knobs.").color(muted()));
         }
         let sym = cat.zip(s.model).and_then(|(c, m)| c.symbol(m)).map(str::to_owned);
         // An amp + cab (or dual cab) shows the cab's photo under the amp's.
@@ -493,7 +494,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
             let wire = s.wire_block();
             let current = preset.block_footswitch(wire);
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Footswitch").color(MUTED));
+                ui.label(RichText::new("Footswitch").color(muted()));
                 let mut pick = current.unwrap_or(0);
                 egui::ComboBox::from_id_salt(("dev-fs", wire))
                     .selected_text(if pick == 0 { "None".to_owned() } else { format!("FS {pick}") })
@@ -587,7 +588,7 @@ pub fn device_controllers(
                  Changes are kept in the preset and written when you save or send it; on the live preset they go to the pedal at once.",
             );
             let total = list.len() + fs_blocks.len();
-            ui.label(RichText::new(format!("{} assignment{}", total, if total == 1 { "" } else { "s" })).color(MUTED));
+            ui.label(RichText::new(format!("{} assignment{}", total, if total == 1 { "" } else { "s" })).color(muted()));
         });
         ui.add_space(4.0);
         // The same tabs as a .hlx preset's Controllers card.
@@ -628,7 +629,7 @@ pub fn device_controllers(
                     3 => "No knob is on a MIDI CC.",
                     _ => "Nothing here.",
                 })
-                .color(MUTED),
+                .color(muted()),
             );
         }
         // The pedal's switches at a glance: each one with what it does.
@@ -655,9 +656,9 @@ pub fn device_controllers(
             sorted.sort_by_key(|x| x.0);
             for (fs, wire, name, on) in sorted {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("FS {fs}")).strong().color(ORANGE));
+                    ui.label(RichText::new(format!("FS {fs}")).strong().color(orange()));
                     ui.label(RichText::new(format!("{name}: on/off")).strong());
-                    ui.label(RichText::new(if on { "(on now)" } else { "(off now)" }).small().color(MUTED));
+                    ui.label(RichText::new(if on { "(on now)" } else { "(off now)" }).small().color(muted()));
                     if ui.small_button("✖").on_hover_text("Take this effect off the footswitch").clicked() {
                         preset.set_block_footswitch(wire, None, &name, on);
                         *dirty = true;
@@ -678,7 +679,7 @@ pub fn device_controllers(
             if c.controller != last_ctl {
                 last_ctl = c.controller;
                 ui.add_space(4.0);
-                ui.label(RichText::new(name_of_ctl(c.controller)).strong().color(ORANGE));
+                ui.label(RichText::new(name_of_ctl(c.controller)).strong().color(orange()));
             }
             let slot = slots.iter().find(|s| s.wire_block() == c.wire);
             let model = slot.and_then(|s| if c.cab { s.paired } else { s.model });
@@ -697,7 +698,7 @@ pub fn device_controllers(
                         ui.label(format!("{block_name}: on/off"));
                     }
                     1 => {
-                        ui.label(RichText::new("a global setting").color(MUTED));
+                        ui.label(RichText::new("a global setting").color(muted()));
                     }
                     // Under snapshot control a knob has one value per snapshot, not a range.
                     _ if c.controller == fam.snapshots_ctrl => {
@@ -705,9 +706,9 @@ pub fn device_controllers(
                         for (s, sname) in snap_names.iter().enumerate() {
                             let (on, v) = c.snaps.get(s).cloned().flatten().unwrap_or((false, Value::Nil));
                             ui.add_space(6.0);
-                            ui.label(RichText::new(sname).small().color(MUTED));
+                            ui.label(RichText::new(sname).small().color(muted()));
                             if matches!(v, Value::Nil) {
-                                ui.label(RichText::new("-").color(MUTED));
+                                ui.label(RichText::new("-").color(muted()));
                                 continue;
                             }
                             let r = ui.push_id(("snapv", i, s), |ui| bound_cell(ui, &v, meta.as_ref())).inner;
@@ -724,7 +725,7 @@ pub fn device_controllers(
                     }
                     _ => {
                         ui.label(RichText::new(format!("{block_name} › {knob}")).strong());
-                        ui.label(RichText::new("from").color(MUTED));
+                        ui.label(RichText::new("from").color(muted()));
                         if let Some(v) = bound_cell(ui, &c.min, meta.as_ref()) {
                             list[i].min = v.clone();
                             changed = true;
@@ -732,7 +733,7 @@ pub fn device_controllers(
                                 cmds.push(Cmd::ControllerBound { max: false, block: c.wire, cab: c.cab, index: c.index as i64, value: v });
                             }
                         }
-                        ui.label(RichText::new("to").color(MUTED));
+                        ui.label(RichText::new("to").color(muted()));
                         if let Some(v) = bound_cell(ui, &c.max, meta.as_ref()) {
                             list[i].max = v.clone();
                             changed = true;
@@ -741,7 +742,7 @@ pub fn device_controllers(
                             }
                         }
                         if c.controller == fam.midi_ctrl {
-                            ui.label(RichText::new("CC").color(MUTED));
+                            ui.label(RichText::new("CC").color(muted()));
                             let mut cc = c.cc;
                             if ui.add(egui::DragValue::new(&mut cc).range(1..=127)).changed() {
                                 list[i].cc = cc;

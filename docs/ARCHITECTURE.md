@@ -122,7 +122,8 @@ rx: Receiver<Event> }`. The loop:
 - One look: a mockup-style top bar, flat effect boxes with icons, a docked block panel and
   round IN/OUT terminals. (Function names with `studio` in them date from when there was also
   a "Classic" look, which has been removed.) `theme::bg()/panel()/card_bg()/card_hi()/line()` are the
-  palette; `theme::accent()` is the accent colour chosen in Settings.
+  palette, with a dark and a light set (`theme::set_light`, chosen in Settings; `TONESTRAND_THEME=light` for
+  one run); `theme::accent()` is the accent colour chosen in Settings.
 - egui's default fonts lack some symbols (`●`, `→`, `▾`, `↶`); they render as squares. Paint
   dots/arrows with the painter, or use plain text.
 - Tips go behind `theme::help(ui, text)` (a "?" icon), not as visible small text.

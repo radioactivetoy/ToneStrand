@@ -244,6 +244,9 @@ impl App {
     pub fn new(cc: &eframe::CreationContext<'_>, screenshot: Option<PathBuf>) -> App {
         let (settings, settings_note) = Settings::load_reporting();
         theme::set_accent(settings.accent);
+        // TONESTRAND_THEME=light|dark|system overrides the setting for one run (for pictures).
+        let theme_choice = std::env::var("TONESTRAND_THEME").unwrap_or_else(|_| settings.theme.clone());
+        theme::set_light(theme::wants_light(&theme_choice, &cc.egui_ctx));
         theme::apply(&cc.egui_ctx);
         let (tx, box_rx) = channel();
         let tx_local = tx.clone();
@@ -590,7 +593,7 @@ impl App {
             ui.spacing_mut().item_spacing = Vec2::new(3.0, 3.0);
             for (i, d) in self.docs.iter().enumerate() {
                 let active = i == self.active;
-                let galley = ui.painter().layout_no_wrap(d.title.clone(), font.clone(), TEXT);
+                let galley = ui.painter().layout_no_wrap(d.title.clone(), font.clone(), ink());
                 let dot = if d.dirty { 12.0 } else { 0.0 };
                 let (rect, resp) =
                     ui.allocate_exact_size(Vec2::new(10.0 + dot + galley.size().x + 6.0 + 16.0 + 5.0, 26.0), egui::Sense::click());
@@ -618,22 +621,22 @@ impl App {
                 let mut x = rect.left() + 10.0;
                 if d.dirty {
                     // Unsaved changes: a small painted dot.
-                    p.circle_filled(egui::pos2(x + 3.0, rect.center().y), 3.0, ORANGE);
+                    p.circle_filled(egui::pos2(x + 3.0, rect.center().y), 3.0, orange());
                     x += dot;
                 }
                 let col = if active {
                     accent()
                 } else if hot {
-                    TEXT
+                    ink()
                 } else {
-                    MUTED
+                    muted()
                 };
                 p.galley(egui::pos2(x, rect.center().y - galley.size().y / 2.0), galley, col);
                 if active || hot {
                     if x_resp.hovered() {
                         p.rect_filled(x_rect, CornerRadius::same(4), line());
                     }
-                    let c = if x_resp.hovered() { TEXT } else { MUTED };
+                    let c = if x_resp.hovered() { ink() } else { muted() };
                     let m = x_rect.center();
                     let s = Stroke::new(1.4_f32, c);
                     p.line_segment([m + Vec2::new(-3.0, -3.0), m + Vec2::new(3.0, 3.0)], s);
@@ -740,7 +743,7 @@ impl App {
                     ("Anywhere", &[("F1", "This list"), ("Ctrl+Shift+T", "The hidden Tests page")]),
                 ];
                 for (title, rows) in sections {
-                    ui.label(RichText::new(title).small().strong().color(MUTED));
+                    ui.label(RichText::new(title).small().strong().color(muted()));
                     egui::Grid::new(("shortcuts", title)).num_columns(2).min_col_width(210.0).spacing([18.0, 4.0]).show(ui, |ui| {
                         for (keys, what) in rows {
                             ui.label(RichText::new(*keys).monospace().color(accent()));
@@ -794,14 +797,14 @@ impl App {
                 egui::Align2::CENTER_CENTER,
                 "Drop files here",
                 egui::FontId::proportional(26.0),
-                TEXT,
+                ink(),
             );
             painter.text(
                 inner.center() + Vec2::new(0.0, 18.0),
                 egui::Align2::CENTER_CENTER,
                 "Presets open to edit; backups and setlists go to the library; IRs and captures go to the IR library",
                 egui::FontId::proportional(14.0),
-                MUTED,
+                muted(),
             );
         }
         let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
@@ -912,7 +915,7 @@ impl App {
                     choice = Some(0);
                 }
                 let discard = if matches!(ask, CloseAsk::Quit) { "Quit without saving" } else { "Close without saving" };
-                if ui.button(RichText::new(discard).color(BAD)).clicked() {
+                if ui.button(RichText::new(discard).color(bad())).clicked() {
                     choice = Some(1);
                 }
                 if ui.button("Cancel").clicked() {
@@ -1152,7 +1155,7 @@ impl App {
                     ui.add_space(16.0);
                 }
                 ui.label(RichText::new("No preset open").size(22.0).strong());
-                ui.label(RichText::new("Open a file, start a new preset, or edit one from the pedal.").color(MUTED));
+                ui.label(RichText::new("Open a file, start a new preset, or edit one from the pedal.").color(muted()));
             });
         });
     }
@@ -1182,11 +1185,12 @@ impl App {
                             }
                         });
                     };
-                    let hx = if self.catalog.is_some() { ("HX Edit found".to_owned(), GOOD) } else { ("not found yet".to_owned(), ORANGE) };
+                    let hx =
+                        if self.catalog.is_some() { ("HX Edit found".to_owned(), good()) } else { ("not found yet".to_owned(), orange()) };
                     step(ui, "1", "Install Line 6's HX Edit on this computer (ToneStrand reads the effect names from it).", Some(hx));
                     let seen = match (found_usb, found_box) {
-                        (Some(p), _) => Some((format!("{p} on USB"), GOOD)),
-                        (None, Some(b)) => Some((format!("{b} on the network"), GOOD)),
+                        (Some(p), _) => Some((format!("{p} on USB"), good())),
+                        (None, Some(b)) => Some((format!("{b} on the network"), good())),
                         _ => None,
                     };
                     step(
@@ -1202,7 +1206,7 @@ impl App {
                             hide = true;
                         }
                         ui.label(
-                            RichText::new("You can also work on preset files without a pedal: New preset or Open.").small().color(MUTED),
+                            RichText::new("You can also work on preset files without a pedal: New preset or Open.").small().color(muted()),
                         );
                     });
                 });
@@ -1228,13 +1232,13 @@ impl App {
             .show(ctx, |ui| {
                 theme::card(ui, |ui| {
                     ui.set_width(ui.available_width());
-                    ui.label(RichText::new("HX Edit was not found").size(16.0).strong().color(ORANGE));
+                    ui.label(RichText::new("HX Edit was not found").size(16.0).strong().color(orange()));
                     ui.label(
                         RichText::new(
                             "ToneStrand takes effect names, knob names and ranges from the HX Edit program on this computer. \
                              Without it most of the editor is empty. Install HX Edit, or choose the folder it is in.",
                         )
-                        .color(MUTED),
+                        .color(muted()),
                     );
                     ui.add_space(4.0);
                     ui.horizontal_wrapped(|ui| {
@@ -1300,7 +1304,7 @@ impl App {
                 .show_inside(ui, |ui| {
                     ui.horizontal(|ui| {
                         if let Some(n) = editors::current_note(ui.ctx()) {
-                            ui.label(RichText::new(n).color(ORANGE));
+                            ui.label(RichText::new(n).color(orange()));
                             ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
                         }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -1379,7 +1383,7 @@ impl App {
                         doc.dirty = true;
                     }
                     if !compact {
-                        theme::pill(ui, "HLX file", BLUE);
+                        theme::pill(ui, "HLX file", blue());
                     }
                 }
                 DocKind::Device { origin, .. } => {
@@ -1399,16 +1403,16 @@ impl App {
                         doc.dirty = true;
                     }
                     match origin {
-                        Origin::Live { index, .. } => theme::pill(ui, &format!("LIVE · {}", slot_label((*index).max(0) as usize)), GOOD),
+                        Origin::Live { index, .. } => theme::pill(ui, &format!("LIVE · {}", slot_label((*index).max(0) as usize)), good()),
                         Origin::Slot { index, .. } => {
                             theme::pill(ui, &format!("from pedal · {}", slot_label((*index).max(0) as usize)), accent())
                         }
-                        Origin::File => theme::pill(ui, "pedal preset file", ORANGE),
+                        Origin::File => theme::pill(ui, "pedal preset file", orange()),
                     }
                 }
             }
             if doc.example && !compact {
-                theme::pill(ui, "example", MUTED);
+                theme::pill(ui, "example", muted());
             }
         };
         let save_buttons = |ui: &mut egui::Ui, studio: bool, save: &mut Option<bool>| {
@@ -1416,7 +1420,7 @@ impl App {
                 if ui.button("Save as...").clicked() {
                     *save = Some(true);
                 }
-                let primary = egui::Button::new(RichText::new("Save").strong().color(Color32::from_rgb(8, 22, 26))).fill(accent());
+                let primary = egui::Button::new(RichText::new("Save").strong().color(on_accent())).fill(accent());
                 if ui.add(primary).on_hover_text("Save this preset (Ctrl+S)").clicked() {
                     *save = Some(false);
                 }
@@ -1461,7 +1465,7 @@ impl App {
                 let name = doc.name.clone();
                 let mut clean = false;
                 if let Origin::Live { setlist: sl, index } = origin {
-                    let btn = egui::Button::new(RichText::new("Save on pedal").strong().color(Color32::from_rgb(8, 26, 24))).fill(accent());
+                    let btn = egui::Button::new(RichText::new("Save on pedal").strong().color(on_accent())).fill(accent());
                     if ui.add_enabled(connected, btn).on_hover_text("Keep the live changes in this preset slot").clicked() {
                         cmds.push(Cmd::SaveCurrent { setlist: *sl, index: *index, name: name.clone() });
                         clean = true;
@@ -1562,7 +1566,7 @@ impl App {
                 header(ui, doc, true);
                 if live && sent_recently {
                     // A live change just went to the pedal (a failure shows in red in the status bar).
-                    ui.label(RichText::new("sent").small().color(GOOD));
+                    ui.label(RichText::new("sent").small().color(good()));
                     ui.ctx().request_repaint_after(Duration::from_millis(200));
                 }
                 undo_buttons(ui, doc, true, &mut history);
@@ -1658,7 +1662,7 @@ impl App {
         // What converting presets to the unit did, or why it could not.
         if let Some((title, lines, refusal)) = self.unit_report.clone() {
             let mut close = false;
-            egui::Window::new(RichText::new(&title).strong().color(if refusal { BAD } else { TEXT }))
+            egui::Window::new(RichText::new(&title).strong().color(if refusal { bad() } else { ink() }))
                 .id(egui::Id::new("unit-report"))
                 .collapsible(false)
                 .resizable(false)
@@ -1774,8 +1778,8 @@ impl App {
 fn level_colour(l: LogLevel, info: Color32) -> Color32 {
     match l {
         LogLevel::Info => info,
-        LogLevel::Good => GOOD,
-        LogLevel::Bad => BAD,
+        LogLevel::Good => good(),
+        LogLevel::Bad => bad(),
     }
 }
 
@@ -1931,7 +1935,7 @@ fn focus_if_asked(ui: &egui::Ui, r: &egui::Response, len: usize) {
 /// A sidebar section: a card under a small capital heading.
 fn side_section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     ui.add_space(4.0);
-    ui.label(RichText::new(title).small().strong().color(MUTED));
+    ui.label(RichText::new(title).small().strong().color(muted()));
     ui.add_space(4.0);
     let r = egui::Frame::new()
         .fill(card_bg())

@@ -113,10 +113,14 @@ pub fn has_side(ui: &egui::Ui, symbol: &str, cab: Option<&str>) -> bool {
 /// or a dual cab), a few lines about the model, and more on demand.
 pub fn side(ui: &mut egui::Ui, symbol: &str, width: f32, cab: Option<&str>) {
     let framed = |ui: &mut egui::Ui, t: &egui::TextureHandle, h: f32| {
-        egui::Frame::new().fill(bg()).corner_radius(egui::CornerRadius::same(8)).inner_margin(egui::Margin::same(6)).show(ui, |ui| {
-            ui.set_width(width - 12.0);
-            ui.vertical_centered(|ui| image(ui, t, Vec2::new(width - 24.0, h)));
-        });
+        egui::Frame::new()
+            .fill(egui::Color32::from_rgb(0x10, 0x11, 0x14))
+            .corner_radius(egui::CornerRadius::same(8))
+            .inner_margin(egui::Margin::same(6))
+            .show(ui, |ui| {
+                ui.set_width(width - 12.0);
+                ui.vertical_centered(|ui| image(ui, t, Vec2::new(width - 24.0, h)));
+            });
         ui.add_space(6.0);
     };
     let cab_photo = cab.and_then(|c| photo(ui.ctx(), c));
@@ -129,17 +133,17 @@ pub fn side(ui: &mut egui::Ui, symbol: &str, width: f32, cab: Option<&str>) {
     let Some(i) = info(symbol) else { return };
     if let Some(d) = i.description.as_deref().and_then(|d| d.split("\n\n").next()) {
         let short: String = if d.chars().count() > 150 { d.chars().take(150).collect::<String>() + "…" } else { d.to_owned() };
-        ui.add(egui::Label::new(RichText::new(short).small().color(MUTED)).wrap());
+        ui.add(egui::Label::new(RichText::new(short).small().color(muted())).wrap());
         egui::CollapsingHeader::new(RichText::new("More").small()).id_salt(("about", symbol)).default_open(false).show(ui, |ui| {
             if let Some(d) = &i.description {
                 ui.label(RichText::new(d).small());
             }
             if let Some(n) = &i.notable_users {
                 ui.add_space(4.0);
-                ui.label(RichText::new("Notable players").small().strong().color(MUTED));
+                ui.label(RichText::new("Notable players").small().strong().color(muted()));
                 ui.label(RichText::new(n).small());
             }
-            ui.label(RichText::new("Source: Line 6 release notes").small().color(MUTED));
+            ui.label(RichText::new("Source: Line 6 release notes").small().color(muted()));
         });
     }
 }
@@ -156,14 +160,14 @@ pub fn summary(ui: &mut egui::Ui, symbol: &str, names: &str) {
         ui.vertical(|ui| {
             ui.label(RichText::new(names).strong());
             if i.based_on.is_none() && i.description.is_none() {
-                ui.label(RichText::new("No description for this effect.").small().color(MUTED));
+                ui.label(RichText::new("No description for this effect.").small().color(muted()));
             }
             if let Some(b) = &i.based_on {
                 ui.label(RichText::new(format!("Based on {b}")).strong());
             }
             if let Some(d) = i.description.as_deref().and_then(|d| d.split("\n\n").next()) {
                 let short: String = if d.chars().count() > 230 { d.chars().take(230).collect::<String>() + "…" } else { d.to_owned() };
-                ui.label(RichText::new(short).small().color(MUTED));
+                ui.label(RichText::new(short).small().color(muted()));
             }
         });
     });
@@ -179,7 +183,7 @@ pub fn hover(ui: &mut egui::Ui, symbol: &str) {
     }
     if let Some(d) = i.description.as_deref().and_then(|d| d.split("\n\n").next()) {
         let short: String = if d.chars().count() > 260 { d.chars().take(260).collect::<String>() + "…" } else { d.to_owned() };
-        ui.label(RichText::new(short).small().color(MUTED));
+        ui.label(RichText::new(short).small().color(muted()));
     }
 }
 

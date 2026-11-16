@@ -10,6 +10,11 @@ impl App {
         if self.usb_scanned.is_none_or(|t| t.elapsed() > Duration::from_secs(3)) {
             self.usb = wire::list_usb_pedals();
             self.usb_scanned = Some(Instant::now());
+            // "Follow the computer": pick up a change of its light or dark setting.
+            if self.settings.theme == "system" && theme::wants_light("system", ctx) != theme::is_light() {
+                theme::set_light(!theme::is_light());
+                theme::apply(ctx);
+            }
         }
         self.maybe_reconnect(ctx);
         while let Ok(b) = self.box_rx.try_recv() {
@@ -380,7 +385,7 @@ impl App {
                 return;
             }
             if !self.usb.is_empty() {
-                ui.label(RichText::new("USB").small().color(MUTED));
+                ui.label(RichText::new("USB").small().color(muted()));
             }
             for (i, p) in self.usb.clone().iter().enumerate() {
                 let sel = self.pick == Some(Pick::Usb(i));
@@ -390,9 +395,9 @@ impl App {
                 }
             }
             ui.add_space(4.0);
-            ui.label(RichText::new("Helrig Box (Wi-Fi)").small().color(MUTED));
+            ui.label(RichText::new("Helrig Box (Wi-Fi)").small().color(muted()));
             if self.boxes.is_empty() {
-                ui.label(RichText::new("Looking for boxes on your network...").color(MUTED).italics());
+                ui.label(RichText::new("Looking for boxes on your network...").color(muted()).italics());
             }
             for (i, b) in self.boxes.clone().iter().enumerate() {
                 let sel = self.pick == Some(Pick::Box(i));
@@ -405,7 +410,7 @@ impl App {
                         self.check_box(b.host.clone());
                     }
                     if paired {
-                        theme::pill(ui, "paired", GOOD);
+                        theme::pill(ui, "paired", good());
                     }
                 });
             }
@@ -461,7 +466,7 @@ impl App {
                         Some(Pick::Box(i)) => self.boxes.get(*i).is_some_and(|b| self.settings.token_for(b).is_some()),
                         None => false,
                     };
-                    let btn = egui::Button::new(RichText::new("Connect").strong().color(Color32::from_rgb(8, 26, 24))).fill(accent());
+                    let btn = egui::Button::new(RichText::new("Connect").strong().color(on_accent())).fill(accent());
                     if ui.add_enabled(can, btn).on_disabled_hover_text("Pick a pedal, or a paired box, first").clicked() {
                         ui.close_menu();
                         self.connect(ctx);
@@ -473,12 +478,12 @@ impl App {
                     ui.label(
                         RichText::new("This computer is not paired with the box yet: press Pair above, then the BOOT button on the box.")
                             .small()
-                            .color(ORANGE),
+                            .color(orange()),
                     );
                 }
             }
             if let Some(e) = &self.last_error {
-                ui.label(RichText::new(format!("Last try: {e}")).small().color(BAD));
+                ui.label(RichText::new(format!("Last try: {e}")).small().color(bad()));
             }
         });
     }
@@ -491,16 +496,16 @@ impl App {
             match &status {
                 Some((h, Ok(st))) if *h == b.host => {
                     ui.label(match &st.pedal {
-                        Some(p) => RichText::new(format!("Pedal attached: {p}")).color(GOOD),
-                        None => RichText::new("No pedal attached to the box").color(ORANGE),
+                        Some(p) => RichText::new(format!("Pedal attached: {p}")).color(good()),
+                        None => RichText::new("No pedal attached to the box").color(orange()),
                     });
                     ui.label(RichText::new(if st.relay_only { "Relay mode: on" } else { "Relay mode: off" }).color(if st.relay_only {
-                        GOOD
+                        good()
                     } else {
-                        ORANGE
+                        orange()
                     }));
                     if st.client && !locked {
-                        ui.label(RichText::new("Another computer is using it right now").color(ORANGE));
+                        ui.label(RichText::new("Another computer is using it right now").color(orange()));
                     }
                     if !st.relay_only {
                         if let Some(tok) = self.settings.token_for(b) {
@@ -515,12 +520,12 @@ impl App {
                     }
                 }
                 Some((h, Err(e))) if *h == b.host => {
-                    ui.label(RichText::new(e).color(BAD));
+                    ui.label(RichText::new(e).color(bad()));
                 }
                 _ => {
                     ui.horizontal(|ui| {
                         ui.add(egui::Spinner::new().size(12.0));
-                        ui.label(RichText::new("Asking the box...").color(MUTED));
+                        ui.label(RichText::new("Asking the box...").color(muted()));
                     });
                 }
             }
@@ -530,8 +535,8 @@ impl App {
                 }
                 if let Some(p) = &self.pairing {
                     let left = boxes::PAIR_WINDOW_SECS.saturating_sub(p.started.elapsed().as_secs());
-                    ui.add(egui::Spinner::new().size(12.0).color(ORANGE));
-                    ui.label(RichText::new(format!("Press BOOT on the box now ({left}s)")).color(ORANGE).strong());
+                    ui.add(egui::Spinner::new().size(12.0).color(orange()));
+                    ui.label(RichText::new(format!("Press BOOT on the box now ({left}s)")).color(orange()).strong());
                 } else if ui
                     .small_button(if self.settings.token_for(b).is_some() { "Pair again" } else { "Pair" })
                     .on_hover_text("Then press the BOOT button on the box once")
@@ -574,7 +579,7 @@ impl App {
                         format!("{lt} is backed up before it is replaced (and {lf} too, if you swap).")
                     })
                     .small()
-                    .color(MUTED),
+                    .color(muted()),
                 );
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
@@ -611,7 +616,7 @@ impl App {
     pub(super) fn pedal_card(&mut self, ui: &mut egui::Ui) {
         side_section(ui, "PRESETS", |ui| {
             if self.connected.is_none() {
-                ui.label(RichText::new("Connect to a pedal to see and edit its presets.").color(MUTED));
+                ui.label(RichText::new("Connect to a pedal to see and edit its presets.").color(muted()));
                 return;
             }
             if !self.setlists.is_empty() {
@@ -701,7 +706,7 @@ impl App {
                             egui::Align2::LEFT_CENTER,
                             slot_label(i),
                             egui::FontId::monospace(12.5),
-                            if is_current { accent() } else { MUTED },
+                            if is_current { accent() } else { muted() },
                         );
                         let shown = if name.trim().is_empty() { "<empty>" } else { name.as_str() };
                         p.text(
@@ -709,7 +714,7 @@ impl App {
                             egui::Align2::LEFT_CENTER,
                             shown,
                             egui::FontId::proportional(14.0),
-                            TEXT,
+                            ink(),
                         );
                         // Drag a preset onto another slot to copy, swap or move it.
                         if !presets[i].trim().is_empty() {
@@ -747,7 +752,7 @@ impl App {
                                 ui.close_menu();
                             }
                             ui.separator();
-                            if ui.button(RichText::new("Clear slot").color(BAD)).clicked() {
+                            if ui.button(RichText::new("Clear slot").color(bad())).clicked() {
                                 self.confirm = Some((
                                     format!("Clear {} \"{}\"? This empties the slot on the pedal.", slot_label(i), name),
                                     Cmd::Clear { setlist: sl, index: i as i64 },

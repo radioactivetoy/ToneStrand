@@ -131,7 +131,7 @@ impl App {
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Presets kept before a write, and from \"Back up this setlist\"").color(MUTED));
+                    ui.label(RichText::new("Presets kept before a write, and from \"Back up this setlist\"").color(muted()));
                     theme::help(
                         ui,
                         &format!(
@@ -150,7 +150,7 @@ impl App {
                 });
                 ui.add_space(4.0);
                 if st.files.is_empty() {
-                    ui.label(RichText::new("No backups yet. One is made each time a slot is written over.").color(MUTED));
+                    ui.label(RichText::new("No backups yet. One is made each time a slot is written over.").color(muted()));
                 }
                 egui::ScrollArea::vertical().max_height(360.0).auto_shrink([true, true]).show(ui, |ui| {
                     for f in &st.files {
@@ -159,10 +159,10 @@ impl App {
                             ui.label(RichText::new(f.slot.map(slot_label).unwrap_or_else(|| "???".into())).monospace().color(accent()));
                             ui.label(RichText::new(&f.name).strong());
                             if f.before_write {
-                                theme::pill(ui, "before a write", MUTED);
+                                theme::pill(ui, "before a write", muted());
                             }
                             if let Some(w) = f.when {
-                                ui.label(RichText::new(when_text(w)).small().color(MUTED));
+                                ui.label(RichText::new(when_text(w)).small().color(muted()));
                             }
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 let target = own.or_else(|| st.asked.get(&f.path).copied());

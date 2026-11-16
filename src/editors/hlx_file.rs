@@ -16,11 +16,11 @@ fn assign_menu(ui: &mut egui::Ui, json: &mut serde_json::Value, b: &hlx::HlxBloc
     let fam = snapshots::family(json);
     let current = snapshots::controller(json, b, knob);
     let label = current.map(|c| c.0.short()).unwrap_or_else(|| "assign".into());
-    let col = if current.is_some() { ORANGE } else { MUTED.gamma_multiply(0.85) };
+    let col = if current.is_some() { orange() } else { muted().gamma_multiply(0.85) };
     // Quiet until it means something: no frame when nothing is assigned, an orange tag when it is.
     {
         let w = &mut ui.style_mut().visuals.widgets;
-        let fill = if current.is_some() { ORANGE.gamma_multiply(0.16) } else { Color32::TRANSPARENT };
+        let fill = if current.is_some() { orange().gamma_multiply(0.16) } else { Color32::TRANSPARENT };
         w.inactive.weak_bg_fill = fill;
         w.inactive.bg_fill = fill;
         w.inactive.bg_stroke = Stroke::NONE;
@@ -195,7 +195,7 @@ pub fn hlx_editor(
             let full = count >= unit.max_blocks;
             let main_cols = hlx::main_cols_for(json, dsp, unit.positions, unit.max_blocks, unit.shared_slots);
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("PATH {}", di + 1)).small().strong().color(MUTED));
+                ui.label(RichText::new(format!("PATH {}", di + 1)).small().strong().color(muted()));
             });
             // The path as a diagram: main line, and when it splits the lower lane
             // starting at the split dot.
@@ -437,7 +437,7 @@ pub fn hlx_editor(
                 block_header(ui, family_colour("io"), if merge { "Merge" } else { "Split" }, "");
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui
-                        .button(RichText::new("Remove split").color(BAD))
+                        .button(RichText::new("Remove split").color(bad()))
                         .on_hover_text("Back to a single lane; lower-lane blocks move to free places on the main lane")
                         .clicked()
                     {
@@ -456,7 +456,7 @@ pub fn hlx_editor(
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 if !merge {
-                    ui.label(RichText::new("Type").color(MUTED));
+                    ui.label(RichText::new("Type").color(muted()));
                     let current = hlx::SPLITS.iter().find(|s| s.0 == model).map(|s| s.1).unwrap_or("Split");
                     egui::ComboBox::from_id_salt(format!("split-{dsp}")).selected_text(current).show_ui(ui, |ui| {
                         for (m, n) in hlx::SPLITS {
@@ -469,7 +469,7 @@ pub fn hlx_editor(
                     });
                     ui.add_space(12.0);
                 }
-                ui.label(RichText::new("Position").color(MUTED));
+                ui.label(RichText::new("Position").color(muted()));
                 let main_cols = hlx::main_cols_for(json, &dsp, unit.positions, unit.max_blocks, unit.shared_slots);
                 let lower_slots = hlx::lower_slots_of(json, &dsp).max(1);
                 let min_p = if merge { sp } else { 0 };
@@ -539,7 +539,7 @@ pub fn hlx_editor(
                 let global = json.pointer_mut("/data/tone/global").and_then(|g| g.as_object_mut());
                 if let Some(g) = global {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new("Guitar In-Z").color(MUTED));
+                        ui.label(RichText::new("Guitar In-Z").color(muted()));
                         let mut z = g.get("@guitarinputZ").and_then(|v| v.as_i64()).unwrap_or(0);
                         let choices: Vec<(i64, &str)> = GUITAR_IN_Z.iter().enumerate().map(|(i, n)| (i as i64, *n)).collect();
                         if choice_combo(ui, "inz", &mut z, &choices) {
@@ -547,7 +547,7 @@ pub fn hlx_editor(
                             *dirty = true;
                         }
                         ui.add_space(12.0);
-                        ui.label(RichText::new("Guitar Pad").color(MUTED));
+                        ui.label(RichText::new("Guitar Pad").color(muted()));
                         let mut pad = g.get("@guitarpad").and_then(|v| v.as_i64()).unwrap_or(0);
                         for (i, n) in GUITAR_PAD.iter().enumerate() {
                             if ui.selectable_label(pad == i as i64, *n).clicked() {
@@ -561,13 +561,13 @@ pub fn hlx_editor(
                 }
             }
             let Some(obj) = hlx::io_mut(json, &dsp, input) else {
-                ui.label(RichText::new("This preset has no settings here.").color(MUTED));
+                ui.label(RichText::new("This preset has no settings here.").color(muted()));
                 return;
             };
             let route_key = if input { "@input" } else { "@output" };
             let mut route = obj.get(route_key).and_then(|v| v.as_i64()).unwrap_or(1);
             ui.horizontal(|ui| {
-                ui.label(RichText::new(if input { "Source" } else { "Destination" }).color(MUTED));
+                ui.label(RichText::new(if input { "Source" } else { "Destination" }).color(muted()));
                 if choice_combo(ui, &format!("route-{dsp}-{input}"), &mut route, &crate::routes::route_names(fam, input, di > 0)) {
                     obj.insert(route_key.into(), serde_json::json!(route));
                     *dirty = true;
@@ -595,7 +595,7 @@ pub fn hlx_editor(
         return;
     }
     let Some(sel) = selected.filter(|s| *s < blocks.len()) else {
-        ui.label(RichText::new("Pick a block above to see its knobs, or click + to add an effect.").color(MUTED));
+        ui.label(RichText::new("Pick a block above to see its knobs, or click + to add an effect.").color(muted()));
         return;
     };
     let b = blocks[sel].clone();
@@ -619,7 +619,7 @@ pub fn hlx_editor(
                         switched = true;
                     }
                 }
-                if ui.button(RichText::new("Remove").color(BAD)).clicked() {
+                if ui.button(RichText::new("Remove").color(bad())).clicked() {
                     hlx::remove_block(json, &b);
                     *dirty = true;
                     removed = true;
@@ -670,7 +670,7 @@ pub fn hlx_editor(
                 ui.set_min_width(rest.min(200.0));
                 // Footswitch for this block's on/off.
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Footswitch").color(MUTED));
+                    ui.label(RichText::new("Footswitch").color(muted()));
                     let current = snapshots::footswitch(json, &b);
                     let mut fs = current.map(|c| c.0).unwrap_or(0);
                     let mut choices: Vec<(i64, String)> = vec![(0, "None".into())];
@@ -779,13 +779,13 @@ pub fn hlx_editor(
                                         ui.vertical_centered(|ui| assign_menu(ui, json, &b, k, meta.as_ref(), dirty));
                                     }
                                     None => {
-                                        ui.label(RichText::new(&label).small().color(MUTED));
+                                        ui.label(RichText::new(&label).small().color(muted()));
                                         if let serde_json::Value::String(s) = v {
                                             if ui.add(egui::TextEdit::singleline(s).desired_width(100.0)).changed() {
                                                 *dirty = true;
                                             }
                                         } else {
-                                            ui.label(RichText::new(v.to_string()).small().color(MUTED));
+                                            ui.label(RichText::new(v.to_string()).small().color(muted()));
                                         }
                                     }
                                 }

@@ -132,7 +132,7 @@ impl App {
             .default_width(560.0)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
-                ui.label(RichText::new(st.folder.display().to_string()).small().color(MUTED));
+                ui.label(RichText::new(st.folder.display().to_string()).small().color(muted()));
                 ui.add_space(4.0);
                 let (np, ni) = (st.presets.iter().filter(|p| p.take).count(), st.irs.iter().filter(|i| i.take).count());
                 ui.label(format!(
@@ -157,7 +157,7 @@ impl App {
                             if p.setlist == shown {
                                 let now = known.get(p.slot).map(String::as_str).unwrap_or("");
                                 let text = if now.is_empty() { "empty now".to_owned() } else { format!("replaces \"{now}\"") };
-                                ui.label(RichText::new(text).small().color(MUTED));
+                                ui.label(RichText::new(text).small().color(muted()));
                             }
                         });
                     }
@@ -174,9 +174,9 @@ impl App {
                     }
                     if !st.problems.is_empty() {
                         ui.add_space(6.0);
-                        ui.label(RichText::new("Left out").strong().color(BAD));
+                        ui.label(RichText::new("Left out").strong().color(bad()));
                         for p in &st.problems {
-                            ui.label(RichText::new(p).small().color(MUTED));
+                            ui.label(RichText::new(p).small().color(muted()));
                         }
                     }
                 });

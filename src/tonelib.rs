@@ -248,7 +248,7 @@ impl ToneLib {
                     if send.clicked() {
                         actions.push(Action::SendToPedal(picked.iter().map(Self::send_path).collect()));
                     }
-                    if ui.add_enabled(!picked.is_empty(), egui::Button::new(RichText::new("Delete...").color(BAD))).clicked() {
+                    if ui.add_enabled(!picked.is_empty(), egui::Button::new(RichText::new("Delete...").color(bad()))).clicked() {
                         let mut files: Vec<PathBuf> = picked.iter().map(|e| e.path.clone()).collect();
                         files.extend(picked.iter().filter_map(|e| e.converted.clone()));
                         self.confirm_delete = Some(files);
@@ -263,7 +263,7 @@ impl ToneLib {
                         ui.vertical_centered(|ui| {
                             ui.add_space(16.0);
                             ui.label(RichText::new("No IRs or captures here yet").size(16.0).strong());
-                            ui.label(RichText::new("Import .wav IRs and .nam captures, or download IRs from the pedal into this library.").color(MUTED));
+                            ui.label(RichText::new("Import .wav IRs and .nam captures, or download IRs from the pedal into this library.").color(muted()));
                             ui.add_space(16.0);
                         });
                     });
@@ -281,9 +281,9 @@ impl ToneLib {
                                 ui.set_width(ui.available_width());
                                 ui.horizontal(|ui| {
                                     match e.kind {
-                                        Kind::Ir => theme::pill(ui, "IR", BLUE),
-                                        Kind::Nam => theme::pill(ui, "NAM", PINK),
-                                        Kind::NamWav => theme::pill(ui, "NAM .wav", PINK),
+                                        Kind::Ir => theme::pill(ui, "IR", blue()),
+                                        Kind::Nam => theme::pill(ui, "NAM", pink()),
+                                        Kind::NamWav => theme::pill(ui, "NAM .wav", pink()),
                                     }
                                     ui.label(RichText::new(&e.name).strong());
                                     if self.current.is_none() && !e.folder.is_empty() {
@@ -292,15 +292,15 @@ impl ToneLib {
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| match (&e.kind, &e.converted, &e.problem) {
                                         (Kind::Nam, _, Some(p)) => {
                                             theme::help(ui, p);
-                                            theme::pill(ui, "can't convert", BAD);
+                                            theme::pill(ui, "can't convert", bad());
                                         }
                                         (Kind::Nam, Some(c), _) => {
-                                            theme::pill(ui, "✔ converted", GOOD);
-                                            ui.label(RichText::new(c.file_name().and_then(|s| s.to_str()).unwrap_or("")).small().color(MUTED));
+                                            theme::pill(ui, "✔ converted", good());
+                                            ui.label(RichText::new(c.file_name().and_then(|s| s.to_str()).unwrap_or("")).small().color(muted()));
                                         }
-                                        (Kind::Nam, None, None) => theme::pill(ui, "not converted", ORANGE),
+                                        (Kind::Nam, None, None) => theme::pill(ui, "not converted", orange()),
                                         (Kind::NamWav, ..) => {
-                                            ui.label(RichText::new("converted capture (its .nam isn't here)").small().color(MUTED));
+                                            ui.label(RichText::new("converted capture (its .nam isn't here)").small().color(muted()));
                                         }
                                         _ => {}
                                     });
@@ -351,11 +351,13 @@ impl ToneLib {
                         ui.label(format!("Delete {} file{s} from your library? This can't be undone.", files.len()));
                     }
                     for f in files.iter().take(8) {
-                        ui.label(RichText::new(f.file_name().and_then(|s| s.to_str()).unwrap_or("")).small().color(MUTED));
+                        ui.label(RichText::new(f.file_name().and_then(|s| s.to_str()).unwrap_or("")).small().color(muted()));
                     }
                     ui.horizontal(|ui| {
                         if ui
-                            .button(RichText::new(if crate::files::HAS_RECYCLE_BIN { "Move to Recycle Bin" } else { "Delete" }).color(BAD))
+                            .button(
+                                RichText::new(if crate::files::HAS_RECYCLE_BIN { "Move to Recycle Bin" } else { "Delete" }).color(bad()),
+                            )
                             .clicked()
                         {
                             result = Some(true);

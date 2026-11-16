@@ -97,7 +97,7 @@ impl App {
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
                 ui.set_min_width(560.0);
-                ui.label(RichText::new("Pick the slot each file goes into.").color(MUTED));
+                ui.label(RichText::new("Pick the slot each file goes into.").color(muted()));
                 ui.add_space(6.0);
                 let slots: Vec<i64> = plan.rows.iter().map(|r| r.slot).collect();
                 egui::Grid::new("ir-plan").num_columns(4).spacing([10.0, 6.0]).show(ui, |ui| {
@@ -108,9 +108,9 @@ impl App {
                                 ui.add(egui::Image::new(&t).fit_to_exact_size(Vec2::splat(22.0)));
                             }
                             ui.label(RichText::new(if row.nam { "NAM capture" } else { "IR" }).small().color(if row.nam {
-                                PINK
+                                pink()
                             } else {
-                                BLUE
+                                blue()
                             }));
                         });
                         ui.label(RichText::new(&row.name).strong()).on_hover_text(format!("{}\n{}", row.file, row.notes));
@@ -122,16 +122,16 @@ impl App {
                             ui,
                             |ui| {
                                 for s in 0..crate::session::IR_SLOTS {
-                                    let col = if used.contains_key(&s) { ORANGE } else { TEXT };
+                                    let col = if used.contains_key(&s) { orange() } else { ink() };
                                     ui.selectable_value(&mut row.slot, s, RichText::new(label(s)).color(col));
                                 }
                             },
                         );
                         let twice = slots.iter().filter(|s| **s == row.slot).count() > 1;
                         if twice {
-                            ui.label(RichText::new("same slot twice").small().color(BAD));
+                            ui.label(RichText::new("same slot twice").small().color(bad()));
                         } else if let Some(n) = used.get(&row.slot) {
-                            ui.label(RichText::new(format!("replaces \"{n}\"")).small().color(ORANGE));
+                            ui.label(RichText::new(format!("replaces \"{n}\"")).small().color(orange()));
                         } else {
                             ui.label("");
                         }
@@ -142,18 +142,18 @@ impl App {
                     ui.add_space(8.0);
                     theme::card(ui, |ui| {
                         ui.label(
-                            RichText::new("NAM captures only work with the NAM A2 Lite firmware on the pedal.").strong().color(ORANGE),
+                            RichText::new("NAM captures only work with the NAM A2 Lite firmware on the pedal.").strong().color(orange()),
                         );
                         ui.label(
                             RichText::new("Without it the pedal refuses them, and the transfer can hang and drop the connection.")
                                 .small()
-                                .color(MUTED),
+                                .color(muted()),
                         );
                         ui.checkbox(&mut plan.firmware_ok, "My pedal has the NAM A2 Lite firmware");
                     });
                 }
                 for p in &plan.problems {
-                    ui.label(RichText::new(p).small().color(BAD));
+                    ui.label(RichText::new(p).small().color(bad()));
                 }
                 ui.add_space(8.0);
                 let dup = (0..plan.rows.len()).any(|i| plan.rows.iter().skip(i + 1).any(|r| r.slot == plan.rows[i].slot));
@@ -218,13 +218,13 @@ impl App {
                          so a NAM capture comes back as the .wav the NAM block reads.",
                     );
                     if let Some(l) = &self.irs {
-                        ui.label(RichText::new(format!("{} of 128 slots in use", l.len())).color(MUTED));
+                        ui.label(RichText::new(format!("{} of 128 slots in use", l.len())).color(muted()));
                     }
                 });
                 ui.add_space(6.0);
                 if !connected {
                     theme::card(ui, |ui| {
-                        ui.label(RichText::new("Connect to a pedal to see and change its IRs.").color(MUTED));
+                        ui.label(RichText::new("Connect to a pedal to see and change its IRs.").color(muted()));
                         ui.add_space(4.0);
                         if ui.button("Convert .nam captures to .wav files...").clicked() {
                             self.convert_nam_files();
@@ -258,7 +258,7 @@ impl App {
                         if ui.add_enabled(one.is_some(), egui::Button::new("Rename")).clicked() {
                             self.ir_rename = one.clone();
                         }
-                        if ui.add_enabled(!picked.is_empty(), egui::Button::new(RichText::new("Remove").color(BAD))).clicked() {
+                        if ui.add_enabled(!picked.is_empty(), egui::Button::new(RichText::new("Remove").color(bad()))).clicked() {
                             let names: Vec<String> = picked.iter().map(|(s, n)| format!("{} \"{n}\"", s + 1)).collect();
                             self.confirm = Some((format!("Remove {} IR{} from the pedal? ({})\nPresets that use them will have an empty IR.", picked.len(), if picked.len() == 1 { "" } else { "s" }, names.join(", ")), Cmd::DeleteIrs { slots: picked.iter().map(|p| p.0).collect(), backup: self.backup_dir() }));
                         }
@@ -269,7 +269,7 @@ impl App {
                 });
                 ui.add_space(8.0);
                 if self.irs.is_none() {
-                    ui.label(RichText::new(if busy { "Reading..." } else { "Press \"Read list\" to see the pedal's IRs." }).color(MUTED));
+                    ui.label(RichText::new(if busy { "Reading..." } else { "Press \"Read list\" to see the pedal's IRs." }).color(muted()));
                 } else {
                     let multi = ui.input(|i| i.modifiers.ctrl || i.modifiers.command || i.modifiers.shift);
                     let backup = self.backup_dir();
@@ -290,7 +290,7 @@ impl App {
                             self.ir_view = v;
                         }
                         if used.keys().any(|s| kind_of(*s) == Some(None)) {
-                            ui.label(RichText::new("sorting...").small().color(MUTED));
+                            ui.label(RichText::new("sorting...").small().color(muted()));
                         }
                     });
                     ui.add_space(6.0);
@@ -309,7 +309,7 @@ impl App {
                             1 => "No IRs on the pedal.",
                             2 => "No NAM captures on the pedal.",
                             _ => "No empty slots.",
-                        }).color(MUTED));
+                        }).color(muted()));
                     }
                     egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
                         let cols = ((ui.available_width() / 300.0).floor() as usize).clamp(1, 4);
@@ -327,7 +327,7 @@ impl App {
                                     p.rect_stroke(rect, egui::CornerRadius::same(5), egui::Stroke::new(1.0_f32, accent()), egui::StrokeKind::Inside);
                                 }
                                 let mono = egui::FontId::monospace(13.0);
-                                p.text(rect.left_center() + Vec2::new(6.0, 0.0), egui::Align2::LEFT_CENTER, format!("{:>3}", slot + 1), mono.clone(), MUTED);
+                                p.text(rect.left_center() + Vec2::new(6.0, 0.0), egui::Align2::LEFT_CENTER, format!("{:>3}", slot + 1), mono.clone(), muted());
                                 let icon_rect = egui::Rect::from_center_size(rect.left_center() + Vec2::new(50.0, 0.0), Vec2::splat(22.0));
                                 match name {
                                     Some(n) => {
@@ -335,12 +335,12 @@ impl App {
                                         if let Some(t) = tex {
                                             p.image(t.id(), icon_rect, egui::Rect::from_min_max(egui::Pos2::ZERO, egui::Pos2::new(1.0, 1.0)), Color32::WHITE);
                                         }
-                                        let galley = p.layout_no_wrap(n.clone(), egui::FontId::proportional(14.0), if nam { PINK } else { TEXT });
+                                        let galley = p.layout_no_wrap(n.clone(), egui::FontId::proportional(14.0), if nam { pink() } else { ink() });
                                         let at = rect.left_center() + Vec2::new(68.0, -galley.size().y / 2.0);
-                                        p.with_clip_rect(rect.shrink(2.0)).galley(at, galley, TEXT);
+                                        p.with_clip_rect(rect.shrink(2.0)).galley(at, galley, ink());
                                     }
                                     None => {
-                                        p.text(rect.left_center() + Vec2::new(68.0, 0.0), egui::Align2::LEFT_CENTER, "empty", egui::FontId::proportional(13.0), MUTED.linear_multiply(0.7));
+                                        p.text(rect.left_center() + Vec2::new(68.0, 0.0), egui::Align2::LEFT_CENTER, "empty", egui::FontId::proportional(13.0), muted().linear_multiply(0.7));
                                     }
                                 }
                                 let r = r
@@ -373,7 +373,7 @@ impl App {
                                             ui.close_menu();
                                         }
                                         ui.separator();
-                                        if ui.button(RichText::new("Remove").color(BAD)).clicked() {
+                                        if ui.button(RichText::new("Remove").color(bad())).clicked() {
                                             self.confirm = Some((
                                                 format!("Remove {} \"{n}\" from the pedal?\nPresets that use it will have an empty IR.", slot + 1),
                                                 Cmd::DeleteIrs { slots: vec![slot], backup: backup.clone() },
@@ -469,7 +469,7 @@ impl App {
                     );
                     let n_nam = self.tones.entries.iter().filter(|e| e.kind == crate::tonelib::Kind::Nam).count();
                     let n_conv = self.tones.entries.iter().filter(|e| e.converted.is_some()).count();
-                    ui.label(RichText::new(format!("{} files · {n_conv} of {n_nam} captures converted", self.tones.entries.len())).color(MUTED));
+                    ui.label(RichText::new(format!("{} files · {n_conv} of {n_nam} captures converted", self.tones.entries.len())).color(muted()));
                     if ui.small_button("⟳").on_hover_text("Look again").clicked() {
                         self.tones.scan(opts);
                     }

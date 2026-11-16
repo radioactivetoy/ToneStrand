@@ -53,7 +53,7 @@ fn io_params(input: bool) -> Vec<(&'static str, Param)> {
 fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bool, cmds: &mut Vec<Cmd>, dirty: &mut bool) {
     let input = s.kind == Kind::Input;
     ui.horizontal(|ui| {
-        ui.label(RichText::new(if input { "Source" } else { "Destination" }).color(MUTED));
+        ui.label(RichText::new(if input { "Source" } else { "Destination" }).color(muted()));
         if let Some(route) = preset.io_route(s.path, s.position) {
             // The jacks by name, numbered as in .hlx files (the same numbers the pedal keeps).
             let fam = snapshots::family_of_device(crate::nam::unit());
@@ -104,9 +104,9 @@ fn block_header(ui: &mut egui::Ui, colour: Color32, title: &str, extra: &str) {
     let (r, _) = ui.allocate_exact_size(Vec2::new(4.0, 26.0), egui::Sense::hover());
     ui.painter().rect_filled(r, CornerRadius::same(2), colour);
     ui.add_space(2.0);
-    ui.label(RichText::new(title).size(19.0).strong().color(TEXT));
+    ui.label(RichText::new(title).size(19.0).strong().color(ink()));
     if !extra.is_empty() {
-        ui.label(RichText::new(extra).color(MUTED));
+        ui.label(RichText::new(extra).color(muted()));
     }
 }
 
@@ -114,9 +114,9 @@ fn block_header(ui: &mut egui::Ui, colour: Color32, title: &str, extra: &str) {
 fn block_header_icon(ui: &mut egui::Ui, colour: Color32, category: &str, symbol: &str, title: &str, extra: &str) {
     if crate::icons::show_model(ui, category, symbol, title, 34.0) {
         ui.add_space(4.0);
-        ui.label(RichText::new(title).size(19.0).strong().color(TEXT));
+        ui.label(RichText::new(title).size(19.0).strong().color(ink()));
         if !extra.is_empty() {
-            ui.label(RichText::new(extra).color(MUTED));
+            ui.label(RichText::new(extra).color(muted()));
         }
     } else {
         block_header(ui, colour, title, extra);
@@ -247,8 +247,8 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label(RichText::new(format!("Path {}, slot {}", st.path + 1, st.position + 1)).color(MUTED));
-                let col = if st.free < 15.0 { BAD } else { GOOD };
+                ui.label(RichText::new(format!("Path {}, slot {}", st.path + 1, st.position + 1)).color(muted()));
+                let col = if st.free < 15.0 { bad() } else { good() };
                 ui.label(RichText::new(format!("{:.0}% DSP free", st.free.max(0.0))).color(col));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     // A visible box, and the cursor in it from the start: type to search,
@@ -287,7 +287,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                 }
                                 // The counts line up on the right.
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    ui.label(RichText::new(count.to_string()).small().color(MUTED));
+                                    ui.label(RichText::new(count.to_string()).small().color(muted()));
                                 });
                             });
                         }
@@ -362,7 +362,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                 let p = ui.painter();
                                 // A faint stripe on every other row guides the eye to the DSP figure.
                                 if row_no % 2 == 1 {
-                                    p.rect_filled(rect, CornerRadius::same(6), Color32::from_white_alpha(5));
+                                    p.rect_filled(rect, CornerRadius::same(6), wash(5));
                                 }
                                 row_no += 1;
                                 if resp.hovered() && fits {
@@ -399,7 +399,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                 if !crate::icons::paint_model(p, ui.ctx(), sw, kind, sym_now, &m.name, tint) {
                                     p.rect_filled(sw, CornerRadius::same(5), if fits { g.colour } else { g.colour.linear_multiply(0.35) });
                                 }
-                                let tc = if fits { TEXT } else { MUTED };
+                                let tc = if fits { ink() } else { muted() };
                                 let title =
                                     if search.is_empty() || g.sub.is_empty() { shown.clone() } else { format!("{}  ·  {}", shown, g.sub) };
                                 p.text(
@@ -415,7 +415,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                         egui::Align2::RIGHT_CENTER,
                                         format!("{cost:.0}%"),
                                         egui::FontId::monospace(12.0),
-                                        if fits { MUTED } else { BAD },
+                                        if fits { muted() } else { bad() },
                                     );
                                 }
                                 let tip = if fits { "Click to use this effect" } else { "Not enough DSP left in this path" };
@@ -429,7 +429,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                     if let Some(o) = &other {
                                         ui.label(RichText::new(o).small());
                                     }
-                                    ui.label(RichText::new(tip).small().color(MUTED));
+                                    ui.label(RichText::new(tip).small().color(muted()));
                                 });
                                 if resp.clicked() && fits {
                                     picked = Some((st.clone(), m.number, paired));
@@ -451,7 +451,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                         match shown.as_ref() {
                             Some((sym, names)) => crate::modelinfo::summary(ui, sym, names),
                             None => {
-                                ui.label(RichText::new("Point at an effect to see what it is.").small().color(MUTED));
+                                ui.label(RichText::new("Point at an effect to see what it is.").small().color(muted()));
                             }
                         }
                     });
@@ -524,7 +524,10 @@ fn knob(ui: &mut egui::Ui, value: &mut f64, lo: f64, hi: f64, default: Option<f6
     }
     p.circle_filled(c, r - 6.0, if active { card_hi() } else { panel() });
     let a = start + sweep * frac;
-    p.line_segment([c + Vec2::new(a.cos(), a.sin()) * (r - 15.0), c + Vec2::new(a.cos(), a.sin()) * (r - 6.0)], Stroke::new(2.5_f32, TEXT));
+    p.line_segment(
+        [c + Vec2::new(a.cos(), a.sin()) * (r - 15.0), c + Vec2::new(a.cos(), a.sin()) * (r - 6.0)],
+        Stroke::new(2.5_f32, ink()),
+    );
     resp.on_hover_text("Drag up/down or left/right (Shift = fine), scroll, or double-click for the default");
     ((*value - before).abs() > span * 1e-6, commit)
 }
@@ -536,7 +539,7 @@ fn param_cell(ui: &mut egui::Ui, name: &str, meta: Option<&Param>, v: &Value) ->
     ui.push_id(salt, |ui| {
         ui.allocate_ui_with_layout(Vec2::new(104.0, 104.0), egui::Layout::top_down(egui::Align::Center), |ui| {
             ui.set_width(104.0);
-            ui.add(egui::Label::new(RichText::new(name).small().color(MUTED)).truncate());
+            ui.add(egui::Label::new(RichText::new(name).small().color(muted())).truncate());
             out = value_widget(ui, meta, v);
         });
     });
@@ -569,7 +572,7 @@ fn capture_picker(ui: &mut egui::Ui, cur: i64, nam: bool) -> Option<i64> {
     let warn = (1..=128).contains(&cur) && crate::nam::slot_is_capture(cur) == Some(!nam);
     let mut picked = None;
     let r = egui::ComboBox::from_id_salt(if nam { "nam-capture" } else { "ir-select" })
-        .selected_text(RichText::new(&shown).color(if warn { ORANGE } else { TEXT }))
+        .selected_text(RichText::new(&shown).color(if warn { orange() } else { ink() }))
         .width(96.0)
         .height(420.0)
         .show_ui(ui, |ui| {
@@ -579,14 +582,16 @@ fn capture_picker(ui: &mut egui::Ui, cur: i64, nam: bool) -> Option<i64> {
             let irs: Vec<&(i64, String)> = names.iter().filter(|(s, _)| crate::nam::slot_is_capture(*s) == Some(false)).collect();
             if names.is_empty() {
                 ui.label(
-                    RichText::new("Connect the pedal to list its IR slots.\nOr type the slot number under the list.").small().color(MUTED),
+                    RichText::new("Connect the pedal to list its IR slots.\nOr type the slot number under the list.")
+                        .small()
+                        .color(muted()),
                 );
             }
             let mut section = |ui: &mut egui::Ui, title: &str, list: &[&(i64, String)], col: Color32| {
                 if list.is_empty() {
                     return;
                 }
-                ui.label(RichText::new(title).small().strong().color(MUTED));
+                ui.label(RichText::new(title).small().strong().color(muted()));
                 for (s, n) in list {
                     if ui.selectable_label(*s == cur, RichText::new(format!("{s:>3}  {n}")).monospace().color(col)).clicked() {
                         picked = Some(*s);
@@ -595,16 +600,16 @@ fn capture_picker(ui: &mut egui::Ui, cur: i64, nam: bool) -> Option<i64> {
                 ui.add_space(4.0);
             };
             if nam {
-                section(ui, "NAM CAPTURES", &captures, PINK);
-                section(ui, "NOT SORTED YET", &unknown, TEXT);
-                section(ui, "IRS (NOT CAPTURES - WON'T SOUND RIGHT)", &irs, MUTED);
+                section(ui, "NAM CAPTURES", &captures, pink());
+                section(ui, "NOT SORTED YET", &unknown, ink());
+                section(ui, "IRS (NOT CAPTURES - WON'T SOUND RIGHT)", &irs, muted());
                 if ui.selectable_label(!(1..=128).contains(&cur), "<EMPTY>").clicked() {
                     picked = Some(0);
                 }
             } else {
-                section(ui, "IRS", &irs, TEXT);
-                section(ui, "NOT SORTED YET", &unknown, TEXT);
-                section(ui, "NAM CAPTURES (NOT IRS - WON'T SOUND RIGHT)", &captures, MUTED);
+                section(ui, "IRS", &irs, ink());
+                section(ui, "NOT SORTED YET", &unknown, ink());
+                section(ui, "NAM CAPTURES (NOT IRS - WON'T SOUND RIGHT)", &captures, muted());
             }
         });
     let r = r.response.on_hover_text(match (warn, nam) {
@@ -622,7 +627,7 @@ fn capture_picker(ui: &mut egui::Ui, cur: i64, nam: bool) -> Option<i64> {
     let mut n = cur.clamp(lo, 128);
     ui.horizontal(|ui| {
         ui.add_space(18.0);
-        ui.label(RichText::new("slot").small().color(MUTED));
+        ui.label(RichText::new("slot").small().color(muted()));
         if ui.add(egui::DragValue::new(&mut n).range(lo..=128).speed(0.1)).changed() {
             picked = Some(n);
         }
@@ -821,7 +826,7 @@ fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<V
             } else {
                 let shown = catalog::format_value(meta, f);
                 let r = ui
-                    .add(egui::Label::new(RichText::new(&shown).monospace().color(TEXT)).sense(egui::Sense::click()))
+                    .add(egui::Label::new(RichText::new(&shown).monospace().color(ink())).sense(egui::Sense::click()))
                     .on_hover_cursor(egui::CursorIcon::Text)
                     .on_hover_text("Click to type a value");
                 if r.clicked() {
@@ -839,7 +844,7 @@ fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<V
             }
         }
         other => {
-            ui.label(RichText::new(other.summary()).small().color(MUTED));
+            ui.label(RichText::new(other.summary()).small().color(muted()));
         }
     }
     (None, false)
@@ -1019,7 +1024,7 @@ pub fn footswitch_strip(ui: &mut egui::Ui, count: usize, items: &[FootswitchItem
             ui.allocate_ui(Vec2::new(w, 0.0), |ui| {
                 egui::Frame::new()
                     .fill(card_bg())
-                    .stroke(Stroke::new(1.0_f32, if mine.is_empty() { line() } else { ORANGE.gamma_multiply(0.5) }))
+                    .stroke(Stroke::new(1.0_f32, if mine.is_empty() { line() } else { orange().gamma_multiply(0.5) }))
                     .corner_radius(CornerRadius::same(8))
                     .inner_margin(egui::Margin::symmetric(8, 6))
                     .show(ui, |ui| {
@@ -1027,18 +1032,18 @@ pub fn footswitch_strip(ui: &mut egui::Ui, count: usize, items: &[FootswitchItem
                         ui.set_min_height(48.0);
                         // (the strip itself is a row, so each cell stacks its own lines)
                         ui.vertical(|ui| {
-                            ui.label(RichText::new(format!("FS {n}")).strong().color(if mine.is_empty() { MUTED } else { ORANGE }));
+                            ui.label(RichText::new(format!("FS {n}")).strong().color(if mine.is_empty() { muted() } else { orange() }));
                             if mine.is_empty() {
-                                ui.label(RichText::new("free").small().color(MUTED));
+                                ui.label(RichText::new("free").small().color(muted()));
                             }
                             for (_, text, on) in mine {
                                 ui.horizontal(|ui| {
                                     if let Some(on) = on {
                                         let (r, _) = ui.allocate_exact_size(Vec2::splat(8.0), egui::Sense::hover());
                                         if *on {
-                                            ui.painter().circle_filled(r.center(), 3.5, GOOD);
+                                            ui.painter().circle_filled(r.center(), 3.5, good());
                                         } else {
-                                            ui.painter().circle_stroke(r.center(), 3.0, Stroke::new(1.0_f32, MUTED));
+                                            ui.painter().circle_stroke(r.center(), 3.0, Stroke::new(1.0_f32, muted()));
                                         }
                                     }
                                     ui.add(egui::Label::new(RichText::new(text).small()).truncate());

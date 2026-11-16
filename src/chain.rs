@@ -121,10 +121,10 @@ fn draw_block(ui: &egui::Ui, rect: Rect, cell: &Cell, selected: bool, hovered: b
             let col = if selected {
                 accent()
             } else if hovered {
-                MUTED
+                muted()
             } else {
                 // Visible enough to find, quiet enough not to compete with the effects.
-                MUTED.gamma_multiply(0.4)
+                muted().gamma_multiply(0.4)
             };
             p.rect_filled(small, CornerRadius::same(8), bg());
             p.rect_stroke(small, CornerRadius::same(8), Stroke::new(1.0_f32, col), egui::StrokeKind::Inside);
@@ -206,9 +206,17 @@ fn draw_studio_block(ui: &egui::Ui, rect: Rect, look: StudioBlock) {
         let g = p.layout_job(job);
         p.galley(rect.left_top() + Vec2::new(text_x, y), g, col);
     };
-    let sub_col = if on { Color32::from_white_alpha(200) } else { MUTED };
+    let bright_fill =
+        on && crate::theme::is_light() && (0.299 * colour.r() as f32 + 0.587 * colour.g() as f32 + 0.114 * colour.b() as f32) > 140.0;
+    let sub_col = if bright_fill {
+        Color32::from_black_alpha(190)
+    } else if on {
+        Color32::from_white_alpha(200)
+    } else {
+        muted()
+    };
     let wide = side_w >= 56.0;
-    let pink = if on { Color32::from_rgb(255, 196, 230) } else { MUTED };
+    let pink = if on { Color32::from_rgb(255, 196, 230) } else { muted() };
     match (detail, wide) {
         (Some(d), true) => {
             small(subtitle, sub_col, 11.0);
@@ -227,25 +235,38 @@ fn draw_studio_block(ui: &egui::Ui, rect: Rect, look: StudioBlock) {
     // The on/off light (clickable), glowing while on.
     let light = rect.right_top() + Vec2::new(-12.0, 18.0);
     if on {
-        p.circle_filled(light, 7.5, GOOD.gamma_multiply(0.3));
-        p.circle_filled(light, 4.5, GOOD);
+        p.circle_filled(light, 7.5, good().gamma_multiply(0.3));
+        p.circle_filled(light, 4.5, good());
     } else {
         p.circle_stroke(light, 4.5, Stroke::new(1.5_f32, Color32::from_gray(110)));
     }
     // The name, bold, at the bottom (two lines at most).
-    let tc = if on { Color32::WHITE } else { MUTED };
+    // On a bright block (the light palette darkens colours only a little), dark text reads better.
+    let bright =
+        on && crate::theme::is_light() && (0.299 * colour.r() as f32 + 0.587 * colour.g() as f32 + 0.114 * colour.b() as f32) > 140.0;
+    let tc = if bright {
+        Color32::from_rgb(0x14, 0x17, 0x1c)
+    } else if on {
+        Color32::WHITE
+    } else {
+        muted()
+    };
     // A long name steps down in size until it fits whole (the hover tip always has it in full);
     // the lane's other names follow it, so a row reads evenly.
     let rows = if detail.is_some() && !wide { 1 } else { 2 };
     let (g, _) = fit_name(p, title, tc, rect.width() - 20.0, rows, NAME_SIZE.with(|c| c.get()).unwrap_or(14.5));
     let at = Pos2::new(rect.left() + 10.0, rect.bottom() - 9.0 - g.size().y);
     // A faint shadow behind the name keeps it readable on bright colours.
-    p.galley_with_override_text_color(at + Vec2::new(0.0, 1.0), g.clone(), Color32::from_black_alpha(140));
+    p.galley_with_override_text_color(
+        at + Vec2::new(0.0, 1.0),
+        g.clone(),
+        if bright { Color32::from_white_alpha(110) } else { Color32::from_black_alpha(140) },
+    );
     p.galley(at, g, tc);
     if !on {
         let pill = Rect::from_min_size(rect.right_top() + Vec2::new(-52.0, 11.0), Vec2::new(28.0, 15.0));
-        p.rect_filled(pill, CornerRadius::same(4), Color32::from_gray(55));
-        p.text(pill.center(), egui::Align2::CENTER_CENTER, "OFF", egui::FontId::proportional(9.5), MUTED);
+        p.rect_filled(pill, CornerRadius::same(4), card_hi());
+        p.text(pill.center(), egui::Align2::CENTER_CENTER, "OFF", egui::FontId::proportional(9.5), muted());
     }
 }
 
@@ -259,7 +280,7 @@ fn draw_loop_marker(ui: &egui::Ui, rect: Rect, title: &str, on: bool, selected: 
     let cy = rect.center().y;
     let top = rect.top() + 22.0;
     if selected || hovered {
-        p.rect_filled(rect, CornerRadius::same(12), if selected { accent().gamma_multiply(0.12) } else { Color32::from_white_alpha(6) });
+        p.rect_filled(rect, CornerRadius::same(12), if selected { accent().gamma_multiply(0.12) } else { wash(6) });
         if selected {
             p.rect_stroke(rect, CornerRadius::same(12), Stroke::new(1.5_f32, accent()), egui::StrokeKind::Inside);
         }
@@ -279,11 +300,11 @@ fn draw_loop_marker(ui: &egui::Ui, rect: Rect, title: &str, on: bool, selected: 
         (2, t.to_owned())
     };
     let tag = |center: Pos2| {
-        let galley = p.layout_no_wrap(label.clone(), egui::FontId::proportional(11.5), if on { TEXT } else { MUTED });
+        let galley = p.layout_no_wrap(label.clone(), egui::FontId::proportional(11.5), if on { ink() } else { muted() });
         let r = Rect::from_center_size(center, galley.size() + Vec2::new(14.0, 6.0));
         p.rect_filled(r, CornerRadius::same(6), bg());
         p.rect_stroke(r, CornerRadius::same(6), stroke, egui::StrokeKind::Inside);
-        p.galley(r.center() - galley.size() / 2.0, galley, TEXT);
+        p.galley(r.center() - galley.size() / 2.0, galley, ink());
     };
     match kind {
         0 => {
@@ -330,10 +351,10 @@ fn draw_loop_marker(ui: &egui::Ui, rect: Rect, title: &str, on: bool, selected: 
     // The on/off light where the effect boxes have it.
     let light = rect.right_top() + Vec2::new(-12.0, 18.0);
     if on {
-        p.circle_filled(light, 4.0, GOOD);
+        p.circle_filled(light, 4.0, good());
     } else {
         p.circle_stroke(light, 4.0, Stroke::new(1.5_f32, Color32::from_gray(110)));
-        p.text(rect.center_bottom() + Vec2::new(0.0, -10.0), egui::Align2::CENTER_BOTTOM, "OFF", egui::FontId::proportional(10.0), MUTED);
+        p.text(rect.center_bottom() + Vec2::new(0.0, -10.0), egui::Align2::CENTER_BOTTOM, "OFF", egui::FontId::proportional(10.0), muted());
     }
 }
 
@@ -355,7 +376,7 @@ fn io_box(ui: &egui::Ui, rect: Rect, text: &str, selected: bool, hovered: bool) 
         TERMINAL_R,
         Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, if selected { accent() } else { crate::theme::line() }),
     );
-    p.text(c, egui::Align2::CENTER_CENTER, text, egui::FontId::monospace(11.5), if hovered || selected { TEXT } else { MUTED });
+    p.text(c, egui::Align2::CENTER_CENTER, text, egui::FontId::monospace(11.5), if hovered || selected { ink() } else { muted() });
 }
 
 impl Chain<'_> {
@@ -377,7 +398,7 @@ impl Chain<'_> {
         let main_y = top + bh() / 2.0;
         let low_y = top + bh() + ROW_GAP + bh() / 2.0;
         let mid_y = (main_y + low_y) / 2.0;
-        let line = Stroke::new(2.0_f32, Color32::from_gray(150));
+        let line = Stroke::new(2.0_f32, muted());
         let in_rect = Rect::from_min_size(Pos2::new(left, top), Vec2::new(IO_W, bh()));
         let out_rect = Rect::from_min_size(Pos2::new(col_x(left, total_cols), top), Vec2::new(IO_W, bh()));
 
@@ -441,7 +462,7 @@ impl Chain<'_> {
                 let open = ui.memory(|m| m.is_popup_open(pid));
                 if r.hovered() || open {
                     p.circle_filled(rect.center(), 8.0, accent());
-                    p.text(rect.center(), egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(13.0), Color32::from_rgb(8, 22, 26));
+                    p.text(rect.center(), egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(13.0), on_accent());
                 }
                 if r.clicked() {
                     ui.memory_mut(|m| m.toggle_popup(pid));
@@ -499,7 +520,7 @@ impl Chain<'_> {
                 .iter()
                 .filter_map(|c| match c {
                     Cell::Block { title, category, .. } if category != "Send/Return" => {
-                        Some(fit_name(ui.painter(), title, TEXT, bw() - 20.0, 2, 14.5).1)
+                        Some(fit_name(ui.painter(), title, ink(), bw() - 20.0, 2, 14.5).1)
                     }
                     _ => None,
                 })
@@ -532,7 +553,7 @@ impl Chain<'_> {
                     ui.painter().rect_stroke(
                         rect.expand(2.0),
                         CornerRadius::same(11),
-                        Stroke::new(2.0_f32, ORANGE),
+                        Stroke::new(2.0_f32, orange()),
                         egui::StrokeKind::Outside,
                     );
                 }
@@ -547,7 +568,7 @@ impl Chain<'_> {
                     let light = Rect::from_center_size(rect.right_top() + Vec2::new(-12.0, 18.0), Vec2::splat(18.0));
                     let lr = ui.interact(light, ui.id().with((self.id, lane, col, "light")), egui::Sense::click());
                     if lr.hovered() {
-                        ui.painter().circle_stroke(light.center(), 7.0, Stroke::new(1.5_f32, TEXT));
+                        ui.painter().circle_stroke(light.center(), 7.0, Stroke::new(1.5_f32, ink()));
                     }
                     if lr.clicked() {
                         light_hit = true;
@@ -576,7 +597,7 @@ impl Chain<'_> {
                             ui.close_menu();
                         }
                         ui.separator();
-                        if ui.button(RichText::new("Remove").color(BAD)).clicked() {
+                        if ui.button(RichText::new("Remove").color(bad())).clicked() {
                             hits.push(Hit::Remove(lane, col));
                             ui.close_menu();
                         }
@@ -621,7 +642,7 @@ impl Chain<'_> {
                         egui::Align2::CENTER_TOP,
                         "before its send",
                         egui::FontId::proportional(10.5),
-                        BAD,
+                        bad(),
                     );
                 }
             }
@@ -712,7 +733,7 @@ impl Chain<'_> {
                 ui.painter().circle_filled(
                     c,
                     if active { 8.0 } else { 6.5 },
-                    if self.selected == sel || r.dragged() { accent() } else { Color32::from_gray(170) },
+                    if self.selected == sel || r.dragged() { accent() } else { muted() },
                 );
                 ui.painter().circle_stroke(c, 7.5, Stroke::new(2.0_f32, bg()));
                 if r.dragged() {

@@ -44,8 +44,9 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
    a `theme::help` "?" icon, not as visible small text.
 5. **Font gaps:** egui's default fonts lack `●`, `→`, `▾`, `↶`, `↷` (they draw as squares). Paint
    shapes or use words.
-6. **One look.** Use `theme::bg()/panel()/card_bg()/card_hi()/line()` and `theme::accent()`,
-   never fixed greys or teal. (There used to be a second, "Classic" look; it is gone, so
+6. **One look, two palettes.** Use `theme::bg()/panel()/card_bg()/card_hi()/line()/ink()/muted()/wash()`
+   and `theme::accent()`/`on_accent()`, never fixed greys or teal: they follow the dark or light
+   palette (Settings > Display). `theme.rs` has a test that text reads on every surface in both. (There used to be a second, "Classic" look; it is gone, so
    don't add a switch for it.)
 7. **Settings stay compatible:** `Settings` has a struct-level `#[serde(default)]`; give a new
    field its value in `impl Default for Settings` (older files then load with it).

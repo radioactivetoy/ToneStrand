@@ -53,7 +53,7 @@ fn add_menu(
     ui.menu_button(RichText::new(label).color(accent()), |ui| {
         let blocks: Vec<HlxBlock> = hlx::blocks(json).into_iter().filter(|b| b.key.starts_with("block")).collect();
         if blocks.is_empty() {
-            ui.label(RichText::new("Add effects to the chain first").color(MUTED));
+            ui.label(RichText::new("Add effects to the chain first").color(muted()));
         }
         for b in blocks {
             ui.menu_button(block_name(cat, &b), |ui| {
@@ -107,20 +107,20 @@ fn knob_row(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catalo
                 };
                 let label = if sname.is_empty() { format!("{}", i + 1) } else { sname };
                 ui.add_space(6.0);
-                ui.label(RichText::new(label).small().color(MUTED));
-                ui.label(RichText::new(shown).monospace().color(if i == cur { accent() } else { TEXT }));
+                ui.label(RichText::new(label).small().color(muted()));
+                ui.label(RichText::new(shown).monospace().color(if i == cur { accent() } else { ink() }));
             }
         }
         if src != Source::Snapshots {
             let (mut a, mut z) = (lo, hi);
             let step = ((max - min) / 200.0).max(0.001);
-            ui.label(RichText::new("from").color(MUTED));
+            ui.label(RichText::new("from").color(muted()));
             let c1 = ui.add(egui::DragValue::new(&mut a).range(min..=max).speed(step)).changed();
-            ui.label(RichText::new("to").color(MUTED));
+            ui.label(RichText::new("to").color(muted()));
             let c2 = ui.add(egui::DragValue::new(&mut z).range(min..=max).speed(step)).changed();
             let mut c = cc.unwrap_or(1);
             let c3 = if src == Source::Midi {
-                ui.label(RichText::new("CC").color(MUTED));
+                ui.label(RichText::new("CC").color(muted()));
                 ui.add(egui::DragValue::new(&mut c).range(1..=127)).changed()
             } else {
                 false
@@ -213,7 +213,7 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
                                 knob_row(ui, json, cat, a, dirty);
                             }
                             if !any {
-                                ui.label(RichText::new("unassigned").color(MUTED));
+                                ui.label(RichText::new("unassigned").color(muted()));
                             }
                             if let Some((b, knob)) = add_menu(ui, json, cat, "+ Add", true) {
                                 match knob {
@@ -233,12 +233,12 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
             Tab::Expression => {
                 for n in 1..=fam.exp_count {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new(format!("EXP {n}")).strong().color(ORANGE));
+                        ui.label(RichText::new(format!("EXP {n}")).strong().color(orange()));
                         ui.add_space(8.0);
                         ui.vertical(|ui| {
                             let list: Vec<_> = assignments.iter().filter(|a| a.src == Source::Exp(n)).collect();
                             if list.is_empty() {
-                                ui.label(RichText::new("unassigned").color(MUTED));
+                                ui.label(RichText::new("unassigned").color(muted()));
                             }
                             for a in list {
                                 knob_row(ui, json, cat, a, dirty);
@@ -258,7 +258,7 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
                 if list.is_empty() {
                     ui.label(
                         RichText::new("No knob is stored per snapshot yet. Turn a knob while a snapshot is picked, or add one here.")
-                            .color(MUTED),
+                            .color(muted()),
                     );
                 }
                 for a in list {
@@ -274,7 +274,7 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
             Tab::Midi => {
                 let list: Vec<_> = assignments.iter().filter(|a| a.src == Source::Midi).collect();
                 if list.is_empty() {
-                    ui.label(RichText::new("unassigned").color(MUTED));
+                    ui.label(RichText::new("unassigned").color(muted()));
                 }
                 for a in list {
                     knob_row(ui, json, cat, a, dirty);
@@ -790,7 +790,7 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
         ui.label(
             RichText::new("A command's values are kept per snapshot, as on the pedal: these are the selected snapshot's.")
                 .small()
-                .color(MUTED),
+                .color(muted()),
         );
     });
     ui.add_space(8.0);
@@ -829,12 +829,12 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                 let stroke = if is_sel {
                     egui::Stroke::new(2.0_f32, accent())
                 } else if active_cmd.is_some() {
-                    egui::Stroke::new(1.0_f32, GOOD.linear_multiply(0.55))
+                    egui::Stroke::new(1.0_f32, good().linear_multiply(0.55))
                 } else {
                     egui::Stroke::new(1.0_f32, line())
                 };
                 p.rect_stroke(rect, egui::CornerRadius::same(8), stroke, egui::StrokeKind::Inside);
-                let tri_col = if active_cmd.is_some() { GOOD } else { egui::Color32::from_gray(75) };
+                let tri_col = if active_cmd.is_some() { good() } else { muted().linear_multiply(0.5) };
                 p.text(
                     rect.center_top() + Vec2::new(0.0, 12.0),
                     egui::Align2::CENTER_CENTER,
@@ -847,7 +847,7 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                     egui::Align2::CENTER_CENTER,
                     &slot.short,
                     egui::FontId::proportional(13.0),
-                    if is_sel || active_cmd.is_some() { TEXT } else { MUTED },
+                    if is_sel || active_cmd.is_some() { ink() } else { muted() },
                 );
                 if resp.clicked() {
                     selected_key = slot.key.clone();
@@ -876,7 +876,7 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(&slot.title).size(15.0).strong());
                 ui.add_space(12.0);
-                ui.label(RichText::new("Command").color(MUTED));
+                ui.label(RichText::new("Command").color(muted()));
                 let shown = current_spec.map(|s| s.name).unwrap_or("None");
                 egui::ComboBox::from_id_salt(format!("cc-type-{}", slot.key)).selected_text(shown).width(170.0).show_ui(ui, |ui| {
                     if ui.selectable_label(current_spec.is_none(), "None").clicked() && current_spec.is_some() {
@@ -892,7 +892,7 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                 });
                 if let (SlotKind::Switch, Some(map)) = (slot.kind, current_map.as_ref()) {
                     ui.add_space(12.0);
-                    ui.label(RichText::new("Switch label").color(MUTED));
+                    ui.label(RichText::new("Switch label").color(muted()));
                     let mut lbl = map.get("@fs_label").and_then(serde_json::Value::as_str).unwrap_or("").to_owned();
                     if ui.add(egui::TextEdit::singleline(&mut lbl).desired_width(120.0).char_limit(FS_LABEL_MAX)).changed() {
                         set_slot_field(json, &slot.key, cur_snap, "@fs_label", serde_json::json!(lbl));
@@ -926,7 +926,7 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                                     let text =
                                         options.iter().find(|(v, _)| *v == val).map(|(_, n)| n.clone()).unwrap_or_else(|| val.to_string());
                                     ui.horizontal(|ui| {
-                                        ui.label(RichText::new(*label).small().color(MUTED));
+                                        ui.label(RichText::new(*label).small().color(muted()));
                                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                             ui.label(RichText::new(&text).small().strong());
                                         });
@@ -961,7 +961,7 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                                 FieldSpec::Range { key, label, min, max } => {
                                     let mut val = map.get(*key).and_then(serde_json::Value::as_i64).unwrap_or(0).clamp(*min, *max);
                                     ui.horizontal(|ui| {
-                                        ui.label(RichText::new(*label).small().color(MUTED));
+                                        ui.label(RichText::new(*label).small().color(muted()));
                                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                             if ui.add(egui::DragValue::new(&mut val).range(*min..=*max)).changed() {
                                                 set_slot_field(json, &slot.key, cur_snap, key, serde_json::json!(val));

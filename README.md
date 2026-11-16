@@ -48,7 +48,7 @@ The effect pictures and names come from Line 6; see "Third-party material" below
 - **NAM A2 Lite** (optional community firmware for HX Stomp / XL / HX Effects): the block's
   knobs and capture picker, and a converter from `.nam` captures to the `.wav` the block loads.
 - Effect photos and descriptions, real-gear names (optional), effect-type icons, DSP estimate
-  per path, and a choice of accent colour in Settings.
+  per path, a dark or light look (or follow the computer), and a choice of accent colour in Settings.
 - A hidden **self-test** page (Ctrl+Shift+T) that exercises every pedal operation on one slot
   and one IR slot, with backups and automatic restore.
 

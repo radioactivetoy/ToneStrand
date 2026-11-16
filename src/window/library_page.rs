@@ -204,7 +204,9 @@ impl App {
                     }
                     ui.horizontal(|ui| {
                         if ui
-                            .button(RichText::new(if crate::files::HAS_RECYCLE_BIN { "Move to Recycle Bin" } else { "Delete" }).color(BAD))
+                            .button(
+                                RichText::new(if crate::files::HAS_RECYCLE_BIN { "Move to Recycle Bin" } else { "Delete" }).color(bad()),
+                            )
                             .clicked()
                         {
                             result = Some(true);

@@ -22,7 +22,7 @@ impl App {
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Pedal self-test").size(24.0).strong());
-                    theme::pill(ui, "HIDDEN · Ctrl+Shift+T", ORANGE);
+                    theme::pill(ui, "HIDDEN · Ctrl+Shift+T", orange());
                     theme::help(
                         ui,
                         "Tests every operation this app uses, as safely as it can: it backs up the whole setlist and the test IR first, \
@@ -33,7 +33,7 @@ impl App {
                 ui.add_space(8.0);
                 if !connected {
                     theme::card(ui, |ui| {
-                        ui.label(RichText::new("Connect to a pedal first.").color(MUTED));
+                        ui.label(RichText::new("Connect to a pedal first.").color(muted()));
                     });
                     return;
                 }
@@ -80,17 +80,17 @@ impl App {
                         });
                         ui.add_space(6.0);
                         theme::section(ui, "What to test");
-                        ui.label(RichText::new("✔ Always (reading only): backup of the setlist and the test IR, double reads, preset list, IR list, one IR download.").small().color(MUTED));
+                        ui.label(RichText::new("✔ Always (reading only): backup of the setlist and the test IR, double reads, preset list, IR list, one IR download.").small().color(muted()));
                         ui.checkbox(&mut self.tests.preset_writes, "Preset writes: write a test preset into the slot, verify, rename, verify, restore, verify");
                         ui.checkbox(&mut self.tests.live_edit, "Live edit: set one knob of the loaded preset to the value it already has, verify, reload the preset (drops unsaved changes on the pedal)");
                         ui.checkbox(&mut self.tests.ir_writes, "IR writes: upload a test IR, verify name and audio, rename, verify, restore, verify");
                         let writes = self.tests.preset_writes || self.tests.live_edit || self.tests.ir_writes;
                         if writes {
-                            ui.checkbox(&mut self.tests.understood, RichText::new("I understand the chosen slots are changed for a moment and then restored from the backup").color(ORANGE));
+                            ui.checkbox(&mut self.tests.understood, RichText::new("I understand the chosen slots are changed for a moment and then restored from the backup").color(orange()));
                         }
                         let folder = self.tests.folder.clone().unwrap_or_else(|| self.library_dir.join("Self-test backups"));
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(format!("Backups go to {}", folder.display())).small().color(MUTED));
+                            ui.label(RichText::new(format!("Backups go to {}", folder.display())).small().color(muted()));
                             if ui.small_button("Change...").clicked() {
                                 if let Some(d) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
                                     self.tests.folder = Some(d);
@@ -99,7 +99,7 @@ impl App {
                         });
                         ui.add_space(6.0);
                         let ready = self.tests.preset_slot.is_some() && self.tests.ir_slot.is_some() && (!writes || self.tests.understood) && self.busy.is_none();
-                        if ui.add_enabled(ready, egui::Button::new(RichText::new("▶ Run the self-test").strong().color(Color32::from_rgb(8, 26, 24))).fill(accent())).clicked() {
+                        if ui.add_enabled(ready, egui::Button::new(RichText::new("▶ Run the self-test").strong().color(on_accent())).fill(accent())).clicked() {
                             start = true;
                         }
                     });
@@ -111,28 +111,28 @@ impl App {
                         theme::section(ui, "Results");
                         if self.tests.running {
                             ui.spinner();
-                            ui.label(RichText::new(self.busy.clone().unwrap_or_default()).small().color(MUTED));
+                            ui.label(RichText::new(self.busy.clone().unwrap_or_default()).small().color(muted()));
                         }
                         match self.tests.done {
-                            Some(0) => theme::pill(ui, "ALL PASSED", GOOD),
-                            Some(n) => theme::pill(ui, &format!("{n} FAILED"), BAD),
+                            Some(0) => theme::pill(ui, "ALL PASSED", good()),
+                            Some(n) => theme::pill(ui, &format!("{n} FAILED"), bad()),
                             None => {}
                         }
                     });
                     if self.tests.log.is_empty() {
-                        ui.label(RichText::new("Nothing run yet.").color(MUTED));
+                        ui.label(RichText::new("Nothing run yet.").color(muted()));
                     }
                     egui::ScrollArea::vertical().auto_shrink([false, true]).max_height(ui.available_height() - 8.0).stick_to_bottom(true).show(ui, |ui| {
                         for (name, ok, detail) in &self.tests.log {
                             ui.horizontal_wrapped(|ui| {
                                 let (mark, col) = match ok {
-                                    Some(true) => ("✔", GOOD),
-                                    Some(false) => ("✖", BAD),
-                                    None => ("•", MUTED),
+                                    Some(true) => ("✔", good()),
+                                    Some(false) => ("✖", bad()),
+                                    None => ("•", muted()),
                                 };
                                 ui.label(RichText::new(mark).strong().color(col));
                                 ui.label(RichText::new(name).strong());
-                                ui.label(RichText::new(detail).color(if *ok == Some(false) { BAD } else { MUTED }));
+                                ui.label(RichText::new(detail).color(if *ok == Some(false) { bad() } else { muted() }));
                             });
                         }
                     });

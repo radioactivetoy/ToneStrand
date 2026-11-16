@@ -74,7 +74,7 @@ impl App {
                     for side in 0..2 {
                         let pick = if side == 0 { &st.a } else { &st.b };
                         ui.vertical(|ui| {
-                            ui.label(RichText::new(if side == 0 { "From" } else { "To" }).small().color(MUTED));
+                            ui.label(RichText::new(if side == 0 { "From" } else { "To" }).small().color(muted()));
                             egui::ComboBox::from_id_salt(("compare-side", side))
                                 .width(250.0)
                                 .selected_text(pick.as_ref().map(|p| p.label.clone()).unwrap_or_else(|| "Pick a preset".into()))
@@ -99,7 +99,7 @@ impl App {
                         let lines: Vec<Line> = compare::diff(&a.summary, &b.summary);
                         if lines.is_empty() {
                             ui.label(
-                                RichText::new("These two are the same: the same effects, places, on/off and knob values.").color(GOOD),
+                                RichText::new("These two are the same: the same effects, places, on/off and knob values.").color(good()),
                             );
                         } else {
                             ui.label(
@@ -109,10 +109,10 @@ impl App {
                         egui::ScrollArea::vertical().max_height(380.0).auto_shrink([true, true]).show(ui, |ui| {
                             for l in &lines {
                                 let (mark, colour) = match l.change {
-                                    Change::Added => ("+", GOOD),
-                                    Change::Removed => ("−", BAD),
-                                    Change::Changed => ("~", ORANGE),
-                                    Change::Note => ("•", MUTED),
+                                    Change::Added => ("+", good()),
+                                    Change::Removed => ("−", bad()),
+                                    Change::Changed => ("~", orange()),
+                                    Change::Note => ("•", muted()),
                                 };
                                 ui.horizontal_wrapped(|ui| {
                                     ui.label(RichText::new(mark).monospace().strong().color(colour));
@@ -122,7 +122,7 @@ impl App {
                         });
                     }
                     _ => {
-                        ui.label(RichText::new("Pick two presets: open tabs, or files.").color(MUTED));
+                        ui.label(RichText::new("Pick two presets: open tabs, or files.").color(muted()));
                     }
                 }
             });

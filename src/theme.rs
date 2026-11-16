@@ -2,46 +2,130 @@
 
 use eframe::egui::{self, Color32, CornerRadius, Stroke};
 
-/// The base colours: dark, neutral greys with thin borders.
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+
+/// Whether the light palette is in use (the dark one is the default).
+static LIGHT: AtomicBool = AtomicBool::new(false);
+pub fn is_light() -> bool {
+    LIGHT.load(Ordering::Relaxed)
+}
+/// Pick the palette (call apply() afterwards so widgets follow).
+pub fn set_light(on: bool) {
+    LIGHT.store(on, Ordering::Relaxed);
+}
+
+/// One colour of each palette: (dark, light).
+fn pick(dark: u32, light: u32) -> Color32 {
+    let v = if is_light() { light } else { dark };
+    Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8)
+}
+
+/// The base colours: neutral greys with thin borders, dark or light.
 pub fn bg() -> Color32 {
-    Color32::from_rgb(0x10, 0x11, 0x14)
+    pick(0x101114, 0xeceef3)
 }
 pub fn panel() -> Color32 {
-    Color32::from_rgb(0x15, 0x16, 0x1a)
+    pick(0x15161a, 0xf6f7fa)
 }
 pub fn card_bg() -> Color32 {
-    Color32::from_rgb(0x1b, 0x1d, 0x22)
+    pick(0x1b1d22, 0xffffff)
 }
 pub fn card_hi() -> Color32 {
-    Color32::from_rgb(0x25, 0x28, 0x2f)
+    pick(0x25282f, 0xe6e9f0)
 }
 pub fn line() -> Color32 {
-    Color32::from_rgb(0x2a, 0x2d, 0x34)
+    pick(0x2a2d34, 0xcfd4de)
 }
-pub const TEXT: Color32 = Color32::from_rgb(0xe6, 0xe9, 0xef);
-pub const MUTED: Color32 = Color32::from_rgb(0x9a, 0xa2, 0xb6);
-/// The accent colour, picked in the top bar (teal by default).
-static ACCENT_RGB: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0x2ec4b6);
+/// The fill of a hovered button.
+pub fn hover_fill() -> Color32 {
+    pick(0x353c4c, 0xd8deea)
+}
+pub fn ink() -> Color32 {
+    pick(0xe6e9ef, 0x1a1d24)
+}
+pub fn muted() -> Color32 {
+    pick(0x9aa2b6, 0x596176)
+}
+/// Text on the accent colour (a button or the picked tab): dark or white, whichever reads better.
+pub fn on_accent() -> Color32 {
+    let dark = Color32::from_rgb(0x08, 0x1a, 0x18);
+    if contrast(dark, accent()) >= contrast(Color32::WHITE, accent()) {
+        dark
+    } else {
+        Color32::WHITE
+    }
+}
+
+/// WCAG contrast ratio of two colours (1 to 21).
+pub fn contrast(a: Color32, b: Color32) -> f32 {
+    let lum = |c: Color32| {
+        let f = |v: u8| {
+            let v = v as f32 / 255.0;
+            if v <= 0.03928 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        0.2126 * f(c.r()) + 0.7152 * f(c.g()) + 0.0722 * f(c.b())
+    };
+    let (x, y) = (lum(a), lum(b));
+    (x.max(y) + 0.05) / (x.min(y) + 0.05)
+}
+/// A faint wash over the surface under it: light on dark, dark on light (a hover or a divider).
+pub fn wash(alpha: u8) -> Color32 {
+    if is_light() {
+        Color32::from_black_alpha(alpha)
+    } else {
+        Color32::from_white_alpha(alpha)
+    }
+}
+/// The colour a palette-independent colour is drawn in on the light palette: darker, so it
+/// reads on white.
+fn for_palette(c: Color32) -> Color32 {
+    if is_light() {
+        let k = 0.78;
+        Color32::from_rgb((c.r() as f32 * k) as u8, (c.g() as f32 * k) as u8, (c.b() as f32 * k) as u8)
+    } else {
+        c
+    }
+}
+/// The accent colour, picked in Settings (teal by default).
+static ACCENT_RGB: AtomicU32 = AtomicU32::new(0x2ec4b6);
 pub const ACCENTS: [(u32, &str); 6] =
     [(0x2ec4b6, "Teal"), (0x4fb3ff, "Blue"), (0xc6e44a, "Lime"), (0xff5d8f, "Pink"), (0xff9f1c, "Orange"), (0xa879ff, "Violet")];
 pub fn accent() -> Color32 {
-    let v = ACCENT_RGB.load(std::sync::atomic::Ordering::Relaxed);
-    Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8)
+    let v = ACCENT_RGB.load(Ordering::Relaxed);
+    for_palette(Color32::from_rgb((v >> 16) as u8, (v >> 8) as u8, v as u8))
 }
 pub fn accent_rgb() -> u32 {
-    ACCENT_RGB.load(std::sync::atomic::Ordering::Relaxed)
+    ACCENT_RGB.load(Ordering::Relaxed)
 }
 /// Change the accent colour (call apply() afterwards so widgets follow).
 pub fn set_accent(rgb: u32) {
-    ACCENT_RGB.store(rgb & 0xffffff, std::sync::atomic::Ordering::Relaxed);
+    ACCENT_RGB.store(rgb & 0xffffff, Ordering::Relaxed);
 }
-pub const ORANGE: Color32 = Color32::from_rgb(0xff, 0x9f, 0x1c);
-pub const PINK: Color32 = Color32::from_rgb(0xff, 0x5d, 0x8f);
-pub const BLUE: Color32 = Color32::from_rgb(0x3a, 0x86, 0xff);
-pub const GOOD: Color32 = Color32::from_rgb(0x4c, 0xd1, 0x7a);
-pub const BAD: Color32 = Color32::from_rgb(0xff, 0x5c, 0x5c);
+pub fn orange() -> Color32 {
+    for_palette(Color32::from_rgb(0xff, 0x9f, 0x1c))
+}
+pub fn pink() -> Color32 {
+    for_palette(Color32::from_rgb(0xff, 0x5d, 0x8f))
+}
+pub fn blue() -> Color32 {
+    for_palette(Color32::from_rgb(0x3a, 0x86, 0xff))
+}
+pub fn good() -> Color32 {
+    for_palette(Color32::from_rgb(0x4c, 0xd1, 0x7a))
+}
+pub fn bad() -> Color32 {
+    for_palette(Color32::from_rgb(0xff, 0x5c, 0x5c))
+}
 
 pub fn family_colour(family: &str) -> Color32 {
+    for_palette(family_base(family))
+}
+
+fn family_base(family: &str) -> Color32 {
     match family {
         "amp" => Color32::from_rgb(0xff, 0x8a, 0x3d),
         "cab" => Color32::from_rgb(0xc7, 0x8b, 0x5a),
@@ -66,12 +150,12 @@ pub fn number_colour(n: i64) -> Color32 {
 }
 
 pub fn apply(ctx: &egui::Context) {
-    let mut v = egui::Visuals::dark();
+    let mut v = if is_light() { egui::Visuals::light() } else { egui::Visuals::dark() };
     v.panel_fill = panel();
     v.window_fill = panel();
     v.extreme_bg_color = bg();
     v.faint_bg_color = card_bg();
-    v.override_text_color = Some(TEXT);
+    v.override_text_color = Some(ink());
     v.selection.bg_fill = accent().linear_multiply(0.45);
     v.selection.stroke = Stroke::new(1.0_f32, accent());
     v.hyperlink_color = accent();
@@ -85,8 +169,8 @@ pub fn apply(ctx: &egui::Context) {
     v.widgets.inactive.bg_fill = card_hi();
     v.widgets.inactive.weak_bg_fill = card_hi();
     v.widgets.inactive.corner_radius = r;
-    v.widgets.hovered.bg_fill = Color32::from_rgb(0x35, 0x3c, 0x4c);
-    v.widgets.hovered.weak_bg_fill = Color32::from_rgb(0x35, 0x3c, 0x4c);
+    v.widgets.hovered.bg_fill = hover_fill();
+    v.widgets.hovered.weak_bg_fill = hover_fill();
     v.widgets.hovered.corner_radius = r;
     v.widgets.active.bg_fill = accent().linear_multiply(0.6);
     v.widgets.active.weak_bg_fill = accent().linear_multiply(0.6);
@@ -94,8 +178,10 @@ pub fn apply(ctx: &egui::Context) {
     v.widgets.open.corner_radius = r;
     // Buttons and links show a pointing hand, so what can be clicked is obvious.
     v.interact_cursor = Some(egui::CursorIcon::PointingHand);
-    v.popup_shadow = egui::epaint::Shadow { offset: [0, 4], blur: 14, spread: 0, color: Color32::from_black_alpha(110) };
-    v.window_shadow = egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(120) };
+    v.popup_shadow =
+        egui::epaint::Shadow { offset: [0, 4], blur: 14, spread: 0, color: Color32::from_black_alpha(if is_light() { 50 } else { 110 }) };
+    v.window_shadow =
+        egui::epaint::Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(if is_light() { 60 } else { 120 }) };
     ctx.set_visuals(v);
 
     ctx.style_mut(|s| {
@@ -170,7 +256,7 @@ pub fn card<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
 
 /// A small upper-case section title.
 pub fn section(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(text.to_uppercase()).small().strong().color(MUTED));
+    ui.label(egui::RichText::new(text.to_uppercase()).small().strong().color(muted()));
 }
 
 /// A small round "?" that explains something when hovered, instead of a line of text on screen.
@@ -182,13 +268,13 @@ pub fn help(ui: &mut egui::Ui, text: &str) -> egui::Response {
     if hot {
         p.circle_filled(c, 7.5, accent().linear_multiply(0.25));
     }
-    p.circle_stroke(c, 7.0, Stroke::new(1.2_f32, if hot { accent() } else { MUTED.linear_multiply(0.8) }));
+    p.circle_stroke(c, 7.0, Stroke::new(1.2_f32, if hot { accent() } else { muted().linear_multiply(0.8) }));
     p.text(
         c + egui::vec2(0.0, 0.5),
         egui::Align2::CENTER_CENTER,
         "?",
         egui::FontId::proportional(10.5),
-        if hot { accent() } else { MUTED },
+        if hot { accent() } else { muted() },
     );
     resp.on_hover_ui(|ui| {
         ui.set_max_width(300.0);
@@ -200,10 +286,10 @@ pub fn help(ui: &mut egui::Ui, text: &str) -> egui::Response {
 /// the pedal will show it differently (accents lost, odd symbols dropped, cut short), how.
 pub fn name_hint(ui: &mut egui::Ui, text: &str, max: usize) {
     let n = text.chars().count();
-    ui.label(egui::RichText::new(format!("{n}/{max}")).small().monospace().color(if n >= max { ORANGE } else { MUTED }));
+    ui.label(egui::RichText::new(format!("{n}/{max}")).small().monospace().color(if n >= max { orange() } else { muted() }));
     let shown = crate::session::pedal_name(text, max);
     if shown != crate::session::clean(text) {
-        ui.label(egui::RichText::new(format!("reads \"{shown}\" on the pedal")).small().color(MUTED));
+        ui.label(egui::RichText::new(format!("reads \"{shown}\" on the pedal")).small().color(muted()));
     }
 }
 
@@ -229,8 +315,7 @@ pub fn segmented(ui: &mut egui::Ui, labels: &[&str], current: usize) -> Option<u
                 ui.spacing_mut().item_spacing.x = 2.0;
                 for (i, l) in labels.iter().enumerate() {
                     let on = i == current;
-                    let text =
-                        egui::RichText::new(*l).size(14.5).strong().color(if on { Color32::from_rgb(0x08, 0x1a, 0x18) } else { MUTED });
+                    let text = egui::RichText::new(*l).size(14.5).strong().color(if on { on_accent() } else { muted() });
                     let b = egui::Button::new(text)
                         .fill(if on { accent() } else { Color32::TRANSPARENT })
                         .stroke(Stroke::NONE)
@@ -253,20 +338,17 @@ pub fn pill(ui: &mut egui::Ui, text: &str, colour: Color32) {
         .corner_radius(CornerRadius::same(9))
         .inner_margin(egui::Margin::symmetric(8, 2))
         .show(ui, |ui| {
-            ui.label(egui::RichText::new(text).small().strong().color(Color32::from_rgb(
-                colour.r() / 2 + 128,
-                colour.g() / 2 + 128,
-                colour.b() / 2 + 128,
-            )));
+            let shown = if is_light() {
+                Color32::from_rgb(colour.r() / 2, colour.g() / 2, colour.b() / 2)
+            } else {
+                Color32::from_rgb(colour.r() / 2 + 128, colour.g() / 2 + 128, colour.b() / 2 + 128)
+            };
+            ui.label(egui::RichText::new(text).small().strong().color(shown));
         });
 }
 
 pub fn primary_button(ui: &mut egui::Ui, text: &str) -> egui::Response {
-    ui.add(
-        egui::Button::new(egui::RichText::new(text).strong().color(Color32::from_rgb(0x08, 0x1a, 0x18)))
-            .fill(accent())
-            .corner_radius(CornerRadius::same(6)),
-    )
+    ui.add(egui::Button::new(egui::RichText::new(text).strong().color(on_accent())).fill(accent()).corner_radius(CornerRadius::same(6)))
 }
 
 /// A one-line search box with a visible frame (egui's own frame vanishes on this background).
@@ -286,4 +368,36 @@ pub fn folder_icon(ui: &mut egui::Ui, colour: Color32) {
     let p = ui.painter();
     p.rect_filled(egui::Rect::from_min_size(rect.min, egui::vec2(6.0, 4.0)), CornerRadius::same(1), colour);
     p.rect_filled(egui::Rect::from_min_max(rect.min + egui::vec2(0.0, 2.0), rect.max), CornerRadius::same(2), colour);
+}
+
+/// Whether a theme setting ("dark", "light", "system") means the light palette now.
+pub fn wants_light(setting: &str, ctx: &egui::Context) -> bool {
+    match setting {
+        "light" => true,
+        "system" => ctx.system_theme() == Some(egui::Theme::Light),
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_reads_on_every_surface_of_both_palettes() {
+        for light in [false, true] {
+            set_light(light);
+            for surface in [bg(), panel(), card_bg(), card_hi()] {
+                assert!(contrast(ink(), surface) >= 7.0, "ink on a surface, light={light}");
+                assert!(contrast(muted(), surface) >= 4.5, "muted on a surface, light={light}");
+            }
+            // Text on the accent colour (a primary button, the picked tab), for every accent.
+            for (rgb, name) in ACCENTS {
+                set_accent(rgb);
+                assert!(contrast(on_accent(), accent()) >= 4.5, "{name} accent, light={light}");
+            }
+        }
+        set_light(false);
+        set_accent(0x2ec4b6);
+    }
 }

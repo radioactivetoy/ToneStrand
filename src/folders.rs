@@ -106,7 +106,7 @@ pub fn pane(
             ui.add_space(depth as f32 * 14.0);
             match label.strip_prefix("📁 ") {
                 Some(rest) => {
-                    theme::folder_icon(ui, MUTED);
+                    theme::folder_icon(ui, muted());
                     ui.selectable_label(selected, rest.to_owned())
                 }
                 None => ui.selectable_label(selected, label),
@@ -198,7 +198,7 @@ pub fn pane(
                 ui.close_menu();
             }
             ui.separator();
-            if ui.button(RichText::new("Remove (only when empty)").color(BAD)).clicked() {
+            if ui.button(RichText::new("Remove (only when empty)").color(bad())).clicked() {
                 match std::fs::remove_dir(root.join(f)) {
                     Ok(_) => {
                         if current.as_deref() == Some(f.as_str()) {
@@ -244,7 +244,7 @@ pub fn pane(
     }
     if let Some(e) = pane.error.clone() {
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new(e).small().color(BAD));
+            ui.label(RichText::new(e).small().color(bad()));
             if ui.small_button("OK").clicked() {
                 pane.error = None;
             }
