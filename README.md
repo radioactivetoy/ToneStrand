@@ -48,6 +48,18 @@ cargo run --release
 
 The release binary is `target/release/tonestrand(.exe)`.
 
+## Your settings file
+
+ToneStrand keeps its settings in `%APPDATA%\ToneStrand\settings.json` (on macOS and Linux, in
+the system's config folder). When you pair a Helrig Box, the secret **pairing token** the box
+gives this computer is stored in that file as plain text. Anyone who has a copy can control
+that box from the same network, for example to send presets to the pedal.
+
+**Don't share `settings.json`**, in bug reports, screenshots, chat or a public repository.
+"Forget" next to a box under Settings removes its token from this computer only; it does not
+necessarily make the box reject that token. If a copy may have leaked, also reset the box's
+pairings as the box's own documentation describes, then pair again.
+
 ## Documentation
 
 | File | For |
