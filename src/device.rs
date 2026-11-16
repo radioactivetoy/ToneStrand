@@ -39,6 +39,8 @@ pub enum Cmd {
     Snapshot(i64),
     RenameSnapshot { index: i64, name: String },
     Backup { setlist: i64, count: usize, folder: std::path::PathBuf, names: Vec<String> },
+    /// Save every setlist's presets and all User IRs into a new folder inside `folder`.
+    FullBackup { folder: std::path::PathBuf },
     /// Read the names of the pedal's User IRs.
     ListIrs,
     /// Write IRs into slots: (slot from 0, name, 8,192 bytes of audio).
@@ -362,47 +364,73 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                 }
                 Cmd::Backup { setlist: sl, count, folder, names } => {
                     std::fs::create_dir_all(&folder).map_err(|e| format!("can't make {} ({e})", folder.display()))?;
-                    let mut saved = 0;
-                    // Keep going past a slot that fails; stop only when the pedal seems gone.
-                    let mut failed: Vec<String> = Vec::new();
-                    let mut in_a_row = 0;
-                    for i in 0..count {
-                        send(Event::Busy(format!("Backing up {}/{}...", i + 1, count)));
-                        let label = crate::proto::slot_label(i);
-                        let outcome = s.fetch_slot(sl, i as i64).map_err(|e| e.to_string()).and_then(|blob| {
-                            let Some(blob) = blob else { return Ok(false) };
-                            let n = names.get(i).cloned().unwrap_or_default();
-                            let file = folder.join(format!("{label} {}.hxpreset", sanitize(&n)));
-                            crate::files::write_atomic(&file, &blob).map_err(|e| e.to_string()).map(|_| true)
-                        });
-                        match outcome {
-                            Ok(wrote) => {
-                                saved += wrote as usize;
-                                in_a_row = 0;
-                            }
-                            Err(e) => {
-                                failed.push(format!("{label} ({e})"));
-                                in_a_row += 1;
-                                if in_a_row >= 3 {
-                                    return Err(format!(
-                                        "Backed up {saved} presets to {}, then stopped: {} slots in a row failed: {}",
-                                        folder.display(),
-                                        in_a_row,
-                                        failed.join(", ")
-                                    ));
-                                }
-                            }
-                        }
+                    let mut run = BackupRun::default();
+                    if backup_setlist(s, send, sl, count, &names, &folder, "", &mut run) {
+                        return Err(format!(
+                            "Backed up {} presets to {}, then stopped: {} slots in a row failed: {}",
+                            run.saved,
+                            folder.display(),
+                            run.in_a_row,
+                            run.failed.join(", ")
+                        ));
                     }
-                    if failed.is_empty() {
-                        send(Event::Done(format!("Backed up {saved} presets to {}", folder.display())));
+                    if run.failed.is_empty() {
+                        send(Event::Done(format!("Backed up {} presets to {}", run.saved, folder.display())));
                     } else {
                         send(Event::Error(format!(
-                            "Backed up {saved} presets to {}; {} failed: {}",
+                            "Backed up {} presets to {}; {} failed: {}",
+                            run.saved,
                             folder.display(),
-                            failed.len(),
-                            failed.join(", ")
+                            run.failed.len(),
+                            run.failed.join(", ")
                         )));
+                    }
+                }
+                Cmd::FullBackup { folder } => {
+                    // One new folder, named by the time, with a folder per setlist and the IRs.
+                    let root = crate::files::unique_path(&folder, &format!("Full backup {} UTC", crate::files::stamp_text(stamp())));
+                    std::fs::create_dir_all(&root).map_err(|e| format!("can't make {} ({e})", root.display()))?;
+                    let setlists = s.setlists().map_err(|e| e.to_string())?;
+                    let mut run = BackupRun::default();
+                    let mut stopped = false;
+                    for (sl, set_name) in setlists.iter().enumerate() {
+                        let names = s.presets(sl as i64).map_err(|e| format!("can't read setlist {set_name} ({e})"))?;
+                        let dir = root.join(sanitize(set_name));
+                        std::fs::create_dir_all(&dir).map_err(|e| format!("can't make {} ({e})", dir.display()))?;
+                        if backup_setlist(s, send, sl as i64, names.len(), &names, &dir, &format!("{set_name}: "), &mut run) {
+                            stopped = true;
+                            break;
+                        }
+                    }
+                    let presets_saved = run.saved;
+                    let mut irs_saved = 0;
+                    if !stopped {
+                        let in_use = s.list_irs().map_err(|e| format!("Backed up {presets_saved} presets to {}, but can't read the IR list ({e})", root.display()))?;
+                        let dir = root.join("IRs");
+                        for (i, (slot, name)) in in_use.iter().enumerate() {
+                            send(Event::Busy(format!("Backing up IR {}/{}...", i + 1, in_use.len())));
+                            let outcome = s.ir_audio(*slot).map_err(|e| e.to_string()).and_then(|audio| {
+                                std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                                let file = crate::files::unique_path(&dir, &crate::irs::file_name(*slot, name));
+                                crate::files::write_atomic(&file, &crate::irs::audio_to_wav(&audio)).map_err(|e| e.to_string())?;
+                                Ok(true)
+                            });
+                            let before = run.saved;
+                            if run.record(&format!("IR {}", slot + 1), outcome) {
+                                stopped = true;
+                                break;
+                            }
+                            irs_saved += run.saved - before;
+                        }
+                    }
+                    let summary = format!("{presets_saved} presets and {irs_saved} IRs to {}", root.display());
+                    if stopped {
+                        return Err(format!("Backed up {summary}, then stopped: {} in a row failed: {}", run.in_a_row, run.failed.join(", ")));
+                    }
+                    if run.failed.is_empty() {
+                        send(Event::Done(format!("Backed up {summary}")));
+                    } else {
+                        send(Event::Error(format!("Backed up {summary}; {} failed: {}", run.failed.len(), run.failed.join(", "))));
                     }
                 }
                 Cmd::AssignController { block, cab, index, controller, cc } => {
@@ -560,6 +588,56 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
     }
 }
 
+/// A backup gives up when this many slots in a row fail: the pedal is probably gone.
+const BACKUP_STOP_AFTER: usize = 3;
+
+/// How a backup is going: what was saved, what failed, and the failures in a row.
+#[derive(Default)]
+struct BackupRun {
+    saved: usize,
+    failed: Vec<String>,
+    in_a_row: usize,
+}
+
+impl BackupRun {
+    /// Note how one item went (`Ok(false)`: nothing there to save). True when it is time to
+    /// stop.
+    fn record(&mut self, label: &str, outcome: Result<bool, String>) -> bool {
+        match outcome {
+            Ok(wrote) => {
+                self.saved += wrote as usize;
+                self.in_a_row = 0;
+            }
+            Err(e) => {
+                self.failed.push(format!("{label} ({e})"));
+                self.in_a_row += 1;
+            }
+        }
+        self.in_a_row >= BACKUP_STOP_AFTER
+    }
+}
+
+/// Save the presets of one setlist as `.hxpreset` files in `folder`. Keeps going past a slot
+/// that fails; true when it stopped because the pedal seems gone. `what` starts the
+/// progress text ("" or "Setlist 2: ").
+#[allow(clippy::too_many_arguments)]
+fn backup_setlist(s: &mut Session, send: &dyn Fn(Event), sl: i64, count: usize, names: &[String], folder: &Path, what: &str, run: &mut BackupRun) -> bool {
+    for i in 0..count {
+        send(Event::Busy(format!("Backing up {what}{}/{count}...", i + 1)));
+        let label = crate::proto::slot_label(i);
+        let outcome = s.fetch_slot(sl, i as i64).map_err(|e| e.to_string()).and_then(|blob| {
+            let Some(blob) = blob else { return Ok(false) };
+            let n = names.get(i).cloned().unwrap_or_default();
+            let file = folder.join(format!("{label} {}.hxpreset", sanitize(&n)));
+            crate::files::write_atomic(&file, &blob).map_err(|e| e.to_string()).map(|_| true)
+        });
+        if run.record(&label, outcome) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Tell the person when a name reads differently on the pedal.
 fn note_name(send: &dyn Fn(Event), name: &str, max_len: usize) {
     if let Some(n) = crate::session::name_note(name, max_len) {
@@ -627,5 +705,26 @@ pub fn sanitize(name: &str) -> String {
         "preset".into()
     } else {
         t
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_backup_stops_after_three_failures_in_a_row() {
+        let mut run = BackupRun::default();
+        assert!(!run.record("01A", Err("no answer".into())));
+        assert!(!run.record("01B", Err("no answer".into())));
+        // A good slot (or an empty one) starts the count again.
+        assert!(!run.record("01C", Ok(false)));
+        assert!(!run.record("02A", Err("no answer".into())));
+        assert!(!run.record("02B", Ok(true)));
+        assert!(!run.record("02C", Err("no answer".into())));
+        assert!(!run.record("03A", Err("no answer".into())));
+        assert!(run.record("03B", Err("no answer".into())));
+        assert_eq!(run.saved, 1);
+        assert_eq!(run.failed.len(), 6);
     }
 }

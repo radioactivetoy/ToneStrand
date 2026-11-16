@@ -526,6 +526,11 @@ impl App {
                 {
                     self.send(Cmd::ReadCurrent);
                 }
+                if ui.button("Back up everything...").on_hover_text("Every setlist and all User IRs, into a new folder inside the one you pick").clicked() {
+                    if let Some(folder) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
+                        self.send(Cmd::FullBackup { folder });
+                    }
+                }
                 if ui.button("Back up all").on_hover_text("Save every preset of this setlist as files").clicked() {
                     if let Some(folder) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
                         let names = self.presets.clone();

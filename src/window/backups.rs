@@ -58,20 +58,9 @@ pub(super) fn parse_backup_name(file_name: &str) -> (Option<usize>, String, Opti
 
 /// "16 Nov 2026 14:03 UTC" for Unix seconds.
 pub(super) fn when_text(secs: u64) -> String {
-    let days = (secs / 86_400) as i64;
-    let rem = secs % 86_400;
-    // Days since 1970-01-01 to a calendar date (Howard Hinnant's algorithm).
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
+    let (year, month, day, hour, minute) = crate::files::civil(secs);
     const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    format!("{day} {} {year} {:02}:{:02} UTC", MONTHS[(month - 1) as usize], rem / 3600, rem % 3600 / 60)
+    format!("{day} {} {year} {hour:02}:{minute:02} UTC", MONTHS[(month - 1) as usize])
 }
 
 /// The backups in a folder, newest first.
@@ -239,6 +228,7 @@ mod tests {
     #[test]
     fn dates_read_in_utc() {
         assert_eq!(when_text(0), "1 Jan 1970 00:00 UTC");
+        assert_eq!(crate::files::stamp_text(1_763_300_000), "2025-11-16 1333");
         assert_eq!(when_text(1_763_300_000), "16 Nov 2025 13:33 UTC");
         assert_eq!(when_text(951_782_400 + 3600 + 120), "29 Feb 2000 01:02 UTC");
     }

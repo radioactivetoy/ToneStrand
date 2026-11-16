@@ -50,6 +50,29 @@ pub fn copy_into(from: &Path, dir: &Path) -> std::io::Result<PathBuf> {
     Ok(to)
 }
 
+/// Unix seconds as (year, month, day, hour, minute) in UTC.
+pub fn civil(secs: u64) -> (i64, u32, u32, u32, u32) {
+    let days = (secs / 86_400) as i64;
+    let rem = secs % 86_400;
+    // Days since 1970-01-01 to a calendar date (Howard Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let month = (if mp < 10 { mp + 3 } else { mp - 9 }) as u32;
+    let year = yoe + era * 400 + i64::from(month <= 2);
+    (year, month, day, (rem / 3600) as u32, (rem % 3600 / 60) as u32)
+}
+
+/// "2026-11-16 1403": a sortable stamp for folder names (UTC).
+pub fn stamp_text(secs: u64) -> String {
+    let (y, mo, d, h, mi) = civil(secs);
+    format!("{y}-{mo:02}-{d:02} {h:02}{mi:02}")
+}
+
 /// Whether `delete_file` can put files in a recycle bin on this system (Windows only so
 /// far). Elsewhere it deletes for good, so callers always ask first.
 pub const HAS_RECYCLE_BIN: bool = cfg!(windows);
