@@ -182,6 +182,8 @@ pub struct App {
     tones_list_asked: bool,
     /// The "Restore from a backup" window, when open.
     restore: Option<backups::RestoreState>,
+    /// "Not now" was clicked on the card that explains HX Edit is missing.
+    catalog_card_hidden: bool,
 }
 
 /// The hidden Tests page (Ctrl+Shift+T).
@@ -267,6 +269,7 @@ impl App {
             irs_local: false,
             tones_list_asked: false,
             restore: None,
+            catalog_card_hidden: false,
         };
         app.catalog = crate::catalog::find_dir(app.settings.hx_edit.as_deref())
             .and_then(|d| Catalog::load(&d).ok())
@@ -904,6 +907,7 @@ impl App {
             return self.tests_page(ctx);
         }
 
+        self.catalog_card(ctx);
         if crate::chain::studio() && !self.docs.is_empty() {
             return self.studio_central(ctx);
         }
@@ -941,6 +945,62 @@ impl App {
                         });
                     });
             });
+    }
+
+    /// Without HX Edit's files there are no effect names, ranges or pictures: say so on the
+    /// editor page, with a way to point at its folder.
+    fn catalog_card(&mut self, ctx: &egui::Context) {
+        if self.catalog.is_some() || self.catalog_card_hidden {
+            return;
+        }
+        let mut choose = false;
+        let mut again = false;
+        let mut hide = false;
+        egui::TopBottomPanel::top("no-catalog")
+            .show_separator_line(false)
+            .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin { left: 14, right: 14, top: 10, bottom: 0 }))
+            .show(ctx, |ui| {
+                theme::card(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.label(RichText::new("HX Edit was not found").size(16.0).strong().color(ORANGE));
+                    ui.label(
+                        RichText::new(
+                            "ToneStrand takes effect names, knob ranges and pictures from the HX Edit program on this computer. \
+                             Without it most of the editor is empty. Install HX Edit, or choose the folder it is in.",
+                        )
+                        .color(MUTED),
+                    );
+                    ui.add_space(4.0);
+                    ui.horizontal_wrapped(|ui| {
+                        if theme::primary_button(ui, "Choose HX Edit folder...").clicked() {
+                            choose = true;
+                        }
+                        if ui.button("Look again").on_hover_text("Search the usual places again").clicked() {
+                            again = true;
+                        }
+                        ui.hyperlink_to("Get HX Edit from Line 6", "https://line6.com/software/");
+                        theme::help(ui, "The folder is the one with HX Edit's \"res\" folder inside it (on Windows, usually C:\\Program Files (x86)\\Line6\\HX Edit). You can change this later in Settings.");
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.small_button("Not now").clicked() {
+                                hide = true;
+                            }
+                        });
+                    });
+                });
+            });
+        if choose {
+            if let Some(d) = rfd::FileDialog::new().pick_folder() {
+                self.settings.hx_edit = Some(d.to_string_lossy().into_owned());
+                self.settings.save();
+                self.reload_catalog();
+            }
+        }
+        if again {
+            self.reload_catalog();
+        }
+        if hide {
+            self.catalog_card_hidden = true;
+        }
     }
 
     /// The Studio look's editor: the open presets' tabs, the chain on a large canvas with
