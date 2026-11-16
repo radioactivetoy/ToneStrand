@@ -20,7 +20,6 @@ pub struct Entry {
     pub setlist: String,
     pub pedal_file: bool,
     pub blocks: Vec<(String, Color32)>,
-    #[allow(dead_code)] // kept for sorting the library by date (review U13)
     pub modified: Option<SystemTime>,
 }
 
@@ -33,6 +32,8 @@ pub struct Library {
     pub current: Option<String>,
     pub search: String,
     pub grid: bool,
+    /// How presets are ordered: 0 by name, 1 by date modified (newest first).
+    pub sort: usize,
     pub folders_pane: crate::folders::FolderPane,
     /// Folders inside the library that hold other things (the IR / NAM library, self-test backups): left out.
     pub skip: Vec<PathBuf>,
@@ -136,9 +137,14 @@ impl Library {
             self.current = None;
         }
     }
+    /// Searching looks in every folder, whichever one is picked.
+    fn searching(&self) -> bool {
+        !self.search.trim().is_empty()
+    }
+
     fn matches(&self, e: &Entry) -> bool {
         if let Some(c) = &self.current {
-            if &e.setlist != c {
+            if &e.setlist != c && !self.searching() {
                 return false;
             }
         }
@@ -161,8 +167,12 @@ impl Library {
         });
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            let w = ui.available_width() - 250.0;
+            let w = ui.available_width() - 580.0;
             ui.add(egui::TextEdit::singleline(&mut self.search).hint_text("🔍 Search names, folders or effects...").desired_width(w.max(200.0)));
+            if let Some(s) = theme::segmented(ui, &["Name", "Newest"], self.sort) {
+                self.sort = s;
+            }
+            theme::help(ui, "Sort by name, or by when the file was last changed (newest first). Searching looks in every folder.");
             if ui.button("Import files...").clicked() {
                 actions.push(Action::Import);
             }
@@ -212,8 +222,16 @@ impl Library {
             });            ui.separator();
             // Presets.
             ui.vertical(|ui| {
-                let shown: Vec<Entry> = self.entries.iter().filter(|e| self.matches(e)).cloned().collect();
-                let title = match self.current.as_deref() { None => "All presets".to_owned(), Some("") => "Top folder".to_owned(), Some(f) => f.to_owned() };
+                let mut shown: Vec<Entry> = self.entries.iter().filter(|e| self.matches(e)).cloned().collect();
+                if self.sort == 1 {
+                    // Newest first; files with no date last; the name breaks ties.
+                    shown.sort_by(|a, b| b.modified.cmp(&a.modified).then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())));
+                }
+                let title = if self.searching() {
+                    "Search results (all folders)".to_owned()
+                } else {
+                    match self.current.as_deref() { None => "All presets".to_owned(), Some("") => "Top folder".to_owned(), Some(f) => f.to_owned() }
+                };
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(title).strong());
                     ui.label(RichText::new(format!("{} presets", shown.len())).color(MUTED));
