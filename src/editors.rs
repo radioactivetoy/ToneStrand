@@ -13,40 +13,6 @@ use crate::snapshots;
 use crate::msgpack::Value;
 use crate::theme::{self, *};
 
-const TILE: Vec2 = Vec2::new(108.0, 78.0);
-
-/// One block in the chain. The colour band is clipped to the tile's own
-/// rounded shape so its corners line up.
-fn tile(ui: &mut egui::Ui, title: &str, subtitle: &str, colour: Color32, on: bool, selected: bool) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(TILE, egui::Sense::click_and_drag());
-    let p = ui.painter();
-    let r = CornerRadius::same(10);
-    // A block that is on is tinted with its category's colour; one that is off stays dark.
-    p.rect_filled(rect, r, if on { mix(card_hi(), colour, 0.42) } else { panel() });
-    let band = egui::Rect::from_min_size(rect.min, Vec2::new(TILE.x, 5.0));
-    p.with_clip_rect(band).rect_filled(rect, r, if on { colour } else { colour.linear_multiply(0.3) });
-    let stroke = if selected {
-        Stroke::new(2.0_f32, accent())
-    } else if resp.hovered() {
-        Stroke::new(1.0_f32, colour.linear_multiply(0.8))
-    } else {
-        Stroke::new(1.0_f32, line())
-    };
-    p.rect_stroke(rect, r, stroke, egui::StrokeKind::Inside);
-    p.circle_filled(rect.right_top() + Vec2::new(-12.0, 18.0), 4.5, if on { GOOD } else { Color32::from_gray(70) });
-    let text_col = if on { TEXT } else { MUTED };
-    let galley = p.layout(title.to_owned(), egui::FontId::proportional(13.0), text_col, TILE.x - 26.0);
-    p.galley(rect.left_top() + Vec2::new(9.0, 13.0), galley, text_col);
-    p.text(rect.left_bottom() + Vec2::new(9.0, -8.0), egui::Align2::LEFT_BOTTOM, subtitle, egui::FontId::proportional(11.0), if on { TEXT.linear_multiply(0.75) } else { colour.linear_multiply(0.8) });
-    resp
-}
-
-/// Blend two colours: `t` = 0 gives `a`, 1 gives `b`.
-fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
-    let l = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
-    Color32::from_rgb(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()))
-}
-
 /// A small ring that fills as the path's DSP fills.
 fn dsp_ring(ui: &mut egui::Ui, percent: f64) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(16.0), egui::Sense::hover());
@@ -65,46 +31,6 @@ fn dsp_ring(ui: &mut egui::Ui, percent: f64) {
     if pts.len() > 1 {
         p.add(egui::Shape::line(pts, Stroke::new(2.5_f32, col)));
     }
-}
-
-/// An empty position in the chain.
-fn empty_tile(ui: &mut egui::Ui, selected: bool, can_add: bool) -> egui::Response {
-    let size = Vec2::new(46.0, TILE.y);
-    let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
-    let col = if selected { accent() } else if resp.hovered() { MUTED } else { line() };
-    ui.painter().rect_stroke(rect.shrink(2.0), CornerRadius::same(8), Stroke::new(1.0_f32, col), egui::StrokeKind::Inside);
-    if can_add {
-        ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(20.0), col);
-    }
-    resp.on_hover_text(if can_add { "Empty - click, then pick an effect" } else { "Empty" })
-}
-
-fn arrow(ui: &mut egui::Ui) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(14.0, TILE.y), egui::Sense::hover());
-    let c = rect.center();
-    ui.painter().line_segment([c - Vec2::new(7.0, 0.0), c + Vec2::new(7.0, 0.0)], Stroke::new(2.0_f32, line()));
-}
-
-/// A split or merge point in the chain, clickable to show its settings.
-fn junction_tile(ui: &mut egui::Ui, text: &str, selected: bool) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(54.0, TILE.y), egui::Sense::click());
-    let col = if selected { accent() } else if resp.hovered() { TEXT } else { MUTED };
-    let p = ui.painter();
-    p.rect_filled(rect.shrink2(Vec2::new(0.0, 14.0)), CornerRadius::same(8), if resp.hovered() { card_hi() } else { panel() });
-    p.rect_stroke(rect.shrink2(Vec2::new(0.0, 14.0)), CornerRadius::same(8), Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, col), egui::StrokeKind::Inside);
-    p.text(rect.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(10.5), col);
-    resp.on_hover_text(if text == "SPLIT" { "Where the path splits into two lanes" } else { "Where the two lanes join again" })
-}
-
-/// The input or output end of a path, clickable to show its settings.
-fn io_button(ui: &mut egui::Ui, text: &str, selected: bool) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(Vec2::new(64.0, TILE.y), egui::Sense::click());
-    let col = if selected { accent() } else if resp.hovered() { MUTED } else { line() };
-    ui.painter().rect_filled(rect, CornerRadius::same(10), if resp.hovered() { card_hi() } else { panel() });
-    ui.painter().rect_stroke(rect, CornerRadius::same(10), Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, col), egui::StrokeKind::Inside);
-    ui.painter().text(rect.center() - Vec2::new(0.0, 6.0), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(14.0), TEXT);
-    ui.painter().text(rect.center() + Vec2::new(0.0, 14.0), egui::Align2::CENTER_CENTER, "settings", egui::FontId::proportional(10.0), MUTED);
-    resp.on_hover_text(if text == "IN" { "Input: source, noise gate" } else { "Output: destination, level, pan" })
 }
 
 /// Names and ranges of the input's and output's knobs, in the pedal's order
@@ -182,12 +108,6 @@ fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bo
             }
         }
     });
-}
-
-fn io_tile(ui: &mut egui::Ui, text: &str) {
-    let (rect, _) = ui.allocate_exact_size(Vec2::new(56.0, TILE.y), egui::Sense::hover());
-    ui.painter().rect_stroke(rect, CornerRadius::same(10), Stroke::new(1.0_f32, line()), egui::StrokeKind::Inside);
-    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, text, egui::FontId::proportional(12.0), MUTED);
 }
 
 fn block_header(ui: &mut egui::Ui, colour: Color32, title: &str, extra: &str) {
@@ -1555,13 +1475,6 @@ pub fn studio_strip_hlx(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: 
     }
 }
 
-/// BPM for the Studio top bar (.hlx or pedal preset).
-pub fn studio_bpm(ui: &mut egui::Ui, bpm: Option<f64>) -> Option<f64> {
-    let mut t = bpm?;
-    ui.label(RichText::new("BPM").color(MUTED));
-    ui.add(egui::DragValue::new(&mut t).range(30.0..=240.0).speed(0.5).fixed_decimals(1)).changed().then_some(t)
-}
-
 /// The Studio top bar's snapshot chips for a pedal preset: on the live preset a click
 /// switches the pedal; right-click renames it or copies another snapshot into it.
 pub fn studio_strip_device(ui: &mut egui::Ui, preset: &mut DevicePreset, dirty: &mut bool, live: bool, cmds: &mut Vec<Cmd>) {
@@ -1642,21 +1555,6 @@ pub fn device_path_meters(cat: Option<&Catalog>, preset: &DevicePreset) -> Vec<(
             (count, fam.max_blocks as usize, used)
         })
         .collect()
-}
-
-/// The fullest path's estimated DSP use of a pedal preset, in percent.
-pub fn device_dsp(cat: &Catalog, preset: &DevicePreset) -> f64 {
-    let slots = preset.slots();
-    [0i64, 1]
-        .iter()
-        .map(|p| {
-            slots
-                .iter()
-                .filter(|s| s.path == *p)
-                .map(|s| s.model.map(|m| dsp_percent(cat, m)).unwrap_or(0.0) + s.paired.map(|m| dsp_percent(cat, m)).unwrap_or(0.0))
-                .sum::<f64>()
-        })
-        .fold(0.0, f64::max)
 }
 
 /// What the effect list is filtered to for an FX loop (0), a send (1) or a return (2).
@@ -2073,14 +1971,6 @@ struct SlotDrag {
     path: i64,
     position: usize,
     global: usize,
-}
-
-/// Outline a tile while something is dragged over it.
-fn drop_mark(ui: &egui::Ui, r: &egui::Response) {
-    let over = r.dnd_hover_payload::<HlxDrag>().is_some() || r.dnd_hover_payload::<SlotDrag>().is_some();
-    if over {
-        ui.painter().rect_stroke(r.rect.expand(2.0), CornerRadius::same(11), Stroke::new(2.0_f32, ORANGE), egui::StrokeKind::Outside);
-    }
 }
 
 /// The snapshot buttons: pick one to hear and edit it; its name; add another.

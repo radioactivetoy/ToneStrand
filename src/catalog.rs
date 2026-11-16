@@ -113,6 +113,7 @@ pub struct PickGroup {
 }
 
 pub struct Catalog {
+    #[allow(dead_code)] // where the catalog was read from, for diagnostics
     pub dir: PathBuf,
     pub sym: Vec<SymEntry>,
     sym_index: HashMap<String, usize>,
@@ -645,6 +646,7 @@ impl Catalog {
         self.models.len()
     }
 
+    #[cfg(test)]
     pub fn number_of_symbol(&self, symbol: &str) -> Option<i64> {
         self.sym_index.get(symbol).map(|i| *i as i64)
     }

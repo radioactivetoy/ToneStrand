@@ -16,7 +16,6 @@ use crate::editors;
 use crate::library::{self, Library};
 use std::sync::Arc;
 use crate::hlx;
-use crate::msgpack::Value;
 use crate::proto::slot_label;
 use crate::theme::{self, *};
 use crate::wire::{self, UsbPedal};
@@ -1019,38 +1018,6 @@ impl App {
         });
     }
 
-    /// The device box at the top of the Studio sidebar: the unit and how it's connected.
-    fn studio_device_summary(&mut self, ui: &mut egui::Ui) {
-        ui.label(RichText::new("DEVICE").small().strong().color(MUTED));
-        ui.add_space(4.0);
-        egui::Frame::new()
-            .fill(card_bg())
-            .corner_radius(CornerRadius::same(8))
-            .stroke(Stroke::new(1.0_f32, line()))
-            .inner_margin(egui::Margin::same(10))
-            .show(ui, |ui| {
-                ui.set_width(ui.available_width());
-                ui.horizontal(|ui| {
-                    let (rect, _) = ui.allocate_exact_size(Vec2::new(40.0, 26.0), egui::Sense::hover());
-                    ui.painter().rect_filled(rect, CornerRadius::same(5), card_hi());
-                    for k in 0..3 {
-                        ui.painter().circle_filled(rect.left_center() + Vec2::new(10.0 + 10.0 * k as f32, 0.0), 2.5, if self.connected.is_some() { GOOD } else { MUTED });
-                    }
-                    ui.vertical(|ui| {
-                        ui.label(RichText::new(crate::units::unit_name(self.unit)).strong());
-                        let how = match (&self.connected, self.connecting) {
-                            (Some(n), _) => RichText::new(format!("connected · {n}")).small().color(GOOD),
-                            (None, true) => RichText::new("connecting...").small().color(ORANGE),
-                            _ if self.usb.is_empty() => RichText::new("USB · not plugged in").small().color(MUTED),
-                            _ => RichText::new("USB · plugged in, not connected").small().color(MUTED),
-                        };
-                        ui.label(how);
-                    });
-                });
-            });
-        ui.add_space(6.0);
-    }
-
     /// The Studio top bar's snapshot chips for the open preset.
     fn studio_strip(&mut self, ui: &mut egui::Ui, i: usize) {
         let connected = self.connected.is_some();
@@ -1510,45 +1477,6 @@ impl App {
         });
     }
 
-    fn library_card(&mut self, ui: &mut egui::Ui) {
-        theme::card(ui, |ui| {
-            ui.horizontal(|ui| {
-                theme::section(ui, "Presets on this computer");
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("⟳").on_hover_text("Look again").clicked() {
-                        self.scan_library();
-                    }
-                    if ui.small_button("Folder...").clicked() {
-                        if let Some(d) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
-                            self.set_library_dir(Some(d));
-                        }
-                    }
-                });
-            });
-            ui.label(RichText::new(self.library_dir.to_string_lossy()).small().color(MUTED));
-            if self.library.is_empty() {
-                ui.label(RichText::new("No preset files here yet. Save one from the editor or the pedal.").color(MUTED));
-            }
-            let mut open = None;
-            egui::ScrollArea::vertical().id_salt("lib").max_height(240.0).auto_shrink([false, true]).show(ui, |ui| {
-                for p in &self.library {
-                    let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("?");
-                    let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
-                    ui.horizontal(|ui| {
-                        let col = if ext == "hlx" { BLUE } else { ORANGE };
-                        ui.label(RichText::new(if ext == "hlx" { "HLX" } else { "PEDAL" }).small().strong().color(col));
-                        if ui.selectable_label(false, name).on_hover_text("Double-click to open").double_clicked() {
-                            open = Some(p.clone());
-                        }
-                    });
-                }
-            });
-            if let Some(p) = open {
-                self.open_file(&p);
-            }
-        });
-    }
-
     fn tabs(&mut self, ui: &mut egui::Ui) {
         let mut close = None;
         ui.horizontal_wrapped(|ui| {
@@ -1557,7 +1485,7 @@ impl App {
                 let active = i == self.active;
                 egui::Frame::new()
                     .fill(if active { card_bg() } else { panel() })
-                    .stroke(Stroke::new(1.0, if active { accent().linear_multiply(0.6) } else { line() }))
+                    .stroke(Stroke::new(1.0_f32, if active { accent().linear_multiply(0.6) } else { line() }))
                     .corner_radius(CornerRadius { nw: 8, ne: 8, sw: 0, se: 0 })
                     .inner_margin(egui::Margin::symmetric(10, 5))
                     .show(ui, |ui| {
@@ -3014,7 +2942,7 @@ impl App {
                 let i = self.active.min(self.docs.len() - 1);
                 egui::Frame::new()
                     .fill(card_bg())
-                    .stroke(Stroke::new(1.0, line()))
+                    .stroke(Stroke::new(1.0_f32, line()))
                     .corner_radius(CornerRadius { nw: 0, ne: 10, sw: 10, se: 10 })
                     .inner_margin(egui::Margin::same(16))
                     .show(ui, |ui| {
@@ -3569,8 +3497,11 @@ impl eframe::App for App {
     }
 
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-        self.disconnect();
-        std::thread::sleep(Duration::from_millis(300));
+        // Let a write in progress finish (the thread takes Disconnect after its current
+        // command) rather than cutting it off when the program exits.
+        if let Some(link) = &mut self.link {
+            link.shut_down(Duration::from_secs(8));
+        }
     }
 }
 

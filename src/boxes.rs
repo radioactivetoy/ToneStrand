@@ -22,7 +22,6 @@ pub struct BoxInfo {
 pub struct RelayStatus {
     pub relay_only: bool,
     pub client: bool,
-    pub auth: String,
     pub pedal: Option<String>,
     pub id: String,
 }
@@ -246,7 +245,6 @@ pub fn relay_status(host: &str) -> Result<RelayStatus, String> {
     Ok(RelayStatus {
         relay_only: v.get("relay_only").and_then(|x| x.as_bool()).unwrap_or(false),
         client: v.get("client").and_then(|x| x.as_bool()).unwrap_or(false),
-        auth: v.get("auth").and_then(|x| x.as_str()).unwrap_or("").to_owned(),
         pedal,
         id: v.get("id").and_then(|x| x.as_str()).unwrap_or("").to_owned(),
     })
@@ -282,7 +280,8 @@ pub fn pair_start(host: &str) -> Result<String, String> {
 }
 
 pub enum PairPoll {
-    Waiting(u64),
+    /// Seconds left in the pairing window (not shown yet).
+    Waiting(#[allow(dead_code)] u64),
     Token(String),
     Closed,
 }

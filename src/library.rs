@@ -20,6 +20,7 @@ pub struct Entry {
     pub setlist: String,
     pub pedal_file: bool,
     pub blocks: Vec<(String, Color32)>,
+    #[allow(dead_code)] // kept for sorting the library by date (review U13)
     pub modified: Option<SystemTime>,
 }
 
@@ -104,7 +105,7 @@ impl Library {
     pub fn scan(&mut self, cat: Option<&Catalog>) {
         let mut entries = Vec::new();
         let setlists = crate::folders::scan(&self.root, &self.skip, 4);
-        let mut visit = |dir: &Path, setlist: &str, entries: &mut Vec<Entry>| {
+        let visit = |dir: &Path, setlist: &str, entries: &mut Vec<Entry>| {
             let Ok(rd) = std::fs::read_dir(dir) else { return };
             for e in rd.flatten() {
                 let p = e.path();

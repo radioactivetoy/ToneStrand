@@ -29,9 +29,6 @@ impl Value {
     pub fn str(s: &str) -> Value {
         Value::Str(s.to_owned(), AUTO)
     }
-    pub fn bin(b: Vec<u8>) -> Value {
-        Value::Bin(b, AUTO)
-    }
     pub fn map(pairs: Vec<(i64, Value)>) -> Value {
         Value::Map(pairs.into_iter().map(|(k, v)| (Value::int(k), v)).collect(), AUTO)
     }

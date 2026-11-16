@@ -80,24 +80,6 @@ pub fn block_mut<'a>(doc: &'a mut Value, b: &HlxBlock) -> Option<&'a mut Map<Str
     doc.pointer_mut(&format!("/data/tone/{}/{}", b.dsp, b.key)).and_then(Value::as_object_mut)
 }
 
-pub fn snapshot_names(doc: &Value) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    for i in 0..8 {
-        let k = format!("snapshot{i}");
-        if let Some(s) = doc.pointer(&format!("/data/tone/{k}")) {
-            let n = s.get("@name").and_then(Value::as_str).unwrap_or("").to_owned();
-            out.push((k, n));
-        }
-    }
-    out
-}
-
-pub fn set_snapshot_name(doc: &mut Value, key: &str, name: &str) {
-    if let Some(s) = doc.pointer_mut(&format!("/data/tone/{key}")).and_then(Value::as_object_mut) {
-        s.insert("@name".into(), Value::String(name.to_owned()));
-    }
-}
-
 /// A readable model name: `HD2_AmpBritPlexiBrt` becomes `Amp Brit Plexi Brt`.
 pub fn pretty_model(model: &str) -> String {
     let core = model.split_once('_').map(|(_, r)| r).unwrap_or(model);
@@ -244,11 +226,6 @@ pub fn remove_block(doc: &mut Value, b: &HlxBlock) {
             set_lower_slots(doc, &b.dsp, (lane_b.len() as i64).max(1));
         }
     }
-}
-
-/// Move a block to another position on its path, swapping with whatever is there.
-pub fn move_block(doc: &mut Value, b: &HlxBlock, to: i64) {
-    move_to(doc, b, b.path, to);
 }
 
 /// Move a block to a lane and position of the same DSP (a drag and drop),
@@ -633,20 +610,6 @@ pub fn split_mut<'a>(doc: &'a mut Value, dsp: &str, merge: bool) -> Option<&'a m
     doc.pointer_mut(&format!("/data/tone/{dsp}/{name}")).and_then(Value::as_object_mut)
 }
 
-/// Remove every split and merge (for units without parallel lanes).
-pub fn clear_split(doc: &mut Value) {
-    for dsp in dsps(doc) {
-        if let Some(section) = doc.pointer_mut(&format!("/data/tone/{dsp}")).and_then(Value::as_object_mut) {
-            section.remove("split");
-            section.remove("join");
-        }
-        let key = format!("@topology{}", dsp_index(&dsp));
-        if let Some(g) = doc.pointer_mut("/data/tone/global").and_then(Value::as_object_mut) {
-            g.insert(key, json!("A"));
-        }
-    }
-}
-
 /// The input or output section of a DSP (`inputA`, `outputA`).
 pub fn io_mut<'a>(doc: &'a mut Value, dsp: &str, input: bool) -> Option<&'a mut Map<String, Value>> {
     let name = if input { "inputA" } else { "outputA" };
@@ -762,4 +725,26 @@ pub fn sample() -> Value {
         "schema": "L6Preset",
         "version": 6
     })
+}
+
+// Used only by the tests (the editor moves blocks and splits through other helpers).
+
+/// Move a block to another position on its path, swapping with whatever is there.
+#[cfg(test)]
+pub fn move_block(doc: &mut Value, b: &HlxBlock, to: i64) {
+    move_to(doc, b, b.path, to);
+}
+
+#[cfg(test)]
+pub fn clear_split(doc: &mut Value) {
+    for dsp in dsps(doc) {
+        if let Some(section) = doc.pointer_mut(&format!("/data/tone/{dsp}")).and_then(Value::as_object_mut) {
+            section.remove("split");
+            section.remove("join");
+        }
+        let key = format!("@topology{}", dsp_index(&dsp));
+        if let Some(g) = doc.pointer_mut("/data/tone/global").and_then(Value::as_object_mut) {
+            g.insert(key, json!("A"));
+        }
+    }
 }

@@ -31,6 +31,7 @@ const HX_EFFECTS: i64 = 2162693;
 /// About how much of the DSP one block uses on an HX Stomp (README: ~23%).
 pub const DSP_SHARE: f64 = 0.23;
 /// Most NAM blocks a preset can run at once.
+#[allow(dead_code)] // documented limit; not enforced by the editor yet
 pub const MAX_BLOCKS: usize = 3;
 
 pub fn set_enabled(on: bool) {
@@ -142,6 +143,7 @@ fn dilations() -> Vec<i64> {
 #[derive(Debug, Clone)]
 pub struct Converted {
     pub samples: Vec<f32>,
+    #[allow(dead_code)] // part of the converter's result; checked by hand against nam2ir.py
     pub scale_exp: i32,
     pub input_level_dbu: Option<f64>,
     pub loudness: Option<f64>,

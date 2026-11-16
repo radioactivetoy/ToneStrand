@@ -33,6 +33,7 @@ const EP_IN: u8 = 0x81;
 pub struct UsbPedal {
     pub product: String,
     pub pid: u16,
+    #[allow(dead_code)] // tells two identical pedals apart; not shown yet
     pub serial: String,
 }
 
@@ -85,53 +86,61 @@ impl UsbWire {
     }
 }
 
-/// Poll a cancel-safe future once without blocking.
-fn poll_now<F: std::future::Future>(f: F) -> Option<F::Output> {
-    futures_lite::future::block_on(futures_lite::future::poll_once(f))
+/// Wakes this thread when a USB transfer completes.
+struct Unpark(std::thread::Thread);
+
+impl std::task::Wake for Unpark {
+    fn wake(self: std::sync::Arc<Self>) {
+        self.0.unpark();
+    }
+    fn wake_by_ref(self: &std::sync::Arc<Self>) {
+        self.0.unpark();
+    }
+}
+
+/// Wait for a cancel-safe future until `deadline`, sleeping in between: the transfer's own
+/// wake-up unparks the thread, so nothing spins. None when the deadline passes first (the
+/// future is then dropped, which nusb's `next_complete` allows).
+fn wait_until<F: std::future::Future>(f: F, deadline: Instant) -> Option<F::Output> {
+    use std::task::{Context, Poll, Waker};
+    let waker = Waker::from(std::sync::Arc::new(Unpark(std::thread::current())));
+    let mut cx = Context::from_waker(&waker);
+    let mut f = std::pin::pin!(f);
+    loop {
+        if let Poll::Ready(v) = f.as_mut().poll(&mut cx) {
+            return Some(v);
+        }
+        let now = Instant::now();
+        if now >= deadline {
+            return None;
+        }
+        // Wakes early on unpark (or spuriously); the loop just polls again.
+        std::thread::park_timeout(deadline - now);
+    }
 }
 
 impl Wire for UsbWire {
     fn send(&mut self, bytes: &[u8]) -> Result<(), String> {
         self.out_q.submit(bytes.to_vec());
-        let deadline = Instant::now() + Duration::from_secs(2);
-        loop {
-            if let Some(c) = poll_now(self.out_q.next_complete()) {
-                return c.status.map_err(|e| format!("USB write failed: {e}"));
-            }
-            if Instant::now() >= deadline {
-                self.out_q.cancel_all();
-                // Collect the cancelled transfer now, or the next send would take its
-                // "cancelled" result for its own.
-                let until = Instant::now() + Duration::from_millis(500);
-                while self.out_q.pending() > 0 && Instant::now() < until {
-                    if poll_now(self.out_q.next_complete()).is_none() {
-                        std::thread::sleep(Duration::from_millis(1));
-                    }
-                }
-                return Err("USB write timed out".into());
-            }
-            std::thread::sleep(Duration::from_millis(1));
+        if let Some(c) = wait_until(self.out_q.next_complete(), Instant::now() + Duration::from_secs(2)) {
+            return c.status.map_err(|e| format!("USB write failed: {e}"));
         }
+        self.out_q.cancel_all();
+        // Collect the cancelled transfer now, or the next send would take its
+        // "cancelled" result for its own.
+        let until = Instant::now() + Duration::from_millis(500);
+        while self.out_q.pending() > 0 && wait_until(self.out_q.next_complete(), until).is_some() {}
+        Err("USB write timed out".into())
     }
 
     fn recv(&mut self, timeout: Duration) -> Result<Vec<u8>, String> {
-        let deadline = Instant::now() + timeout;
-        loop {
-            if let Some(c) = poll_now(self.in_q.next_complete()) {
-                let data = c.data;
-                // Always keep one read waiting, even after a failed one: an empty queue
-                // would leave every later read with nothing to wait on.
-                self.in_q.submit(nusb::transfer::RequestBuffer::new(512));
-                if let Err(e) = c.status {
-                    return Err(format!("USB read failed: {e}"));
-                }
-                return Ok(data);
-            }
-            if Instant::now() >= deadline {
-                return Err(TIMEOUT.into());
-            }
-            std::thread::sleep(Duration::from_millis(1));
-        }
+        let c = wait_until(self.in_q.next_complete(), Instant::now() + timeout).ok_or_else(|| TIMEOUT.to_string())?;
+        let data = c.data;
+        // Always keep one read waiting, even after a failed one: an empty queue
+        // would leave every later read with nothing to wait on.
+        self.in_q.submit(nusb::transfer::RequestBuffer::new(512));
+        c.status.map_err(|e| format!("USB read failed: {e}"))?;
+        Ok(data)
     }
 
     fn describe(&self) -> String {
@@ -145,7 +154,6 @@ pub struct BoxWire {
     name: String,
     ws: tungstenite::WebSocket<TcpStream>,
     last_sent: Instant,
-    pub product: String,
 }
 
 impl BoxWire {
@@ -209,7 +217,6 @@ impl BoxWire {
             name: format!("{product} via {label}"),
             ws,
             last_sent: Instant::now(),
-            product,
         })
     }
 }
@@ -291,5 +298,55 @@ impl Drop for BoxWire {
     fn drop(&mut self) {
         let _ = self.ws.close(None);
         let _ = self.ws.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+    use std::task::{Context, Poll, Waker};
+
+    /// Ready once another thread says so, waking whoever waits.
+    #[derive(Default)]
+    struct Flag {
+        done: bool,
+        waker: Option<Waker>,
+    }
+    struct Waiting(Arc<Mutex<Flag>>);
+    impl std::future::Future for Waiting {
+        type Output = ();
+        fn poll(self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+            let mut f = self.0.lock().unwrap();
+            if f.done {
+                Poll::Ready(())
+            } else {
+                f.waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+        }
+    }
+
+    #[test]
+    fn wait_until_wakes_on_completion_and_gives_up_at_the_deadline() {
+        let flag = Arc::new(Mutex::new(Flag::default()));
+        let other = flag.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(50));
+            let mut f = other.lock().unwrap();
+            f.done = true;
+            if let Some(w) = f.waker.take() {
+                w.wake();
+            }
+        });
+        let t = Instant::now();
+        assert_eq!(wait_until(Waiting(flag), t + Duration::from_secs(5)), Some(()));
+        let took = t.elapsed();
+        assert!(took >= Duration::from_millis(40) && took < Duration::from_secs(2), "{took:?}");
+
+        let never = Arc::new(Mutex::new(Flag::default()));
+        let t = Instant::now();
+        assert_eq!(wait_until(Waiting(never), t + Duration::from_millis(60)), None);
+        assert!(t.elapsed() >= Duration::from_millis(60));
     }
 }

@@ -95,12 +95,32 @@ pub enum Event {
 pub struct Link {
     pub tx: Sender<Cmd>,
     pub rx: Receiver<Event>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl Link {
+    /// Ask the pedal thread to stop and wait up to `limit` for it, so a write in progress
+    /// finishes and the USB / box link is closed cleanly. True when it has stopped.
+    pub fn shut_down(&mut self, limit: Duration) -> bool {
+        let _ = self.tx.send(Cmd::Disconnect);
+        let Some(t) = self.thread.take() else { return true };
+        let until = std::time::Instant::now() + limit;
+        while !t.is_finished() && std::time::Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        if t.is_finished() {
+            let _ = t.join();
+            true
+        } else {
+            false
+        }
+    }
 }
 
 pub fn connect(target: Target, repaint: impl Fn() + Send + 'static) -> Link {
     let (cmd_tx, cmd_rx) = channel::<Cmd>();
     let (ev_tx, ev_rx) = channel::<Event>();
-    std::thread::spawn(move || {
+    let thread = std::thread::spawn(move || {
         let send = |e: Event| {
             let _ = ev_tx.send(e);
             repaint();
@@ -123,7 +143,7 @@ pub fn connect(target: Target, repaint: impl Fn() + Send + 'static) -> Link {
         send(Event::Connected(s.describe()));
         run(&mut s, &cmd_rx, &send);
     });
-    Link { tx: cmd_tx, rx: ev_rx }
+    Link { tx: cmd_tx, rx: ev_rx, thread: Some(thread) }
 }
 
 fn refresh(s: &mut Session, send: &dyn Fn(Event)) -> Result<i64, String> {

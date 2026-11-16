@@ -40,9 +40,6 @@ pub struct Family {
     pub fx_loops: i64,
 }
 
-pub const EXP1: i64 = 1;
-pub const EXP2: i64 = 2;
-
 /// The units a preset can be made for: (device number, name).
 pub const UNITS: [(i64, &str); 6] = [
     (2162694, "HX Stomp"),
@@ -125,24 +122,6 @@ pub fn family(doc: &Value) -> Family {
 
 pub fn device(doc: &Value) -> i64 {
     doc.pointer("/data/device").and_then(Value::as_i64).unwrap_or(2162694)
-}
-
-/// Change which unit a preset is for. Units without parallel lanes get their
-/// lower-lane blocks moved onto the main lane where there is room.
-pub fn set_device(doc: &mut Value, device: i64) {
-    if let Some(d) = doc.pointer_mut("/data").and_then(Value::as_object_mut) {
-        d.insert("device".into(), json!(device));
-    }
-    let f = family_of_device(device);
-    if !f.lanes {
-        for b in hlx::blocks(doc).into_iter().filter(|b| b.path == 1 && b.key.starts_with("block")) {
-            let taken: Vec<i64> = hlx::blocks(doc).iter().filter(|x| x.dsp == b.dsp && x.path == 0).map(|x| x.position).collect();
-            if let Some(free) = (0..hlx::POSITIONS).find(|p| !taken.contains(p)) {
-                hlx::move_to(doc, &b, 0, free);
-            }
-        }
-        crate::hlx::clear_split(doc);
-    }
 }
 
 /// What drives a knob, as the person sees it.
@@ -595,6 +574,25 @@ pub fn set_footswitch(doc: &mut Value, b: &HlxBlock, index: Option<i64>, momenta
     }
 }
 
+
+/// Change which unit a preset is for. Units without parallel lanes get their
+/// lower-lane blocks moved onto the main lane where there is room.
+#[cfg(test)]
+pub fn set_device(doc: &mut Value, device: i64) {
+    if let Some(d) = doc.pointer_mut("/data").and_then(Value::as_object_mut) {
+        d.insert("device".into(), json!(device));
+    }
+    let f = family_of_device(device);
+    if !f.lanes {
+        for b in hlx::blocks(doc).into_iter().filter(|b| b.path == 1 && b.key.starts_with("block")) {
+            let taken: Vec<i64> = hlx::blocks(doc).iter().filter(|x| x.dsp == b.dsp && x.path == 0).map(|x| x.position).collect();
+            if let Some(free) = (0..hlx::POSITIONS).find(|p| !taken.contains(p)) {
+                hlx::move_to(doc, &b, 0, free);
+            }
+        }
+        crate::hlx::clear_split(doc);
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

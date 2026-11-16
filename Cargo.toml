@@ -12,7 +12,6 @@ serde_json = { version = "1", features = ["preserve_order"] }
 tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 mdns-sd = "0.13"
 nusb = "0.1"
-futures-lite = "2"
 rfd = "0.15"
 png = "0.17"
 ureq = { version = "2", default-features = false, features = ["json"] }

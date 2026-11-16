@@ -76,14 +76,14 @@ pub fn apply(ctx: &egui::Context) {
     v.faint_bg_color = card_bg();
     v.override_text_color = Some(TEXT);
     v.selection.bg_fill = accent().linear_multiply(0.45);
-    v.selection.stroke = Stroke::new(1.0, accent());
+    v.selection.stroke = Stroke::new(1.0_f32, accent());
     v.hyperlink_color = accent();
     v.window_corner_radius = CornerRadius::same(10);
     v.menu_corner_radius = CornerRadius::same(8);
-    v.window_stroke = Stroke::new(1.0, line());
+    v.window_stroke = Stroke::new(1.0_f32, line());
     let r = CornerRadius::same(6);
     v.widgets.noninteractive.bg_fill = card_bg();
-    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, line());
+    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, line());
     v.widgets.noninteractive.corner_radius = r;
     v.widgets.inactive.bg_fill = card_hi();
     v.widgets.inactive.weak_bg_fill = card_hi();
@@ -121,8 +121,6 @@ pub fn apply(ctx: &egui::Context) {
 pub enum Logo {
     /// The helix mark from the square logo, for the top bar.
     MarkSquare,
-    /// The long helix without the name.
-    Wide,
     /// The helix with "ToneStrand" under it.
     WithName,
     /// The square logo, for the window icon.
@@ -132,7 +130,6 @@ pub enum Logo {
 pub fn logo_bytes(which: Logo) -> &'static [u8] {
     match which {
         Logo::MarkSquare => include_bytes!("../assets/logos/mark-square.png"),
-        Logo::Wide => include_bytes!("../assets/logos/mark-wide.png"),
         Logo::WithName => include_bytes!("../assets/logos/logo-name.png"),
         Logo::Square => include_bytes!("../assets/logos/icon-256.png"),
     }
@@ -164,7 +161,7 @@ pub fn window_icon() -> Option<egui::IconData> {
 pub fn card<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     egui::Frame::new()
         .fill(card_bg())
-        .stroke(Stroke::new(1.0, line()))
+        .stroke(Stroke::new(1.0_f32, line()))
         .corner_radius(CornerRadius::same(10))
         .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
@@ -237,7 +234,7 @@ pub fn segmented(ui: &mut egui::Ui, labels: &[&str], current: usize) -> Option<u
 pub fn pill(ui: &mut egui::Ui, text: &str, colour: Color32) {
     egui::Frame::new()
         .fill(colour.linear_multiply(0.18))
-        .stroke(Stroke::new(1.0, colour.linear_multiply(0.7)))
+        .stroke(Stroke::new(1.0_f32, colour.linear_multiply(0.7)))
         .corner_radius(CornerRadius::same(9))
         .inner_margin(egui::Margin::symmetric(8, 2))
         .show(ui, |ui| {

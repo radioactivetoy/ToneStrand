@@ -17,9 +17,7 @@ const DATA: &str = include_str!("../assets/helixhelp/models.json");
 #[derive(Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Info {
-    pub name: Option<String>,
     pub image: Option<String>,
-    pub category: Option<String>,
     pub based_on: Option<String>,
     pub description: Option<String>,
     pub notable_users: Option<String>,
@@ -97,52 +95,6 @@ fn image(ui: &mut egui::Ui, tex: &egui::TextureHandle, max: Vec2) {
     let size = tex.size_vec2();
     let scale = (max.x / size.x).min(max.y / size.y).min(1.5);
     ui.add(egui::Image::new(tex).fit_to_exact_size(size * scale));
-}
-
-/// The block panel's "about" strip: photo, what it is based on, and (folded) the description.
-pub fn about(ui: &mut egui::Ui, symbol: &str) {
-    let Some(i) = info(symbol) else { return };
-    let tex = photo(ui.ctx(), symbol);
-    if tex.is_none() && i.based_on.is_none() && i.description.is_none() {
-        return;
-    }
-    ui.add_space(4.0);
-    egui::Frame::new().fill(bg()).corner_radius(egui::CornerRadius::same(8)).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.horizontal_top(|ui| {
-            if let Some(t) = &tex {
-                image(ui, t, Vec2::new(150.0, 90.0));
-                ui.add_space(8.0);
-            }
-            ui.vertical(|ui| {
-                if let Some(b) = &i.based_on {
-                    ui.label(RichText::new(format!("Based on {b}")).strong());
-                }
-                let more = i.description.is_some() || i.notable_users.is_some();
-                if more {
-                    let first = i.description.as_deref().and_then(|d| d.split("\n\n").next()).unwrap_or("");
-                    if !first.is_empty() {
-                        let short: String = if first.chars().count() > 220 { first.chars().take(220).collect::<String>() + "…" } else { first.to_owned() };
-                        ui.label(RichText::new(short).color(MUTED));
-                    }
-                    egui::CollapsingHeader::new(RichText::new("More about this model").small()).id_salt(("about", symbol)).default_open(false).show(ui, |ui| {
-                        if let Some(d) = &i.description {
-                            ui.label(d);
-                        }
-                        if let Some(n) = &i.notable_users {
-                            ui.add_space(4.0);
-                            ui.label(RichText::new("Notable players").small().strong().color(MUTED));
-                            ui.label(n);
-                        }
-                        ui.add_space(2.0);
-                        ui.label(RichText::new("Source: Line 6 release notes, via helixhelp.com").small().color(MUTED));
-                    });
-                } else if tex.is_some() {
-                    ui.label(RichText::new(i.category.clone().unwrap_or_default()).color(MUTED));
-                }
-            });
-        });
-    });
 }
 
 /// "Based on ..." for a model, when known.
