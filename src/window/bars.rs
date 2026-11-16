@@ -379,6 +379,8 @@ impl App {
     }
 
     pub(super) fn status_bar(&mut self, ctx: &egui::Context) {
+        let mut copied = false;
+        let mut save = false;
         egui::TopBottomPanel::bottom("status")
             .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin::symmetric(14, 6)))
             .show(ctx, |ui| {
@@ -394,6 +396,17 @@ impl App {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.menu_button("Activity", |ui| {
                             ui.set_min_width(440.0);
+                            ui.horizontal(|ui| {
+                                if ui.small_button("Copy").on_hover_text("Copy the log, for a bug report").clicked() {
+                                    ui.ctx().copy_text(self.log_text());
+                                    copied = true;
+                                    ui.close_menu();
+                                }
+                                if ui.small_button("Save...").on_hover_text("Save the log as a text file").clicked() {
+                                    save = true;
+                                    ui.close_menu();
+                                }
+                            });
                             egui::ScrollArea::vertical().max_height(320.0).stick_to_bottom(true).show(ui, |ui| {
                                 for (lvl, msg) in &self.log {
                                     ui.label(RichText::new(msg).color(level_colour(*lvl, TEXT)));
@@ -403,6 +416,31 @@ impl App {
                     });
                 });
             });
+        if copied {
+            self.note(LogLevel::Good, "Log copied");
+        }
+        if save {
+            self.save_log();
+        }
+    }
+
+    /// The activity log as plain text, with the program version and the pedal, for a bug report.
+    fn log_text(&self) -> String {
+        let mut out = format!("ToneStrand {}\nPedal: {}\n\n", env!("CARGO_PKG_VERSION"), self.connected.as_deref().unwrap_or("not connected"));
+        for (_, msg) in &self.log {
+            out.push_str(msg);
+            out.push('\n');
+        }
+        out
+    }
+
+    /// "Save..." in the Activity list: the log as a text file.
+    fn save_log(&mut self) {
+        let Some(path) = rfd::FileDialog::new().set_directory(&self.library_dir).set_file_name("ToneStrand log.txt").add_filter("Text", &["txt"]).save_file() else { return };
+        match crate::files::write_atomic(&path, self.log_text().as_bytes()) {
+            Ok(_) => self.note(LogLevel::Good, format!("Saved the log to {}", path.display())),
+            Err(e) => self.note(LogLevel::Bad, format!("Could not save the log: {e}")),
+        }
     }
 
     pub(super) fn left_panel(&mut self, ctx: &egui::Context) {
