@@ -330,6 +330,12 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
         return;
     }
     let slots = preset.slots();
+    // Nothing picked yet (just opened): show the amp's knobs, or else the first effect's.
+    if selected.is_none() {
+        let blocks = || slots.iter().enumerate().filter(|(_, s)| s.kind == Kind::Block && s.model.is_some());
+        let is_amp = |s: &SlotView| cat.zip(s.model).is_some_and(|(c, m)| c.category_name(m).starts_with("Amp"));
+        *selected = blocks().find(|(_, s)| is_amp(s)).or_else(|| blocks().next()).map(|(i, _)| i);
+    }
 
     let Some(sel) = selected.filter(|s| *s < slots.len()) else {
         ui.add_space(20.0);

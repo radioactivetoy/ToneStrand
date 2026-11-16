@@ -228,7 +228,7 @@ impl App {
                         theme::section(ui, "Behaviour");
                         changed |= ui.checkbox(&mut self.settings.confirm_pedal, "Ask before writing to or clearing a slot on the pedal").changed();
                         changed |= ui.checkbox(&mut self.settings.confirm_delete, "Ask before deleting a preset file").changed();
-                        changed |= ui.checkbox(&mut self.settings.show_sample, "Open the sample preset at start").changed();
+                        changed |= ui.checkbox(&mut self.settings.show_sample, "Open the sample preset at every start").changed();
                         changed |= ui.checkbox(&mut self.settings.start_in_library, "Start on the library page").changed();
                         ui.horizontal(|ui| {
                             changed |= ui.checkbox(&mut self.settings.auto_reconnect, "Connect again when a USB pedal is plugged back in").changed();

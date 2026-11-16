@@ -43,8 +43,10 @@ pub struct Settings {
     pub confirm_pedal: bool,
     /// Ask before deleting a preset file from the library.
     pub confirm_delete: bool,
-    /// Open the sample preset when the app starts.
+    /// Open the sample preset when the app starts. Switched off after the first start.
     pub show_sample: bool,
+    /// The sample preset has been opened once (so it is not opened again unless asked for).
+    pub sample_seen: bool,
     /// Start on the library page instead of the editor.
     pub start_in_library: bool,
     /// Look for Helrig Boxes on the network automatically.
@@ -85,6 +87,7 @@ impl Default for Settings {
             confirm_pedal: true,
             confirm_delete: true,
             show_sample: true,
+            sample_seen: false,
             start_in_library: false,
             discover_boxes: true,
             ui_scale: 1.0,

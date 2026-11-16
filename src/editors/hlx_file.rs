@@ -146,6 +146,11 @@ pub fn hlx_editor(
         .filter_map(|b| hlx::block(json, b).and_then(|o| o.get("@cab")).and_then(|v| v.as_str()).map(|c| format!("{}/{c}", b.dsp)))
         .collect();
     let blocks: Vec<hlx::HlxBlock> = all.into_iter().filter(|b| !riding.contains(&format!("{}/{}", b.dsp, b.key))).collect();
+    // Nothing picked yet (just opened): show the amp's knobs, or else the first effect's.
+    if selected.is_none() {
+        let is_amp = |b: &hlx::HlxBlock| cat.and_then(|c| c.category_of_symbol(&b.model)).is_some_and(|(n, _)| n.starts_with("Amp"));
+        *selected = blocks.iter().position(is_amp).or(if blocks.is_empty() { None } else { Some(0) });
+    }
     let dsps: Vec<String> = hlx::dsps(json).into_iter().take(unit.paths).collect();
     // Only a path that is really split shows its lower lane.
     let splits: Vec<Option<(String, i64, i64)>> =

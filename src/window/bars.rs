@@ -58,14 +58,18 @@ impl App {
     /// "Open file..." and the list of recent files beside it (for a right-to-left bar: the
     /// list comes out to the left of the button).
     pub(super) fn open_controls(&mut self, ui: &mut egui::Ui) {
-        if ui.button("Open file...").on_hover_text("Open a preset file (Ctrl+O)").clicked() {
-            self.open_file_dialog();
-        }
         let recent = self.settings.recent.clone();
         let mut open = None;
         let mut clear = false;
-        ui.add_enabled_ui(!recent.is_empty(), |ui| {
-            ui.menu_button("Recent", |ui| {
+        let mut dialog = false;
+        ui.menu_button("Open", |ui| {
+            if ui.button("Open file...  (Ctrl+O)").on_hover_text("Open a preset file").clicked() {
+                dialog = true;
+                ui.close_menu();
+            }
+            if !recent.is_empty() {
+                ui.separator();
+                ui.label(RichText::new("Recent").small().color(MUTED));
                 for p in &recent {
                     let path = Path::new(p);
                     let name = path.file_name().and_then(|s| s.to_str()).unwrap_or(p);
@@ -79,11 +83,13 @@ impl App {
                     clear = true;
                     ui.close_menu();
                 }
-            })
-            .response
-            .on_hover_text("Presets you opened lately")
-            .on_disabled_hover_text("No presets opened yet");
-        });
+            }
+        })
+        .response
+        .on_hover_text("Open a preset file, or one you opened lately (Ctrl+O)");
+        if dialog {
+            self.open_file_dialog();
+        }
         if let Some(p) = open {
             let path = PathBuf::from(&p);
             if path.is_file() {
@@ -163,7 +169,11 @@ impl App {
                         }
                         let mut pick = None;
                         let locked = self.connected.is_some();
-                        ui.add_enabled_ui(!locked, |ui| {
+                        if locked {
+                            // Connected: the pedal decides, so plain text, not a greyed-out menu.
+                            ui.label(RichText::new(crate::units::unit_name(self.unit)).strong())
+                                .on_hover_text("Detected from the connected pedal");
+                        } else {
                             egui::ComboBox::from_id_salt("app-unit")
                                 .selected_text(RichText::new(crate::units::unit_name(self.unit)).strong())
                                 .show_ui(ui, |ui| {
@@ -174,9 +184,8 @@ impl App {
                                     }
                                 })
                                 .response
-                                .on_hover_text("New presets are made for this unit and opened presets are converted to it")
-                                .on_disabled_hover_text("Detected from the connected pedal");
-                        });
+                                .on_hover_text("New presets are made for this unit and opened presets are converted to it");
+                        }
                         if let Some(d) = pick {
                             self.set_unit(d);
                         }

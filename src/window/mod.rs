@@ -312,7 +312,15 @@ impl App {
         // The box by its .local name, in case the network search misses it.
         boxes::lookup_local_names(tx_local);
 
-        if app.settings.show_sample {
+        // The sample preset is for the first start; after that only if it is asked for again
+        // in Settings. (Pictures of the pages (--screenshot) always have it, and change nothing.)
+        let open_sample = app.settings.show_sample || app.screenshot.is_some();
+        if !app.settings.sample_seen && app.screenshot.is_none() {
+            app.settings.sample_seen = true;
+            app.settings.show_sample = false;
+            app.settings.save();
+        }
+        if open_sample {
             app.docs.push(Doc {
                 title: "Sample Tone".into(),
                 name: String::new(),
