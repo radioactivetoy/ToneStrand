@@ -41,7 +41,10 @@ Offline builds work once the crates are in the local cache: `cargo build --offli
 
 - `vendor/webbrowser`: a small stand-in that opens links with the system's default handler
   (Windows `ShellExecuteW`, macOS `open`, Linux `xdg-open`). The published crate links
-  `shlwapi`, which the self-contained GNU toolchain doesn't ship.
+  `shlwapi`, which the self-contained GNU toolchain doesn't ship. **When it can go:** on the
+  MSVC toolchain (`x86_64-pc-windows-msvc`) `shlwapi` is available, so remove the `webbrowser`
+  line under `[patch.crates-io]` in `Cargo.toml` and delete this folder; then build once with
+  the MSVC toolchain and check that a link in the window still opens. Keep it for GNU builds.
 - `vendor/autocfg`: a copy of the upstream crate, kept so offline builds resolve.
 
 If you prefer the upstream crates, remove the `[patch.crates-io]` section and the `vendor/`

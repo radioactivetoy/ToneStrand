@@ -299,6 +299,9 @@ struct CmdSpec {
     fields: Vec<FieldSpec>,
 }
 
+/// Longest footswitch label the pedal shows.
+const FS_LABEL_MAX: usize = 16;
+
 const MMC_MSGS: [&str; 8] = ["Stop", "Play", "Forward", "Rewind", "Pause", "Record", "Punch In", "Punch Out"];
 const MODIFIERS: [&str; 5] = ["None", "Shift", "Alt", "Ctrl", "Win/Cmd"];
 const LOOPER_FNS: [&str; 14] = [
@@ -854,10 +857,11 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                     ui.add_space(12.0);
                     ui.label(RichText::new("Switch label").color(MUTED));
                     let mut lbl = map.get("@fs_label").and_then(serde_json::Value::as_str).unwrap_or("").to_owned();
-                    if ui.add(egui::TextEdit::singleline(&mut lbl).desired_width(120.0).char_limit(16)).changed() {
+                    if ui.add(egui::TextEdit::singleline(&mut lbl).desired_width(120.0).char_limit(FS_LABEL_MAX)).changed() {
                         set_slot_field(json, &slot.key, cur_snap, "@fs_label", serde_json::json!(lbl));
                         *dirty = true;
                     }
+                    theme::name_hint(ui, &lbl, FS_LABEL_MAX);
                 }
             });
 

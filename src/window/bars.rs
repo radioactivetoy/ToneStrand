@@ -328,7 +328,7 @@ impl App {
     }
 
     pub(super) fn left_panel(&mut self, ctx: &egui::Context) {
-        egui::SidePanel::left("left")
+        let shown = egui::SidePanel::left("left")
             .resizable(true)
             .default_width(330.0)
             .min_width(280.0)
@@ -340,5 +340,6 @@ impl App {
                     self.pedal_card(ui);
                 });
             });
+        self.left_rect = shown.response.rect;
     }
 }

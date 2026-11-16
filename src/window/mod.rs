@@ -171,6 +171,8 @@ pub struct App {
     view: View,
     lib: Library,
     pending_delete: Option<PathBuf>,
+    /// Where the preset list on the left was drawn last frame (F2 renames what the pointer is over).
+    left_rect: egui::Rect,
     close_ask: Option<CloseAsk>,
     /// The person chose to quit even with unsaved changes.
     quit_ok: bool,
@@ -276,6 +278,7 @@ impl App {
             view: View::Editor,
             lib: Library::new(PathBuf::new()),
             pending_delete: None,
+            left_rect: egui::Rect::NOTHING,
             close_ask: None,
             quit_ok: false,
             last_error: None,
@@ -596,6 +599,9 @@ impl App {
             return;
         }
         let ctrl = egui::Modifiers::COMMAND;
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F2)) {
+            self.rename_here(ctx);
+        }
         let (close, open, new, prev, next) = ctx.input_mut(|i| {
             (
                 i.consume_key(ctrl, egui::Key::W),
@@ -625,6 +631,30 @@ impl App {
             self.active = (here + n - 1) % n;
         } else if next {
             self.active = (here + 1) % n;
+        }
+    }
+
+    /// F2: rename what is at hand. On the IRs page, the one IR picked on the pedal; in the
+    /// editor, the chosen pedal preset when the pointer is over the preset list, else the
+    /// open preset (its name box gets the focus, with the name selected).
+    fn rename_here(&mut self, ctx: &egui::Context) {
+        match self.view {
+            View::Irs if !self.irs_local && self.ir_sel.len() == 1 => {
+                let slot = *self.ir_sel.iter().next().expect("one picked");
+                if let Some(name) = self.irs.as_ref().and_then(|l| l.iter().find(|(s, _)| *s == slot)).map(|(_, n)| n.clone()) {
+                    self.ir_rename = Some((slot, name));
+                }
+            }
+            View::Editor => {
+                let over_list = ctx.input(|i| i.pointer.hover_pos()).is_some_and(|p| self.left_rect.contains(p));
+                let slot = self.chosen.filter(|_| self.connected.is_some() && over_list);
+                if let Some(i) = slot {
+                    self.rename = Some((self.setlist, i, self.presets.get(i).cloned().unwrap_or_default()));
+                } else if !self.docs.is_empty() {
+                    ctx.data_mut(|d| d.insert_temp(egui::Id::new("focus-doc-name"), true));
+                }
+            }
+            _ => {}
         }
     }
 
@@ -1154,6 +1184,7 @@ impl App {
                 DocKind::Hlx { json } => {
                     let mut name = hlx::name(json);
                     let r = ui.add(egui::TextEdit::singleline(&mut name).font(font).desired_width(w));
+                    focus_if_asked(ui, &r, name.chars().count());
                     if r.has_focus() {
                         theme::name_hint(ui, &name, crate::session::PRESET_NAME_MAX);
                     }
@@ -1170,6 +1201,7 @@ impl App {
                     let r = ui
                         .add(egui::TextEdit::singleline(&mut doc.name).font(font).desired_width(w).char_limit(crate::session::PRESET_NAME_MAX))
                         .on_hover_text("The name it gets on the pedal when you write or save it");
+                    focus_if_asked(ui, &r, doc.name.chars().count());
                     if r.has_focus() {
                         theme::name_hint(ui, &doc.name, crate::session::PRESET_NAME_MAX);
                     }
@@ -1614,6 +1646,20 @@ struct IrPlan {
     /// The person says their pedal runs the NAM A2 Lite firmware (needed for captures).
     firmware_ok: bool,
 }
+/// After F2: give the preset's name box the focus with the whole name selected.
+fn focus_if_asked(ui: &egui::Ui, r: &egui::Response, len: usize) {
+    let flag = egui::Id::new("focus-doc-name");
+    if !ui.data_mut(|d| d.remove_temp::<bool>(flag)).unwrap_or(false) {
+        return;
+    }
+    r.request_focus();
+    if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), r.id) {
+        let all = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(len));
+        state.cursor.set_char_range(Some(all));
+        state.store(ui.ctx(), r.id);
+    }
+}
+
 /// A sidebar section: a card under a small capital heading.
 fn side_section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     ui.add_space(4.0);
