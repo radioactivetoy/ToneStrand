@@ -117,12 +117,18 @@ taken down promptly.
   ToneStrand and have not endorsed either. The names are used only to describe the sound each
   model is designed to recall, and in this project's own words.
 - Helrig Box is the name of its makers' product and is used only to say ToneStrand works with it.
+  See the box's build guide at [box.helrig.com](https://box.helrig.com/), its repository
+  [maveric1977/helrig-box](https://github.com/maveric1977/helrig-box), and the open-source
+  [ToneRelay](https://github.com/mpeskett88/ToneRelay) Wi-Fi relay by Mark Peskett that its
+  firmware is built on.
 
 ### Other sources
 
 - The NAM converter follows the published file layout of
   [hx-stomp-nam-lite](https://github.com/nocaseguy/hx-stomp-nam-lite) (GPL-3; layout read, no
-  code copied). The Helrig Box relay follows the box's public relay protocol description (MIT).
+  code copied). The Helrig Box relay follows the box's public relay protocol description (MIT); see the
+  [helrig-box](https://github.com/maveric1977/helrig-box) and
+  [ToneRelay](https://github.com/mpeskett88/ToneRelay) projects.
 
 ## License
 

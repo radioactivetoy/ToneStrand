@@ -21,6 +21,11 @@ Implemented in `wire.rs` (`UsbWire`, pure-Rust `nusb`).
 
 ### Helrig Box
 
+The box is a DIY build: guide at https://box.helrig.com/, repository
+https://github.com/maveric1977/helrig-box, built on the open-source ToneRelay Wi-Fi relay by
+Mark Peskett (https://github.com/mpeskett88/ToneRelay). This section follows their relay
+protocol; credit for the box and the protocol is theirs.
+
 | Rule | Value |
 |---|---|
 | Discovery | mDNS service types `_helrigbox._tcp.local.` and `_tonerelay._tcp.local.`; fallback names `helrigbox.local`, `tonerelay.local` |
