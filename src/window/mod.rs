@@ -179,6 +179,8 @@ pub struct App {
     errors_unseen: usize,
     /// The keyboard shortcuts window is open (F1).
     show_shortcuts: bool,
+    /// When a live change was last sent to the pedal (shows "sent" for a moment).
+    last_live_send: Option<Instant>,
     close_ask: Option<CloseAsk>,
     /// The person chose to quit even with unsaved changes.
     quit_ok: bool,
@@ -288,6 +290,7 @@ impl App {
             window_seen: None,
             errors_unseen: 0,
             show_shortcuts: false,
+            last_live_send: None,
             close_ask: None,
             quit_ok: false,
             last_error: None,
@@ -396,6 +399,19 @@ impl App {
 
     fn send(&mut self, cmd: Cmd) {
         if let Some(l) = &self.link {
+            if matches!(
+                cmd,
+                Cmd::SetParam { .. }
+                    | Cmd::SetEnabled { .. }
+                    | Cmd::SetModel { .. }
+                    | Cmd::AddBlock { .. }
+                    | Cmd::ReplaceBlock { .. }
+                    | Cmd::ClearBlock { .. }
+                    | Cmd::MoveBlock { .. }
+                    | Cmd::Snapshot(_)
+            ) {
+                self.last_live_send = Some(Instant::now());
+            }
             let _ = l.tx.send(cmd);
         } else {
             self.note(LogLevel::Bad, "Not connected to a pedal.");
@@ -1119,6 +1135,7 @@ impl App {
         }
 
         self.catalog_card(ctx);
+        self.getting_started_card(ctx);
         if !self.docs.is_empty() {
             return self.studio_central(ctx);
         }
@@ -1133,6 +1150,62 @@ impl App {
                 ui.label(RichText::new("Open a file, start a new preset, or edit one from the pedal.").color(MUTED));
             });
         });
+    }
+
+    /// A short "Getting started" card on the editor page until the person has connected a pedal
+    /// once (or dismisses it): three steps, with what the program can already see.
+    fn getting_started_card(&mut self, ctx: &egui::Context) {
+        if self.settings.hide_getting_started || self.connected.is_some() || self.screenshot.is_some() {
+            return;
+        }
+        let mut hide = false;
+        let found_usb = self.usb.first().map(|p| p.product.clone());
+        let found_box = self.boxes.first().map(|b| if b.name.is_empty() { b.host.clone() } else { b.name.clone() });
+        egui::TopBottomPanel::top("getting-started")
+            .show_separator_line(false)
+            .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin { left: 14, right: 14, top: 10, bottom: 0 }))
+            .show(ctx, |ui| {
+                theme::card(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.label(RichText::new("Getting started").size(16.0).strong());
+                    let step = |ui: &mut egui::Ui, n: &str, text: &str, note: Option<(String, Color32)>| {
+                        ui.horizontal_wrapped(|ui| {
+                            ui.label(RichText::new(n).monospace().color(accent()));
+                            ui.label(text);
+                            if let Some((t, c)) = note {
+                                theme::pill(ui, &t, c);
+                            }
+                        });
+                    };
+                    let hx = if self.catalog.is_some() { ("HX Edit found".to_owned(), GOOD) } else { ("not found yet".to_owned(), ORANGE) };
+                    step(ui, "1", "Install Line 6's HX Edit on this computer (ToneStrand reads the effect names from it).", Some(hx));
+                    let seen = match (found_usb, found_box) {
+                        (Some(p), _) => Some((format!("{p} on USB"), GOOD)),
+                        (None, Some(b)) => Some((format!("{b} on the network"), GOOD)),
+                        _ => None,
+                    };
+                    step(
+                        ui,
+                        "2",
+                        "Plug the pedal into a USB port, or switch on a Helrig Box and pair it (Pair, then press BOOT on the box).",
+                        seen,
+                    );
+                    step(ui, "3", "Click the pedal button at the top (\"not connected\"), then Connect.", None);
+                    ui.add_space(2.0);
+                    ui.horizontal(|ui| {
+                        if ui.button("Got it").on_hover_text("Hide this card for good").clicked() {
+                            hide = true;
+                        }
+                        ui.label(
+                            RichText::new("You can also work on preset files without a pedal: New preset or Open.").small().color(MUTED),
+                        );
+                    });
+                });
+            });
+        if hide {
+            self.settings.hide_getting_started = true;
+            self.settings.save();
+        }
     }
 
     /// Without HX Edit's files there are no effect names, ranges or pictures: say so on the
@@ -1274,6 +1347,7 @@ impl App {
         let chosen_name = chosen.and_then(|c| self.presets.get(c).cloned()).unwrap_or_default();
         let setlist = self.setlist;
         let backup = self.backup_dir();
+        let sent_recently = self.last_live_send.is_some_and(|t| t.elapsed() < Duration::from_millis(1500));
         let mut cmds: Vec<Cmd> = Vec::new();
         let mut save = None;
         let mut confirm = None;
@@ -1387,6 +1461,20 @@ impl App {
                         cmds.push(Cmd::SaveCurrent { setlist: *sl, index: *index, name: name.clone() });
                         clean = true;
                     }
+                    // Live edits have no undo: this goes back to what the pedal has stored.
+                    if ui
+                        .add_enabled(connected, egui::Button::new("Revert"))
+                        .on_hover_text("Reload this preset from the pedal's memory and drop the live changes you haven't saved")
+                        .clicked()
+                    {
+                        *confirm = Some((
+                            format!(
+                                "Reload {} from the pedal's memory? Live changes you haven't saved on the pedal are lost.",
+                                slot_label((*index).max(0) as usize)
+                            ),
+                            Cmd::Select(*sl, *index),
+                        ));
+                    }
                 }
                 if let Origin::Slot { setlist: sl, index } = origin {
                     if ui.add_enabled(connected && doc.dirty, egui::Button::new("Write back to its slot")).clicked() {
@@ -1463,6 +1551,11 @@ impl App {
         match mode {
             1 => {
                 header(ui, doc, true);
+                if doc.is_live() && sent_recently {
+                    // A live change just went to the pedal (a failure shows in red in the status bar).
+                    ui.label(RichText::new("sent").small().color(GOOD));
+                    ui.ctx().request_repaint_after(Duration::from_millis(200));
+                }
                 undo_buttons(ui, doc, true, &mut history);
                 save_buttons(ui, true, &mut save);
             }

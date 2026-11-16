@@ -97,6 +97,10 @@ impl App {
         match e {
             Event::Connected(name) => {
                 self.last_error = None;
+                if !self.settings.hide_getting_started {
+                    self.settings.hide_getting_started = true;
+                    self.settings.save();
+                }
                 self.view = View::Editor;
                 self.connecting = false;
                 self.busy = None;
