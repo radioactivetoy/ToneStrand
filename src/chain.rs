@@ -231,10 +231,21 @@ fn draw_studio_block(ui: &egui::Ui, rect: Rect, look: StudioBlock) {
     }
     // The name, bold, at the bottom (two lines at most).
     let tc = if on { Color32::WHITE } else { MUTED };
-    let mut job = egui::text::LayoutJob::simple(title.to_owned(), egui::FontId::proportional(14.5), tc, rect.width() - 20.0);
-    job.wrap.max_rows = if detail.is_some() && !wide { 1 } else { 2 };
-    job.wrap.break_anywhere = false;
-    let g = p.layout_job(job);
+    // A long name steps down in size until it fits whole (the hover tip always has it in full).
+    let rows = if detail.is_some() && !wide { 1 } else { 2 };
+    let mut g = None;
+    for size in [14.5_f32, 13.5, 12.5, 11.5] {
+        let mut job = egui::text::LayoutJob::simple(title.to_owned(), egui::FontId::proportional(size), tc, rect.width() - 20.0);
+        job.wrap.max_rows = rows;
+        job.wrap.break_anywhere = false;
+        let laid = p.layout_job(job);
+        let fits = !laid.elided;
+        g = Some(laid);
+        if fits {
+            break;
+        }
+    }
+    let g = g.expect("at least one size was tried");
     let at = Pos2::new(rect.left() + 10.0, rect.bottom() - 9.0 - g.size().y);
     // A faint shadow behind the name keeps it readable on bright colours.
     p.galley_with_override_text_color(at + Vec2::new(0.0, 1.0), g.clone(), Color32::from_black_alpha(140));

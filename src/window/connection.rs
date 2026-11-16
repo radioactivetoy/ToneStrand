@@ -535,24 +535,30 @@ impl App {
                 if ui.button("Edit loaded preset (live)").on_hover_text("Changes are heard at once; Save on pedal keeps them").clicked() {
                     self.send(Cmd::ReadCurrent);
                 }
-                if ui
-                    .button("Back up everything...")
-                    .on_hover_text("Every setlist and all User IRs, into a new folder inside the one you pick")
-                    .clicked()
-                {
-                    if let Some(folder) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
-                        self.send(Cmd::FullBackup { folder });
+                ui.menu_button("Backups", |ui| {
+                    if ui.button("Back up this setlist...").on_hover_text("Save every preset of this setlist as files").clicked() {
+                        ui.close_menu();
+                        if let Some(folder) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
+                            let names = self.presets.clone();
+                            self.send(Cmd::Backup { setlist: self.setlist, count: self.presets.len(), folder, names });
+                        }
                     }
-                }
-                if ui.button("Back up all").on_hover_text("Save every preset of this setlist as files").clicked() {
-                    if let Some(folder) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
-                        let names = self.presets.clone();
-                        self.send(Cmd::Backup { setlist: self.setlist, count: self.presets.len(), folder, names });
+                    if ui
+                        .button("Back up the whole pedal...")
+                        .on_hover_text("Every setlist and all User IRs, into a new folder inside the one you pick")
+                        .clicked()
+                    {
+                        ui.close_menu();
+                        if let Some(folder) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
+                            self.send(Cmd::FullBackup { folder });
+                        }
                     }
-                }
-                if ui.button("Restore...").on_hover_text("Write a backed-up preset back into a slot").clicked() {
-                    self.open_restore();
-                }
+                    ui.separator();
+                    if ui.button("Restore a backed-up preset...").on_hover_text("Write a backed-up preset back into a slot").clicked() {
+                        ui.close_menu();
+                        self.open_restore();
+                    }
+                });
             });
             ui.add_space(4.0);
             let current_idx = self.current.as_ref().filter(|c| c.0 == self.setlist).map(|c| c.1);

@@ -12,7 +12,7 @@ pub(super) struct BackupFile {
     pub name: String,
     /// Unix seconds: from the file name when it has one, else the file's date.
     pub when: Option<u64>,
-    /// Made by a write ("before overwrite") rather than by "Back up all".
+    /// Made by a write ("before overwrite") rather than by "Back up this setlist".
     pub before_write: bool,
 }
 
@@ -40,7 +40,7 @@ pub(super) fn parse_slot_label(label: &str) -> Option<usize> {
 }
 
 /// Read a backup's file name: "<slot> <name> - before overwrite <secs>.hxpreset" (made by
-/// a write) or "<slot> <name>.hxpreset" (made by "Back up all"). The slot is None when the
+/// a write) or "<slot> <name>.hxpreset" (made by "Back up this setlist"). The slot is None when the
 /// name doesn't start with one.
 pub(super) fn parse_backup_name(file_name: &str) -> (Option<usize>, String, Option<u64>, bool) {
     let stem = file_name.rsplit_once('.').map_or(file_name, |(s, _)| s);
@@ -131,7 +131,7 @@ impl App {
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("Presets kept before a write, and from \"Back up all\"").color(MUTED));
+                    ui.label(RichText::new("Presets kept before a write, and from \"Back up this setlist\"").color(MUTED));
                     theme::help(
                         ui,
                         &format!(
