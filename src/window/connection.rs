@@ -539,9 +539,6 @@ impl App {
             }
             ui.add(egui::TextEdit::singleline(&mut self.filter).hint_text("🔍 Filter presets").desired_width(f32::INFINITY));
             ui.horizontal_wrapped(|ui| {
-                if ui.button("Edit loaded preset (live)").on_hover_text("Changes are heard at once; Save on pedal keeps them").clicked() {
-                    self.send(Cmd::ReadCurrent);
-                }
                 ui.menu_button("Backups", |ui| {
                     if ui.button("Back up this setlist...").on_hover_text("Save every preset of this setlist as files").clicked() {
                         ui.close_menu();

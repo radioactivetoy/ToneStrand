@@ -19,7 +19,6 @@ pub enum Cmd {
     Refresh,
     Presets(i64),
     Select(i64, i64),
-    ReadCurrent,
     FetchSlot {
         setlist: i64,
         index: i64,
@@ -375,13 +374,6 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     s.select_preset(sl, idx).map_err(|e| e.to_string())?;
                     last_index = read_live(s, send)?;
                     send(Event::Done("Preset loaded".into()));
-                }
-                Cmd::ReadCurrent => {
-                    send(Event::Busy("Reading the loaded preset...".into()));
-                    let blob = s.read_current().map_err(|e| e.to_string())?;
-                    let (sl, idx, _) = s.preset_info().map_err(|e| e.to_string())?;
-                    send(Event::Document { setlist: sl.max(0), index: idx, live: true, purpose: Purpose::Edit, blob: Some(blob) });
-                    send(Event::Done("Loaded preset opened for live editing".into()));
                 }
                 Cmd::FetchSlot { setlist: sl, index, purpose } => {
                     send(Event::Busy("Reading preset from the pedal...".into()));
