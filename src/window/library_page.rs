@@ -47,6 +47,50 @@ impl App {
         Ok((n, lines))
     }
 
+    /// Put preset files (.hlx, .hxpreset) and backups (.hxb, .hls) into the library folder
+    /// being shown, and report what happened. Used by Import and by dropping files.
+    pub(super) fn import_files(&mut self, files: Vec<PathBuf>) {
+        let dir = self.lib.folder();
+        let _ = std::fs::create_dir_all(&dir);
+        let mut n = 0;
+        let mut report = Vec::new();
+        for f in files {
+            let ext = f.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+            if ext == "hxb" || ext == "hls" {
+                match self.import_backup(&f, &dir) {
+                    Ok((count, lines)) => {
+                        n += count;
+                        report.extend(lines);
+                    }
+                    Err(e) => report.push(format!("✖ {}: {e}", f.file_name().and_then(|s| s.to_str()).unwrap_or("?"))),
+                }
+            } else {
+                let shown = f.file_name().and_then(|s| s.to_str()).unwrap_or("?").to_owned();
+                match crate::files::copy_into(&f, &dir) {
+                    Ok(to) => {
+                        n += 1;
+                        if to.file_name() != f.file_name() {
+                            let new = to.file_name().and_then(|s| s.to_str()).unwrap_or("?");
+                            report.push(format!("✔ {shown} was already there; kept both (new copy: {new})"));
+                        }
+                    }
+                    Err(e) => report.push(format!("✖ {shown}: {e}")),
+                }
+            }
+        }
+        let failures = report.iter().filter(|l| l.starts_with('✖')).count();
+        let (level, summary) = match (n, failures) {
+            (_, 0) if n > 0 => (LogLevel::Good, format!("Imported {n} presets")),
+            (0, 0) => (LogLevel::Info, "Nothing was imported".to_owned()),
+            (_, f) => (LogLevel::Bad, format!("Imported {n} presets; {f} could not be imported (see the report)")),
+        };
+        self.note(level, summary);
+        if !report.is_empty() {
+            self.unit_report = Some((format!("Imported {n} presets"), report, false));
+        }
+        self.scan_library();
+    }
+
     pub(super) fn library_page(&mut self, ctx: &egui::Context) {
         let can_send = self.connected.is_some() && self.chosen.is_some();
         let actions = egui::CentralPanel::default()
@@ -131,45 +175,7 @@ impl App {
                         .add_filter("Presets, backups and setlists", &["hlx", "hxpreset", "hxb", "hls"])
                         .pick_files()
                     {
-                        let dir = self.lib.folder();
-                        let _ = std::fs::create_dir_all(&dir);
-                        let mut n = 0;
-                        let mut report = Vec::new();
-                        for f in files {
-                            let ext = f.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-                            if ext == "hxb" || ext == "hls" {
-                                match self.import_backup(&f, &dir) {
-                                    Ok((count, lines)) => {
-                                        n += count;
-                                        report.extend(lines);
-                                    }
-                                    Err(e) => report.push(format!("✖ {}: {e}", f.file_name().and_then(|s| s.to_str()).unwrap_or("?"))),
-                                }
-                            } else {
-                                let shown = f.file_name().and_then(|s| s.to_str()).unwrap_or("?").to_owned();
-                                match crate::files::copy_into(&f, &dir) {
-                                    Ok(to) => {
-                                        n += 1;
-                                        if to.file_name() != f.file_name() {
-                                            let new = to.file_name().and_then(|s| s.to_str()).unwrap_or("?");
-                                            report.push(format!("✔ {shown} was already there; kept both (new copy: {new})"));
-                                        }
-                                    }
-                                    Err(e) => report.push(format!("✖ {shown}: {e}")),
-                                }
-                            }
-                        }
-                        let failures = report.iter().filter(|l| l.starts_with('✖')).count();
-                        let (level, summary) = match (n, failures) {
-                            (_, 0) if n > 0 => (LogLevel::Good, format!("Imported {n} presets")),
-                            (0, 0) => (LogLevel::Info, "Nothing was imported".to_owned()),
-                            (_, f) => (LogLevel::Bad, format!("Imported {n} presets; {f} could not be imported (see the report)")),
-                        };
-                        self.note(level, summary);
-                        if !report.is_empty() {
-                            self.unit_report = Some((format!("Imported {n} presets"), report, false));
-                        }
-                        self.scan_library();
+                        self.import_files(files);
                     }
                 }
             }

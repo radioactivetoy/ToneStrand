@@ -552,6 +552,68 @@ impl App {
         }
     }
 
+    /// Files dropped onto the window: presets open as tabs, backups and setlists go into the
+    /// preset library, IRs and captures into the IR library. While files hover, a hint shows.
+    fn drop_files(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| !i.raw.hovered_files.is_empty()) {
+            let screen = ctx.screen_rect();
+            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop-hint")));
+            painter.rect_filled(screen, CornerRadius::ZERO, Color32::from_black_alpha(215));
+            let inner = screen.shrink(24.0);
+            painter.rect_stroke(inner, CornerRadius::same(12), Stroke::new(2.0_f32, accent()), egui::StrokeKind::Inside);
+            painter.text(inner.center() - Vec2::new(0.0, 14.0), egui::Align2::CENTER_CENTER, "Drop files here", egui::FontId::proportional(26.0), TEXT);
+            painter.text(
+                inner.center() + Vec2::new(0.0, 18.0),
+                egui::Align2::CENTER_CENTER,
+                "Presets open to edit; backups and setlists go to the library; IRs and captures go to the IR library",
+                egui::FontId::proportional(14.0),
+                MUTED,
+            );
+        }
+        let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
+        if dropped.is_empty() {
+            return;
+        }
+        let mut presets = Vec::new();
+        let mut backups = Vec::new();
+        let mut tones = Vec::new();
+        let mut skipped = Vec::new();
+        for p in dropped {
+            let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+            match ext.as_str() {
+                "hlx" | "hxpreset" => presets.push(p),
+                "hxb" | "hls" => backups.push(p),
+                "wav" | "nam" => tones.push(p),
+                _ => skipped.push(p.file_name().and_then(|s| s.to_str()).unwrap_or("?").to_owned()),
+            }
+        }
+        if !presets.is_empty() {
+            self.view = View::Editor;
+            for p in presets {
+                self.open_file(&p);
+            }
+        }
+        if !backups.is_empty() {
+            self.import_files(backups);
+        }
+        if !tones.is_empty() {
+            self.scan_tones();
+            let dir = self.tones.folder();
+            let _ = std::fs::create_dir_all(&dir);
+            let n = tones.iter().filter(|f| crate::files::copy_into(f, &dir).is_ok()).count();
+            let failed = tones.len() - n;
+            if failed == 0 {
+                self.note(LogLevel::Good, format!("Imported {n} file{} into the IR library", if n == 1 { "" } else { "s" }));
+            } else {
+                self.note(LogLevel::Bad, format!("Imported {n} of {} files into the IR library", tones.len()));
+            }
+            self.scan_tones();
+        }
+        if !skipped.is_empty() {
+            self.note(LogLevel::Bad, format!("Not a preset, backup, IR or capture: {}", skipped.join(", ")));
+        }
+    }
+
     /// Close a tab, asking first when it has changes that aren't saved.
     fn request_close_tab(&mut self, i: usize) {
         if self.docs.get(i).is_some_and(Doc::needs_save) {
@@ -1429,6 +1491,7 @@ impl eframe::App for App {
         }
         self.guard_quit(ctx);
         self.shortcuts(ctx);
+        self.drop_files(ctx);
         self.poll(ctx);
         self.auto_pick();
         // The hidden Tests page.
