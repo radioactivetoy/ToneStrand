@@ -273,3 +273,152 @@ fn pings_get_acknowledged() {
     let acked = shared.lock().unwrap().frames[n..].iter().any(|(c, t, _)| *c == ChannelId::EVENTS.device && *t == MSG_ACK);
     assert!(acked, "the ping on the events channel must be answered");
 }
+
+// ------------------------------------------------- copying, moving and swapping slots ---
+
+use crate::device::{slot_op, Event, SlotOp};
+use crate::msgpack::AUTO;
+
+type Slots = Arc<Mutex<HashMap<i64, (String, Vec<u8>)>>>;
+
+/// A pedal document whose content depends on `tag`.
+fn tagged_document(tag: &str) -> Vec<u8> {
+    let mut pairs = Vec::new();
+    for k in [0i64, 1, 2, 3, 4, 5, 6, 7, 10] {
+        pairs.push((Value::int(k), Value::map(vec![(1, Value::str(&format!("{tag}{}", "x".repeat(100))))])));
+    }
+    let mut blob = Value::str("l6-helix\0").encode();
+    blob.extend(Value::Bin(vec![0; 48], 0xc4).encode());
+    blob.extend(Value::Map(pairs, 0x80).encode());
+    crate::devpreset::DevicePreset::parse(&blob).unwrap().encode()
+}
+
+/// A pedal that really stores presets in eight slots (slot index -> name and document).
+/// Writes to `corrupt` come back changed, as a failing flash would.
+fn pedal_with(slots: &[(i64, &str, Vec<u8>)], corrupt: Option<i64>) -> (Session, Slots) {
+    let store: Slots = Arc::new(Mutex::new(slots.iter().map(|(i, n, d)| (*i, (n.to_string(), d.clone()))).collect::<HashMap<_, _>>()));
+    let st = store.clone();
+    let (s, _) = open(move |opcode, args| {
+        let index = args.get(key::PRESET_INDEX).and_then(Value::as_i64).unwrap_or(-1);
+        match opcode {
+            op::LIST_PRESETS => {
+                let names: Vec<Value> = (0..8)
+                    .map(|i| {
+                        let name = st.lock().unwrap().get(&i).map(|(n, _)| n.clone()).unwrap_or_default();
+                        Value::Map(vec![(Value::int(i), Value::map(vec![(key::NAME, Value::str(&format!("{name}\0")))]))], AUTO)
+                    })
+                    .collect();
+                Reply::Ok(Value::Array(names, AUTO))
+            }
+            op::FETCH_PRESET => Reply::Ok(Value::Bin(st.lock().unwrap().get(&index).map(|(_, d)| d.clone()).unwrap_or_default(), 0xc4)),
+            op::WRITE_SLOT_NAMED => {
+                let name = args.get(key::NAME).and_then(Value::as_str).unwrap_or("").trim_end_matches('\0').to_owned();
+                let mut doc = args.get(key::DOCUMENT).and_then(Value::as_bin).unwrap_or(&[]).to_vec();
+                if corrupt == Some(index) {
+                    let last = doc.len() - 1;
+                    doc[last] = b'y';
+                }
+                st.lock().unwrap().insert(index, (name, doc));
+                Reply::Ok(Value::Nil)
+            }
+            op::CLEAR_SLOT => {
+                st.lock().unwrap().remove(&index);
+                Reply::Ok(Value::Nil)
+            }
+            _ => friendly(opcode, args),
+        }
+    });
+    (s, store)
+}
+
+fn scratch_dir(tag: &str) -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!("tonestrand-slotop-{tag}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&d);
+    d
+}
+
+/// The documents kept in a backup folder.
+fn kept(dir: &std::path::Path) -> Vec<Vec<u8>> {
+    std::fs::read_dir(dir).map(|rd| rd.flatten().filter_map(|e| std::fs::read(e.path()).ok()).collect()).unwrap_or_default()
+}
+
+fn quiet(_: Event) {}
+
+#[test]
+fn copy_leaves_the_source_and_keeps_the_preset_it_replaces() {
+    let (a, b) = (tagged_document("A"), tagged_document("B"));
+    let (mut s, slots) = pedal_with(&[(1, "Alpha", a.clone()), (2, "Beta", b.clone())], None);
+    let dir = scratch_dir("copy");
+    slot_op(&mut s, &quiet, 0, 1, 2, SlotOp::Copy, &dir).unwrap();
+    let st = slots.lock().unwrap();
+    assert_eq!(st[&2], ("Alpha".to_owned(), a.clone()));
+    assert_eq!(st[&1], ("Alpha".to_owned(), a));
+    assert_eq!(kept(&dir), vec![b], "the replaced preset is in the backup folder");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn move_empties_the_source_and_keeps_it() {
+    let a = tagged_document("A");
+    let (mut s, slots) = pedal_with(&[(1, "Alpha", a.clone())], None);
+    let dir = scratch_dir("move");
+    slot_op(&mut s, &quiet, 0, 1, 3, SlotOp::Move, &dir).unwrap();
+    let st = slots.lock().unwrap();
+    assert_eq!(st[&3], ("Alpha".to_owned(), a.clone()));
+    assert!(!st.contains_key(&1));
+    assert_eq!(kept(&dir), vec![a], "the source is kept before it is emptied (the empty target needs nothing)");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn swap_exchanges_the_two_and_keeps_both() {
+    let (a, b) = (tagged_document("A"), tagged_document("B"));
+    let (mut s, slots) = pedal_with(&[(1, "Alpha", a.clone()), (2, "Beta", b.clone())], None);
+    let dir = scratch_dir("swap");
+    slot_op(&mut s, &quiet, 0, 1, 2, SlotOp::Swap, &dir).unwrap();
+    let st = slots.lock().unwrap();
+    assert_eq!(st[&1], ("Beta".to_owned(), b.clone()));
+    assert_eq!(st[&2], ("Alpha".to_owned(), a.clone()));
+    let mut got = kept(&dir);
+    got.sort();
+    let mut want = vec![a, b];
+    want.sort();
+    assert_eq!(got, want);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn swapping_with_an_empty_slot_is_a_move() {
+    let a = tagged_document("A");
+    let (mut s, slots) = pedal_with(&[(1, "Alpha", a.clone())], None);
+    let dir = scratch_dir("swap-empty");
+    slot_op(&mut s, &quiet, 0, 1, 5, SlotOp::Swap, &dir).unwrap();
+    let st = slots.lock().unwrap();
+    assert_eq!(st[&5], ("Alpha".to_owned(), a));
+    assert!(!st.contains_key(&1));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_bad_read_back_stops_before_the_source_is_touched() {
+    let (a, b) = (tagged_document("A"), tagged_document("B"));
+    let (mut s, slots) = pedal_with(&[(1, "Alpha", a.clone()), (2, "Beta", b.clone())], Some(2));
+    let dir = scratch_dir("corrupt");
+    let e = slot_op(&mut s, &quiet, 0, 1, 2, SlotOp::Move, &dir).unwrap_err();
+    assert!(e.contains("reads back different"), "{e}");
+    let st = slots.lock().unwrap();
+    assert_eq!(st[&1], ("Alpha".to_owned(), a), "the source was not emptied");
+    assert!(kept(&dir).contains(&b), "the preset that was overwritten is in the backup folder");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn an_empty_source_or_the_same_slot_is_refused_without_writing() {
+    let (mut s, slots) = pedal_with(&[(1, "Alpha", tagged_document("A"))], None);
+    let dir = scratch_dir("refuse");
+    assert!(slot_op(&mut s, &quiet, 0, 4, 1, SlotOp::Copy, &dir).unwrap_err().contains("empty"));
+    assert!(slot_op(&mut s, &quiet, 0, 1, 1, SlotOp::Swap, &dir).is_err());
+    assert_eq!(slots.lock().unwrap().len(), 1);
+    assert!(kept(&dir).is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}

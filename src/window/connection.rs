@@ -519,6 +519,66 @@ impl App {
         });
     }
 
+    /// A preset was dropped on another slot of the pedal's list: copy, swap or move.
+    pub(super) fn slot_drop_dialog(&mut self, ctx: &egui::Context) {
+        use crate::device::SlotOp;
+        let Some((from, to)) = self.slot_drop else { return };
+        let empty = |i: usize| self.presets.get(i).is_none_or(|n| n.trim().is_empty());
+        let name = |i: usize| if empty(i) { "<empty>".to_owned() } else { self.presets[i].clone() };
+        if empty(from) || from == to {
+            self.slot_drop = None;
+            return;
+        }
+        let target_empty = empty(to);
+        // None: still asking. Some(None): cancelled. Some(Some(op)): go.
+        let mut choice: Option<Option<SlotOp>> = None;
+        let (lf, lt) = (slot_label(from), slot_label(to));
+        egui::Window::new("Copy, swap or move").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(
+            ctx,
+            |ui| {
+                ui.label(RichText::new(format!("{lf}  \"{}\"   onto   {lt}  \"{}\"", name(from), name(to))).strong());
+                ui.add_space(2.0);
+                ui.label(
+                    RichText::new(if target_empty {
+                        format!("{lt} is empty. Copy keeps {lf} as it is; Move empties it. Whatever changes is backed up first.")
+                    } else {
+                        format!("{lt} is backed up before it is replaced (and {lf} too, if you swap).")
+                    })
+                    .small()
+                    .color(MUTED),
+                );
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if theme::primary_button(ui, &format!("Copy to {lt}")).on_hover_text(format!("{lf} stays as it is")).clicked() {
+                        choice = Some(Some(SlotOp::Copy));
+                    }
+                    if target_empty {
+                        if ui.button(format!("Move to {lt}")).on_hover_text(format!("{lf} is emptied")).clicked() {
+                            choice = Some(Some(SlotOp::Move));
+                        }
+                    } else if ui.button(format!("Swap with {lt}")).on_hover_text("The two presets change places").clicked() {
+                        choice = Some(Some(SlotOp::Swap));
+                    }
+                    if ui.button("Cancel").clicked() {
+                        choice = Some(None);
+                    }
+                });
+            },
+        );
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            choice = Some(None);
+        }
+        match choice {
+            Some(Some(op)) => {
+                self.slot_drop = None;
+                let (setlist, backup) = (self.setlist, self.backup_dir());
+                self.send(Cmd::SlotOp { setlist, from: from as i64, to: to as i64, op, backup });
+            }
+            Some(None) => self.slot_drop = None,
+            None => {}
+        }
+    }
+
     pub(super) fn pedal_card(&mut self, ui: &mut egui::Ui) {
         side_section(ui, "PRESETS", |ui| {
             if self.connected.is_none() {
@@ -563,6 +623,7 @@ impl App {
                         self.open_restore();
                     }
                 });
+                theme::help(ui, "Drag a preset onto another slot to copy, swap or move it. Whatever it replaces is backed up first.");
             });
             ui.add_space(4.0);
             let current_idx = self.current.as_ref().filter(|c| c.0 == self.setlist).map(|c| c.1);
@@ -585,7 +646,7 @@ impl App {
                         }
                         let is_current = current_idx == Some(i as i64);
                         let is_chosen = self.chosen == Some(i);
-                        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), row_h), egui::Sense::click());
+                        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), row_h), egui::Sense::click_and_drag());
                         let fill = if is_chosen {
                             accent().linear_multiply(0.22)
                         } else if resp.hovered() {
@@ -613,6 +674,18 @@ impl App {
                             egui::FontId::proportional(14.0),
                             TEXT,
                         );
+                        // Drag a preset onto another slot to copy, swap or move it.
+                        if !presets[i].trim().is_empty() {
+                            resp.dnd_set_drag_payload(PresetDrag(i));
+                        }
+                        if resp.dnd_hover_payload::<PresetDrag>().is_some_and(|d| d.0 != i) {
+                            ui.painter().rect_stroke(rect, CornerRadius::same(5), Stroke::new(1.5_f32, accent()), egui::StrokeKind::Inside);
+                        }
+                        if let Some(from) = resp.dnd_release_payload::<PresetDrag>() {
+                            if from.0 != i {
+                                self.slot_drop = Some((from.0, i));
+                            }
+                        }
                         if resp.clicked() {
                             self.chosen = Some(i);
                         }
@@ -669,3 +742,6 @@ impl App {
         });
     }
 }
+
+/// What is being dragged in the pedal's preset list: the slot it came from.
+struct PresetDrag(usize);

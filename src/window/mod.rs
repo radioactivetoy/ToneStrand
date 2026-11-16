@@ -179,6 +179,8 @@ pub struct App {
     errors_unseen: usize,
     /// The keyboard shortcuts window is open (F1).
     show_shortcuts: bool,
+    /// A preset dropped on another slot, waiting for "copy, swap or move" (from, to).
+    slot_drop: Option<(usize, usize)>,
     /// When a live change was last sent to the pedal (shows "sent" for a moment).
     last_live_send: Option<Instant>,
     close_ask: Option<CloseAsk>,
@@ -290,6 +292,7 @@ impl App {
             window_seen: None,
             errors_unseen: 0,
             show_shortcuts: false,
+            slot_drop: None,
             last_live_send: None,
             close_ask: None,
             quit_ok: false,
@@ -1857,6 +1860,7 @@ impl eframe::App for App {
         self.central(ctx);
         self.dialogs(ctx);
         self.close_dialog(ctx);
+        self.slot_drop_dialog(ctx);
         self.shortcuts_window(ctx);
         if let Some(cat) = self.catalog.clone() {
             if let Some((st, model, cab)) = editors::picker_window(ctx, &mut self.picker, &cat) {

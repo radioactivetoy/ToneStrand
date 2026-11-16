@@ -32,6 +32,14 @@ pub enum Cmd {
         doc: Vec<u8>,
         backup: PathBuf,
     },
+    /// Copy, move or swap two preset slots (each slot that changes is backed up first).
+    SlotOp {
+        setlist: i64,
+        from: i64,
+        to: i64,
+        op: SlotOp,
+        backup: PathBuf,
+    },
     Rename {
         setlist: i64,
         index: i64,
@@ -399,6 +407,11 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                             "Wrote \"{name}\", but it reads back different from what was sent: check it on the pedal"
                         )));
                     }
+                }
+                Cmd::SlotOp { setlist: sl, from, to, op, backup } => {
+                    slot_op(s, send, sl, from, to, op, &backup)?;
+                    let p = s.presets(sl).map_err(|e| e.to_string())?;
+                    send(Event::Presets(sl, p));
                 }
                 Cmd::Rename { setlist: sl, index, name } => {
                     s.rename_slot(sl, index, &name).map_err(|e| e.to_string())?;
@@ -854,4 +867,81 @@ mod tests {
         assert_eq!(run.saved, 1);
         assert_eq!(run.failed.len(), 6);
     }
+}
+
+/// What dropping one preset slot onto another does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SlotOp {
+    /// The target gets a copy; the source stays.
+    Copy,
+    /// The target gets the source; the source is emptied.
+    Move,
+    /// The two exchange places (with an empty target this is a move).
+    Swap,
+}
+
+/// Copy, move or swap two preset slots of a setlist. Every slot that is about to change is kept
+/// in `backup` first, the first write is read back and compared before anything else is
+/// touched, and a failure stops there (the backups say where the old presets are).
+pub fn slot_op(s: &mut Session, send: &dyn Fn(Event), sl: i64, from: i64, to: i64, op: SlotOp, backup: &Path) -> Result<(), String> {
+    if from == to {
+        return Err("pick two different slots".into());
+    }
+    let label = |i: i64| crate::proto::slot_label(i.max(0) as usize);
+    send(Event::Busy("Reading the two presets...".into()));
+    let names = s.presets(sl).map_err(|e| e.to_string())?;
+    let name_of = |i: i64| names.get(i.max(0) as usize).cloned().unwrap_or_default();
+    let a = s.fetch_slot(sl, from).map_err(|e| e.to_string())?.ok_or_else(|| format!("{} is empty: nothing to copy", label(from)))?;
+    let b = s.fetch_slot(sl, to).map_err(|e| e.to_string())?;
+
+    send(Event::Busy("Backing up the slots that change...".into()));
+    let changing = if op == SlotOp::Copy { vec![to] } else { vec![to, from] };
+    for i in changing {
+        if let Some(note) = backup_slot(s, backup, sl, i)? {
+            send(Event::Info(note));
+        }
+    }
+
+    send(Event::Busy(format!("Writing {}...", label(to))));
+    let sent = s.write_slot(sl, to, &name_of(from), a).map_err(|e| e.to_string())?;
+    note_name(send, &name_of(from), PRESET_NAME_MAX);
+    if !reads_back_same(s, sl, to, &sent)? {
+        return Err(format!(
+            "{} reads back different from what was written, so nothing else was changed. The old presets are kept in {}",
+            label(to),
+            backup.display()
+        ));
+    }
+    match (op, b) {
+        (SlotOp::Copy, _) => {}
+        (SlotOp::Move, _) | (SlotOp::Swap, None) => {
+            send(Event::Busy(format!("Emptying {}...", label(from))));
+            s.clear_slot(sl, from).map_err(|e| format!("{} was copied but {} could not be emptied ({e})", label(to), label(from)))?;
+        }
+        (SlotOp::Swap, Some(b)) => {
+            send(Event::Busy(format!("Writing {}...", label(from))));
+            let sent = s.write_slot(sl, from, &name_of(to), b).map_err(|e| {
+                format!(
+                    "{} now holds the other preset but {} could not be written ({e}); the old presets are kept in {}",
+                    label(to),
+                    label(from),
+                    backup.display()
+                )
+            })?;
+            note_name(send, &name_of(to), PRESET_NAME_MAX);
+            if !reads_back_same(s, sl, from, &sent)? {
+                return Err(format!(
+                    "{} reads back different from what was written; the old presets are kept in {}",
+                    label(from),
+                    backup.display()
+                ));
+            }
+        }
+    }
+    send(Event::Done(match op {
+        SlotOp::Copy => format!("Copied {} to {}", label(from), label(to)),
+        SlotOp::Move => format!("Moved {} to {}", label(from), label(to)),
+        SlotOp::Swap => format!("Swapped {} and {}", label(from), label(to)),
+    }));
+    Ok(())
 }
