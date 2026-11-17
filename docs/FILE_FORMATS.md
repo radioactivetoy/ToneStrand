@@ -68,13 +68,16 @@ label, 15/16: custom colour}`.
 
 ### Command Center (`tone[2]`)
 
+Full details (every command type's fields, slot lists per unit, per-snapshot records, live
+requests) are in [COMMAND_CENTER.md](COMMAND_CENTER.md).
+
 `{0: [command id per slot], 1: [[id, arg1 .. arg6] per slot]}`, one slot per trigger. The HX Stomp has 13,
-in this order: Instant 1-6, FS 4, FS 5, FS 1-3, EXP 1, EXP 2 (FS 4 and FS 5 are confirmed from real
-presets; the rest follow the order of the Command Center rows). The ids are the ones `.hlx` files
+in this order: Instant 1-6, FS 1-5, EXP 1, EXP 2 (confirmed by live capture; the Command Center's own
+numbers, see COMMAND_CENTER.md section 1). The ids are the ones `.hlx` files
 use (14 HX Preset, 15 HX Snapshot, 16/17 HX Looper, 18 MIDI CC ...) and the arguments follow the
 command's fields in order: HX Preset `[preset]` (0 Next, 1 Prev, 2+ the slot), HX Snapshot
-`[behaviour, press, release/hold]`. Only those two are confirmed; other commands' argument order is
-not. `snapshot[n]` entry 1 holds up to 13 per-snapshot command entries `[slot, flag, [0, arg1 .. arg6]]`; an unused entry is
+`[behaviour, press, release/hold]`, MIDI CC `[channel, cc, value, wait]`. The argument order of ids 1 to 6, 12, 13,
+14, 15, 16, 17, 18, 19, 20 is checked on a pedal (HX Looper 16 only for its first argument). `snapshot[n]` entry 1 holds up to 13 per-snapshot command entries `[slot, flag, [0, arg1 .. arg6]]`; an unused entry is
 `[13, false, [0 x 7]]`. Four of the 126 presets read use them (snapshot-specific HX Snapshot presses on FS 4 and FS 5,
 e.g. snapshot 1 presses snapshot 2 on FS 4 and snapshot 3 on FS 5): the entry names the slot it is for, its values
 line up with the command's arguments (arg2 = press), and the flag was false in all of them (its meaning is not

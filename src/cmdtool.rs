@@ -315,14 +315,14 @@ mod tests {
         assert!(out2.contains("no command in the .hlx"), "{out2}");
     }
 
-    /// With a real pedal document that has HX Preset on FS 4 and FS 5 (`HX_COMMANDS_FIXTURE`).
+    /// With a real pedal document that has HX Preset on FS 1 and FS 2 (`HX_COMMANDS_FIXTURE`).
     #[test]
     fn a_real_preset_is_described() {
         let Ok(path) = std::env::var("HX_COMMANDS_FIXTURE") else { return };
         let p = DevicePreset::parse(&std::fs::read(path).unwrap()).unwrap();
         let text = describe(&p, &slots()).join("\n");
-        assert!(text.contains("slot  6 (FS 4): HX Preset (id 14) args [1, 0, 0, 0, 0, 0]"), "{text}");
-        assert!(text.contains("slot  7 (FS 5): HX Preset (id 14) args [0, 0, 0, 0, 0, 0]"), "{text}");
+        assert!(text.contains("slot  6 (FS 1): HX Preset (id 14) args [1, 0, 0, 0, 0, 0]"), "{text}");
+        assert!(text.contains("slot  7 (FS 2): HX Preset (id 14) args [0, 0, 0, 0, 0, 0]"), "{text}");
         let hlx = vec![HlxCmd { key: "commandFS4".into(), id: 14, fields: vec![("@preset".into(), 1)] }];
         let out = compare(&device_commands(&p), &hlx, &slots()).join("\n");
         assert!(out.contains("@preset = 1  ->  arg1"), "{out}");

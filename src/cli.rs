@@ -4,7 +4,11 @@
 use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnames, session, wire};
 
 /// The command-line tools (everything else opens the window).
-pub const CLI_FLAGS: [&str; 17] = [
+pub const CLI_FLAGS: [&str; 21] = [
+    "--put-slot",
+    "--cc-snap",
+    "--send-hlx",
+    "--dump-loaded",
     "--box-proxy",
     "--cc-raw",
     "--cc-reload",
@@ -178,6 +182,110 @@ fn cc_raw_tool(rest: &[String]) {
     }
 }
 
+/// `--cc-snap <box address> <snapshot 1-based> <slot 0-12> [arg1 .. arg6]`: WRITES one command's values in one
+/// snapshot of the loaded preset into the pedal's edit buffer (not saved), as the app's snapshot selector does.
+fn cc_snap_tool(rest: &[String]) {
+    let (Some(host), Some(snap), Some(slot)) = (rest.first(), rest.get(1), rest.get(2)) else {
+        eprintln!("usage: --cc-snap <box address> <snapshot 1-based> <slot 0-12> [arg1 .. arg6]");
+        return;
+    };
+    let (Some(snap), Some(slot)) = (need(snap.parse::<usize>(), "snapshot"), need(slot.parse::<usize>(), "slot")) else { return };
+    let Some(args) = rest[3..].iter().map(|a| need(a.parse::<i64>(), a)).collect::<Option<Vec<i64>>>() else { return };
+    let Some(mut s) = open_session(Some(host)) else { return };
+    let Some(blob) = need(s.read_current(), "reading the loaded preset") else { return };
+    let Some(mut doc) = need(devpreset::DevicePreset::parse(&blob), "the loaded preset") else { return };
+    if !doc.set_command_values(snap.saturating_sub(1), slot, &args) {
+        eprintln!("the loaded preset has no command in slot {slot}");
+        return;
+    }
+    let Some(bytes) = need(doc.encode_checked(), "the document") else { return };
+    if need(s.write_edit_buffer(bytes), "writing the edit buffer").is_none() {
+        return;
+    }
+    let Some(back) = need(s.read_current(), "reading it back").and_then(|b| need(devpreset::DevicePreset::parse(&b), "it")) else { return };
+    println!("written to the pedal's edit buffer (not saved). The loaded preset now has:");
+    for l in crate::cmdtool::describe(&back, &crate::cmdtool::stomp_slots()) {
+        println!("{l}");
+    }
+}
+
+/// `--put-slot <box address> <slot like 42B> <file.hxpreset> <name>`: WRITES a saved pedal document back to a
+/// slot (to undo a test). Reads the slot back and says whether it came back the same.
+fn put_slot_tool(rest: &[String]) {
+    let (Some(host), Some(label), Some(file), Some(name)) = (rest.first(), rest.get(1), rest.get(2), rest.get(3)) else {
+        eprintln!("usage: --put-slot <box address> <slot like 42B> <file.hxpreset> <name>");
+        return;
+    };
+    let Some(slot) = crate::cmdtool::slot_index(label) else {
+        eprintln!("{label}: not a slot like 42B");
+        return;
+    };
+    let Some(bytes) = need(std::fs::read(file), file) else { return };
+    if need(devpreset::DevicePreset::parse(&bytes), file).is_none() {
+        return;
+    }
+    let Some(mut s) = open_session(Some(host)) else { return };
+    let Some(sent) = need(s.write_slot(0, slot as i64, name, bytes), "writing the slot") else { return };
+    let back = need(s.fetch_slot(0, slot as i64), "reading it back").flatten();
+    println!("wrote {file} to {label}; read back {}", if back.as_deref() == Some(sent.as_slice()) { "the same" } else { "DIFFERENT" });
+}
+
+/// `--dump-loaded <box address> <file.hxpreset>`: save the loaded preset's edit buffer (what the pedal
+/// holds right now, unsaved changes included) to a file. Reads only.
+fn dump_loaded_tool(rest: &[String]) {
+    let (Some(host), Some(file)) = (rest.first(), rest.get(1)) else {
+        eprintln!("usage: --dump-loaded <box address> <file.hxpreset>");
+        return;
+    };
+    let Some(mut s) = open_session(Some(host)) else { return };
+    let Some(blob) = need(s.read_current(), "reading the loaded preset") else { return };
+    if let Some(dir) = std::path::Path::new(file).parent().filter(|d| !d.as_os_str().is_empty()) {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    match std::fs::write(file, &blob) {
+        Ok(()) => println!("saved the loaded preset ({} bytes) to {file}", blob.len()),
+        Err(e) => eprintln!("can't write {file}: {e}"),
+    }
+}
+
+/// `--send-hlx <box address> <slot like 42B> <file.hlx> <backup folder>`: WRITES a `.hlx` preset to a slot,
+/// as the app does (the slot's own document is the template), after saving the slot's current document into
+/// the folder. Reads the slot back and says whether it came back the same.
+fn send_hlx_tool(rest: &[String]) {
+    let (Some(host), Some(label), Some(file), Some(folder)) = (rest.first(), rest.get(1), rest.get(2), rest.get(3)) else {
+        eprintln!("usage: --send-hlx <box address> <slot like 42B> <file.hlx> <backup folder>");
+        return;
+    };
+    let Some(slot) = crate::cmdtool::slot_index(label) else {
+        eprintln!("{label}: not a slot like 42B");
+        return;
+    };
+    let Some(cat) = tool_catalog() else { return };
+    let Some(text) = need(std::fs::read_to_string(file), file) else { return };
+    let Some(json) = need(serde_json::from_str::<serde_json::Value>(&text), file) else { return };
+    let name = json.pointer("/data/meta/name").and_then(serde_json::Value::as_str).unwrap_or("Preset").to_owned();
+    let Some(mut s) = open_session(Some(host)) else { return };
+    let Some(Some(old)) = need(s.fetch_slot(0, slot as i64), "reading the slot") else {
+        eprintln!("slot {label} is empty or can't be read; nothing written");
+        return;
+    };
+    let _ = std::fs::create_dir_all(folder);
+    let backup = std::path::Path::new(folder).join(format!("{label} before.hxpreset"));
+    if need(std::fs::write(&backup, &old), "saving the backup").is_none() {
+        return;
+    }
+    println!("backed up {label} to {}", backup.display());
+    let Some(template) = need(devpreset::DevicePreset::parse(&old), "the slot's document") else { return };
+    let Some((doc, notes)) = need(devpreset::DevicePreset::from_hlx(&template, &json, &cat), "converting the .hlx") else { return };
+    for n in &notes {
+        println!("note: {n}");
+    }
+    let Some(bytes) = need(doc.encode_checked(), "encoding") else { return };
+    let Some(sent) = need(s.write_slot(0, slot as i64, &name, bytes), "writing the slot") else { return };
+    let back = need(s.fetch_slot(0, slot as i64), "reading it back").flatten();
+    println!("wrote \"{name}\" to {label}; read back {}", if back.as_deref() == Some(sent.as_slice()) { "the same" } else { "DIFFERENT" });
+}
+
 /// `--cc-reload <box address>`: load the loaded preset again from flash.
 fn cc_reload_tool(rest: &[String]) {
     let Some(host) = rest.first() else {
@@ -228,6 +336,10 @@ ToneStrand command-line tools (all read-only unless noted):
   --cc-compare <file.hxpreset|slot> <file.hlx> [box address]  line an HX Edit export up with the pedal's Command Center
   --cc-raw <box address> <slot 0-12> <id> [arg1 .. arg6]  WRITES one Command Center slot of the loaded preset (edit buffer only)
   --cc-reload <box address>         reload the loaded preset from flash, dropping edit-buffer changes
+  --dump-loaded <box address> <file.hxpreset>  save the loaded preset (edit buffer, unsaved changes included) to a file
+  --put-slot <box address> <slot like 42B> <file.hxpreset> <name>  WRITES a saved pedal document to a slot (undo a test)
+  --cc-snap <box address> <snapshot 1-based> <slot 0-12> [arg1 .. arg6]  WRITES one command's values in one snapshot (edit buffer only)
+  --send-hlx <box address> <slot like 42B> <file.hlx> <backup folder>  WRITES a .hlx to a slot after saving the slot's document
   --box-proxy <listen address:port> <box address> [folder for documents]  log what another editor sends the pedal through the box
   --hlx-check <template.hxpreset> [file.hlx]  try the .hlx -> pedal conversion offline
   --fmt-check                       how a dual cab's knobs read at their edges
@@ -253,6 +365,22 @@ pub fn run(args: &[String]) -> bool {
     }
     if let Some(i) = args.iter().position(|a| a == "--cc-raw") {
         cc_raw_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--send-hlx") {
+        send_hlx_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--cc-snap") {
+        cc_snap_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--put-slot") {
+        put_slot_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--dump-loaded") {
+        dump_loaded_tool(&args[i + 1..]);
         return true;
     }
     if let Some(i) = args.iter().position(|a| a == "--cc-reload") {

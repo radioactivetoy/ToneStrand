@@ -40,8 +40,8 @@ The effect pictures and names come from Line 6; see "Third-party material" below
   replaces is backed up first and the write is read back).
 - **Snapshots**: recall, rename, copy (on the live preset too, with the pedal's own copy and paste), duplicate, delete; per-snapshot knob values.
 - **Controllers**: footswitches, expression pedals, snapshots and MIDI CC, on files and live on the pedal.
-- **Command Center**: all of it in `.hlx` files; on the pedal, every command is shown and FS 4 / FS 5 can be
-  set to HX Preset or HX Snapshot, in a file or live on the loaded preset.
+- **Command Center**: all of it in `.hlx` files; on the pedal (HX Stomp), a trigger grid with an editor per trigger,
+  in a file or live on the loaded preset.
 - **Compare two presets** (files, open tabs or a slot's preset) and **restore** a backed-up preset or a
   whole-pedal backup, after a list of what it holds.
 - **Preset library** on disk (real folders), import of HX Edit backups (`.hxb`) and setlists
@@ -105,6 +105,7 @@ pairings as the box's own documentation describes, then pair again.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the program is organised: modules, threads, data flow, UI |
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | The pedal's USB protocol and the Helrig Box relay |
 | [docs/FILE_FORMATS.md](docs/FILE_FORMATS.md) | Preset documents, `.hlx`, `.hxb`/`.hls`, IR `.wav`, NAM conversion |
+| [docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md) | Command Center: slots, command types, document layout, live editing |
 | [AGENTS.md](AGENTS.md) | Working rules and checklists for coding agents (Claude, Antigravity, ...) |
 
 ## Status

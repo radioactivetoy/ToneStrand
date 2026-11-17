@@ -1019,7 +1019,7 @@ pub fn stomp_device_slots() -> Vec<CmdSlot> {
 /// Command types whose arguments have not been seen on a pedal: the switch versions of Bank/Program, MMC,
 /// Hotkey and HX Looper. They follow the same layout as their instant versions in the notes, but
 /// are shown with a mark.
-const UNVERIFIED: [i64; 4] = [4, 6, 12, 16];
+const UNVERIFIED: [i64; 0] = [];
 
 /// What the pedal puts in a command's arguments when its type is set (seen in its change events); the
 /// rest start at 0. Hotkey (switch) keeps a constant 1 in its fifth argument.
@@ -1028,10 +1028,33 @@ fn device_defaults(id: i64) -> Vec<i64> {
         2 | 3 => vec![0, 0, 0, 127],
         5 => vec![0, 48, 100, 1],
         15 => vec![0, 1, 0],
+        16 => vec![0, 1, 0],
         17 => vec![1],
         12 => vec![0, 0, 0, 0, 1],
         _ => Vec::new(),
     }
+}
+
+/// A command type's `.hlx` field names in the pedal's argument order (`@channel`, `@cc`, ...), for the
+/// kind of trigger it sits on.
+pub fn hlx_arg_keys(kind: SlotKind, id: i64) -> Vec<&'static str> {
+    specs_for(kind, crate::nam::unit(), 3)
+        .into_iter()
+        .find(|s| s.id == id)
+        .map(|s| {
+            s.fields
+                .iter()
+                .map(|f| match f {
+                    FieldSpec::Range { key, .. } | FieldSpec::Choice { key, .. } => *key,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The HX Stomp's slot number for a `.hlx` key such as `commandFS2`.
+pub fn stomp_slot_of_hlx_key(key: &str) -> Option<usize> {
+    stomp_device_slots().iter().position(|s| s.key == key)
 }
 
 /// The Command Center of a pedal document: what each trigger does, and a place to change it. On the
@@ -1054,7 +1077,7 @@ pub fn device_command_center(
             ui.label(RichText::new("Command Center").size(17.0).strong());
             theme::help(
                 ui,
-                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed. The names are the Command Center's own: FS 1 to FS 5, whatever is printed on the pedal.\nOn the loaded preset a change goes to the pedal at once, and Save on pedal keeps it. A mark means the layout of that command has not been checked on a pedal yet.\nThe wait is 0 to 20 (the pedal's own limit). Each snapshot keeps its own copy of a command's values.",
+                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed. The names are the Command Center's own: FS 1 to FS 5, whatever is printed on the pedal.\nOn the loaded preset a change goes to the pedal at once, and Save on pedal keeps it.\nThe wait is 0 to 20 (the pedal's own limit). Each snapshot keeps its own copy of a command's values.",
             );
         });
         if count == 0 {
@@ -1065,14 +1088,24 @@ pub fn device_command_center(
             ui.label(RichText::new("The Command Center of this unit isn't read here yet.").color(muted()));
             return;
         }
-        let snap = preset.current_snapshot();
+        let current = preset.current_snapshot();
         let names = preset.snapshot_names();
-        let snap_name = names.get(snap).map(|n| n.trim().to_owned()).unwrap_or_default();
-        let badge = if snap_name.is_empty() { format!("Snapshot {}", snap + 1) } else { format!("Snapshot {} · {snap_name}", snap + 1) };
+        let snap_id = egui::Id::new("dev-cc-snapshot");
+        let mut snap: usize = ui.data(|d| d.get_temp(snap_id)).unwrap_or(current).min(names.len().saturating_sub(1));
         ui.horizontal_wrapped(|ui| {
-            theme::pill(ui, &badge, accent());
-            ui.label(RichText::new("A command's values are kept per snapshot, as on the pedal.").small().color(muted()));
+            ui.label(RichText::new("Snapshot").color(muted()));
+            for (j, name) in names.iter().enumerate() {
+                let text = if name.trim().is_empty() { format!("{}", j + 1) } else { format!("{} · {}", j + 1, name.trim()) };
+                if ui.selectable_label(snap == j, text).clicked() {
+                    snap = j;
+                }
+            }
+            theme::help(
+                ui,
+                "Each snapshot keeps its own values for a command (HX Preset is the same in all). Pick the snapshot to see or change its values; the command itself and its type are shared.",
+            );
         });
+        ui.data_mut(|d| d.insert_temp(snap_id, snap));
         ui.add_space(6.0);
 
         // Trigger grid in the pedal's own arrangement: the top row carries the instant commands and the
@@ -1132,7 +1165,8 @@ pub fn device_command_center(
         let i = sel;
         let slot = &slots[i];
         let specs: Vec<CmdSpec> = specs_for(slot.kind, device, fam.snapshot_count).into_iter().filter(|s| s.id != 7 && s.id != 8).collect();
-        let (id, mut args) = preset.command(i).unwrap_or((0, vec![0; 6]));
+        let (id, base_args) = preset.command(i).unwrap_or((0, vec![0; 6]));
+        let mut args = preset.snapshot_command_args(snap, i).filter(|_| id != 14).unwrap_or(base_args);
         let spec = specs.iter().find(|s| s.id == id);
         let name = if id == 0 { "None".to_owned() } else { spec.map(|s| s.name.to_owned()).unwrap_or_else(|| format!("command {id}")) };
         let mark = if UNVERIFIED.contains(&id) { " (not checked on a pedal)" } else { "" };
@@ -1179,11 +1213,21 @@ pub fn device_command_center(
                     }
                     return;
                 };
-                if id == 12 {
-                    args.resize(6, 0);
-                    args[4] = 1; // a constant the pedal keeps in this command
-                }
                 ui.add_space(4.0);
+                // Only a CC Toggle and a Hotkey have a Momentary switch (a CC Toggle can latch).
+                if id == 2 || id == 12 {
+                    if let Some(mut m) = preset.command_momentary(i) {
+                        let resp = ui.checkbox(&mut m, "Momentary").on_hover_text(
+                            "On: the value goes out while the switch is held and returns when it is released. Off: latching, each press toggles the command.",
+                        );
+                        if resp.changed() && preset.set_command_momentary(i, m) {
+                            *dirty = true;
+                            if live {
+                                cmds.push(crate::device::Cmd::SetMomentary { slot: i, momentary: m });
+                            }
+                        }
+                    }
+                }
                 let mut changed = false;
                 for (f, field) in spec.fields.iter().enumerate() {
                     if args.len() <= f {
@@ -1218,10 +1262,10 @@ pub fn device_command_center(
                         }
                     }
                 }
-                if changed && preset.set_command(i, id, &args) {
+                if changed && preset.set_command_values(snap, i, &args) {
                     *dirty = true;
                     if live {
-                        cmds.push(crate::device::Cmd::SetCommand { slot: i, id, args: args.clone() });
+                        cmds.push(crate::device::Cmd::SetCommandValues { snapshot: snap, slot: i, args: args.clone() });
                     }
                 }
             });
@@ -1265,5 +1309,80 @@ mod tests {
         set_slot_cmd_type(&mut doc, inst1, None);
         assert!(read_slot_cmd(&doc, "commandInst1", 0).is_none());
         assert!(active_commands(&doc).is_empty());
+    }
+
+    /// The pedal's slot order, confirmed from live traffic: Instant 1-6, FS 1-5, EXP 1-2.
+    #[test]
+    fn the_stomps_slots_are_in_the_pedals_order() {
+        let s = stomp_device_slots();
+        assert_eq!(s.len(), 13);
+        assert_eq!(s[0].title, "Instant 1");
+        assert_eq!(s[5].title, "Instant 6");
+        assert_eq!((s[6].title.as_str(), s[10].title.as_str()), ("FS 1", "FS 5"));
+        assert_eq!((s[11].title.as_str(), s[12].title.as_str()), ("EXP 1", "EXP 2"));
+        assert!(s[..6].iter().all(|x| x.kind == SlotKind::Instant));
+        assert!(s[6..11].iter().all(|x| x.kind == SlotKind::Switch));
+        assert!(s[11..].iter().all(|x| x.kind == SlotKind::Pedal));
+    }
+
+    /// Argument counts of the types checked on a pedal: field i is argument i + 1, in the pedal's order.
+    #[test]
+    fn confirmed_command_types_have_the_pedals_argument_layout() {
+        let layouts: [(SlotKind, i64, &[&str]); 11] = [
+            (SlotKind::Switch, 1, &["channel", "cc", "value"]),
+            (SlotKind::Switch, 2, &["channel", "cc", "initial", "toggle"]),
+            (SlotKind::Pedal, 3, &["channel", "cc", "min", "max"]),
+            (SlotKind::Switch, 5, &["channel", "note", "velocity", "noteoff"]),
+            (SlotKind::Instant, 13, &["modifier1", "modifier2", "modifier3", "keystroke", "waittime"]),
+            (SlotKind::Switch, 14, &["preset"]),
+            (SlotKind::Switch, 15, &["behavior", "press", "relhold"]),
+            (SlotKind::Instant, 17, &["function"]),
+            (SlotKind::Instant, 18, &["channel", "cc", "value", "waittime"]),
+            (SlotKind::Instant, 19, &["channel", "bank0", "bank32", "program"]),
+            (SlotKind::Instant, 20, &["message"]),
+        ];
+        for (kind, id, names) in layouts {
+            let specs = specs_for(kind, 2162694, 3);
+            let spec = specs.iter().find(|s| s.id == id).unwrap_or_else(|| panic!("type {id} missing for slot kind {}", kind as u8));
+            assert_eq!(spec.fields.len(), names.len(), "type {id}: field count");
+            for (f, name) in spec.fields.iter().zip(names) {
+                let key = match f {
+                    FieldSpec::Range { key, .. } | FieldSpec::Choice { key, .. } => key.trim_start_matches('@'),
+                };
+                assert!(key.contains(name) || name.contains(key), "type {id}: field {key} should be {name}");
+            }
+        }
+    }
+
+    /// Whatever type a slot is given, the defaults fit its fields and every type offered is known.
+    #[test]
+    fn defaults_fit_every_offered_type() {
+        let slots = stomp_device_slots();
+        for slot in &slots {
+            for spec in specs_for(slot.kind, 2162694, 3).iter().filter(|s| s.id != 7 && s.id != 8) {
+                assert!(device_defaults(spec.id).len() <= 6, "type {}", spec.id);
+                assert!(device_defaults(spec.id).len() <= spec.fields.len().max(6));
+            }
+        }
+        assert!(UNVERIFIED.iter().all(|id| specs_for(SlotKind::Switch, 2162694, 3).iter().any(|s| s.id == *id)
+            || specs_for(SlotKind::Instant, 2162694, 3).iter().any(|s| s.id == *id)));
+    }
+
+    /// Setting every offered type on a slot of a document keeps the live and the document copies the same.
+    #[test]
+    fn every_offered_type_round_trips_through_a_document() {
+        use crate::devpreset::DevicePreset;
+        let Ok(path) = std::env::var("HX_COMMANDS_FIXTURE") else { return };
+        let mut d = DevicePreset::parse(&std::fs::read(path).unwrap()).unwrap();
+        for (i, slot) in stomp_device_slots().iter().enumerate() {
+            for spec in specs_for(slot.kind, 2162694, 3).iter().filter(|s| s.id != 7 && s.id != 8) {
+                let args = device_defaults(spec.id);
+                assert!(d.set_command(i, spec.id, &args));
+                let back = DevicePreset::parse(&d.encode()).unwrap();
+                let (id, got) = back.command(i).unwrap();
+                assert_eq!(id, spec.id);
+                assert_eq!(&got[..args.len()], &args[..], "slot {i} type {}", spec.id);
+            }
+        }
     }
 }
