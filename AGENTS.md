@@ -89,11 +89,12 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 - Sends/returns: drawn as loop markers; placing them uses the nearest free slot. A return
   placed before its send is flagged, not prevented.
 - macOS and Linux builds haven't been tried.
-- Command Center on the pedal document: FS 4 and FS 5 can be set to HX Preset or HX Snapshot (on a
-  preset that isn't the loaded one, then written to its slot). The layout is in `docs/FILE_FORMATS.md`;
-  other commands' arguments and the slots other than FS 4/FS 5 are not confirmed, so they are shown and
-  kept as they are. On the loaded preset a change is written to the pedal's edit buffer (op 21) and
-  kept by "Save on pedal". `.hlx` files edit all of Command Center.
+- Command Center on the pedal document: a trigger grid (Instant 1-6, FS 1-5, EXP 1-2) with a per-trigger
+  editor for the command types checked on a pedal; types 4, 6, 12 and 16 are shown with a mark. Slot
+  order is Instant 1-6, FS 1-5, EXP 1-2 (live capture). On the loaded preset a change is written to the
+  pedal's edit buffer (op 21) and kept by "Save on pedal". Not built: the Latching toggle (op 58, storage
+  unconfirmed), editing another snapshot's values, units other than the HX Stomp. `.hlx` files edit all of
+  Command Center. `docs/COMMAND_CENTER.md` has every type's field order and the live requests.
 - Device-preset lower lanes are drawn packed; `.hlx` lower lanes are still drawn by stored
   position.
 - The DSP estimate is calibrated so 126 real HX Stomp presets all read ≤ 97%; it is an

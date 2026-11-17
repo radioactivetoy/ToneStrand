@@ -168,6 +168,21 @@ changes (the stored slot stays as it was until saved). Renaming a snapshot to an
 Split and merge: the pedal refuses a split that would sit after the merge, even for a moment;
 move whichever one keeps the split before the merge first.
 
+### Command Center (live; captured from another editor's traffic, not sent by ToneStrand yet)
+
+| Op | Name | Args |
+|---|---|---|
+| 67 | set command type | `{24: slot, 77: type}` |
+| 48 | command info | `{24: slot}` |
+| 68 | set command value | `{24: slot, 77: type, 28: argument number (1-based), 81: value}` |
+| 33 | footswitch index | `{102: fs}` (1-based) |
+| 58 | latching | `{102: fs (0-based), 65: bool}` |
+
+The pedal replies with events 35 (type changed) and 36 (value changed, old value in key 80). The wait is
+clamped to 20. ToneStrand changes the Command Center with op 21 for now.
+
+See [COMMAND_CENTER.md](COMMAND_CENTER.md) for slot numbers, types and field positions.
+
 ### Controllers and footswitches (live)
 
 | Op | Name | Args |

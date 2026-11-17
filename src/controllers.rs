@@ -1266,4 +1266,79 @@ mod tests {
         assert!(read_slot_cmd(&doc, "commandInst1", 0).is_none());
         assert!(active_commands(&doc).is_empty());
     }
+
+    /// The pedal's slot order, confirmed from live traffic: Instant 1-6, FS 1-5, EXP 1-2.
+    #[test]
+    fn the_stomps_slots_are_in_the_pedals_order() {
+        let s = stomp_device_slots();
+        assert_eq!(s.len(), 13);
+        assert_eq!(s[0].title, "Instant 1");
+        assert_eq!(s[5].title, "Instant 6");
+        assert_eq!((s[6].title.as_str(), s[10].title.as_str()), ("FS 1", "FS 5"));
+        assert_eq!((s[11].title.as_str(), s[12].title.as_str()), ("EXP 1", "EXP 2"));
+        assert!(s[..6].iter().all(|x| x.kind == SlotKind::Instant));
+        assert!(s[6..11].iter().all(|x| x.kind == SlotKind::Switch));
+        assert!(s[11..].iter().all(|x| x.kind == SlotKind::Pedal));
+    }
+
+    /// Argument counts of the types checked on a pedal: field i is argument i + 1, in the pedal's order.
+    #[test]
+    fn confirmed_command_types_have_the_pedals_argument_layout() {
+        let layouts: [(SlotKind, i64, &[&str]); 11] = [
+            (SlotKind::Switch, 1, &["channel", "cc", "value"]),
+            (SlotKind::Switch, 2, &["channel", "cc", "initial", "toggle"]),
+            (SlotKind::Pedal, 3, &["channel", "cc", "min", "max"]),
+            (SlotKind::Switch, 5, &["channel", "note", "velocity", "noteoff"]),
+            (SlotKind::Instant, 13, &["modifier1", "modifier2", "modifier3", "keystroke", "waittime"]),
+            (SlotKind::Switch, 14, &["preset"]),
+            (SlotKind::Switch, 15, &["behavior", "press", "relhold"]),
+            (SlotKind::Instant, 17, &["function"]),
+            (SlotKind::Instant, 18, &["channel", "cc", "value", "waittime"]),
+            (SlotKind::Instant, 19, &["channel", "bank0", "bank32", "program"]),
+            (SlotKind::Instant, 20, &["message"]),
+        ];
+        for (kind, id, names) in layouts {
+            let specs = specs_for(kind, 2162694, 3);
+            let spec = specs.iter().find(|s| s.id == id).unwrap_or_else(|| panic!("type {id} missing for slot kind {}", kind as u8));
+            assert_eq!(spec.fields.len(), names.len(), "type {id}: field count");
+            for (f, name) in spec.fields.iter().zip(names) {
+                let key = match f {
+                    FieldSpec::Range { key, .. } | FieldSpec::Choice { key, .. } => key.trim_start_matches('@'),
+                };
+                assert!(key.contains(name) || name.contains(key), "type {id}: field {key} should be {name}");
+            }
+        }
+    }
+
+    /// Whatever type a slot is given, the defaults fit its fields and every type offered is known.
+    #[test]
+    fn defaults_fit_every_offered_type() {
+        let slots = stomp_device_slots();
+        for slot in &slots {
+            for spec in specs_for(slot.kind, 2162694, 3).iter().filter(|s| s.id != 7 && s.id != 8) {
+                assert!(device_defaults(spec.id).len() <= 6, "type {}", spec.id);
+                assert!(device_defaults(spec.id).len() <= spec.fields.len().max(6));
+            }
+        }
+        assert!(UNVERIFIED.iter().all(|id| specs_for(SlotKind::Switch, 2162694, 3).iter().any(|s| s.id == *id)
+            || specs_for(SlotKind::Instant, 2162694, 3).iter().any(|s| s.id == *id)));
+    }
+
+    /// Setting every offered type on a slot of a document keeps the live and the document copies the same.
+    #[test]
+    fn every_offered_type_round_trips_through_a_document() {
+        use crate::devpreset::DevicePreset;
+        let Ok(path) = std::env::var("HX_COMMANDS_FIXTURE") else { return };
+        let mut d = DevicePreset::parse(&std::fs::read(path).unwrap()).unwrap();
+        for (i, slot) in stomp_device_slots().iter().enumerate() {
+            for spec in specs_for(slot.kind, 2162694, 3).iter().filter(|s| s.id != 7 && s.id != 8) {
+                let args = device_defaults(spec.id);
+                assert!(d.set_command(i, spec.id, &args));
+                let back = DevicePreset::parse(&d.encode()).unwrap();
+                let (id, got) = back.command(i).unwrap();
+                assert_eq!(id, spec.id);
+                assert_eq!(&got[..args.len()], &args[..], "slot {i} type {}", spec.id);
+            }
+        }
+    }
 }

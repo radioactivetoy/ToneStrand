@@ -501,8 +501,8 @@ impl DevicePreset {
 
     // ------------------------------------------------------------ Command Center ---
 
-    /// How many Command Center slots the document has (13 on an HX Stomp: Instant 1-6, FS 4, FS 5,
-    /// FS 1-3, EXP 1, EXP 2), or 0 when it has none.
+    /// How many Command Center slots the document has (13 on an HX Stomp: Instant 1-6, FS 1-5,
+    /// EXP 1, EXP 2), or 0 when it has none.
     pub fn command_count(&self) -> usize {
         self.tone.at(&[key::COMMANDS, 0]).and_then(Value::as_array).map_or(0, |a| a.len())
     }
@@ -1643,9 +1643,9 @@ mod command_tests {
         let mut d = with_commands();
         assert_eq!(d.command_count(), 13);
         assert_eq!(d.command(6), None);
-        // FS 4 (slot 6): HX Preset, preset value 39.
+        // FS 1 (slot 6): HX Preset, preset value 39.
         assert!(d.set_command(6, 14, &[39]));
-        // FS 5 (slot 7): HX Snapshot, Press/Release, press = snapshot 3 (value 5).
+        // FS 2 (slot 7): HX Snapshot, Press/Release, press = snapshot 3 (value 5).
         assert!(d.set_command(7, 15, &[0, 5, 0]));
         assert_eq!(d.command(6), Some((14, vec![39, 0, 0, 0, 0, 0])));
         assert_eq!(d.command(7), Some((15, vec![0, 5, 0, 0, 0, 0])));
@@ -1658,15 +1658,15 @@ mod command_tests {
         assert!(!d.set_command(13, 14, &[]), "there is no slot 13");
     }
 
-    /// The presets read from a real HX Stomp: "Shine on 2" has HX Preset on FS 4 and FS 5.
+    /// The presets read from a real HX Stomp: "Shine on 2" has HX Preset on FS 1 and FS 2.
     /// `HX_COMMANDS_FIXTURE` is such a pedal document.
     #[test]
     fn a_real_presets_commands_are_read() {
         let Ok(path) = std::env::var("HX_COMMANDS_FIXTURE") else { return };
         let d = DevicePreset::parse(&std::fs::read(path).unwrap()).unwrap();
         assert_eq!(d.command_count(), 13);
-        assert_eq!(d.command(6), Some((14, vec![1, 0, 0, 0, 0, 0])), "FS 4: previous preset");
-        assert_eq!(d.command(7), Some((14, vec![0, 0, 0, 0, 0, 0])), "FS 5: next preset");
+        assert_eq!(d.command(6), Some((14, vec![1, 0, 0, 0, 0, 0])), "FS 1: previous preset");
+        assert_eq!(d.command(7), Some((14, vec![0, 0, 0, 0, 0, 0])), "FS 2: next preset");
         assert_eq!(d.command(0), None);
         // Editing one slot and re-encoding keeps the rest: the other command, the blocks, the names.
         let mut e = d.clone();
