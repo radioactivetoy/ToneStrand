@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0-beta.2 - 2026-11-17
+
+### New
+- **Guitar input card** on a pedal preset's Controllers tab: the guitar input impedance (Auto to 1M) and the
+  guitar pad (Global, Off, On). On the loaded preset a change reaches the pedal at once (kept by "Save on
+  pedal"); on a file or a slot copy it changes the document. Auto lets the pedal pick the impedance from the
+  first effect in the chain; a value set here is the preset's own and wins over the pedal's global setting.
+- The file formats notes record how the preset and global input settings interact (checked on an HX Stomp).
+
 ## 1.0.0-beta.1 - 2026-11-17
 
 First beta. Checked on an **HX Stomp** (through a Helrig Box for this release); the other units
