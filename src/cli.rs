@@ -4,7 +4,9 @@
 use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnames, session, wire};
 
 /// The command-line tools (everything else opens the window).
-pub const CLI_FLAGS: [&str; 14] = [
+pub const CLI_FLAGS: [&str; 16] = [
+    "--cc-raw",
+    "--cc-reload",
     "--commands",
     "--cc-compare",
     "--probe",
@@ -146,6 +148,50 @@ fn cc_compare_tool(rest: &[String]) {
     }
 }
 
+/// `--cc-raw <box address> <slot> <id> [args]`: change one Command Center slot of the loaded preset in the
+/// pedal's edit buffer (nothing is saved to a slot; `--cc-reload` or loading the preset drops it).
+fn cc_raw_tool(rest: &[String]) {
+    let (Some(host), Some(slot), Some(id)) = (rest.first(), rest.get(1), rest.get(2)) else {
+        eprintln!("usage: --cc-raw <box address> <slot 0-12> <command id> [arg1 .. arg6]");
+        return;
+    };
+    let (Some(slot), Some(id)) = (need(slot.parse::<usize>(), "slot"), need(id.parse::<i64>(), "command id")) else { return };
+    let Some(args) = rest[3..].iter().map(|a| need(a.parse::<i64>(), a)).collect::<Option<Vec<i64>>>() else { return };
+    let Some(mut s) = open_session(Some(host)) else { return };
+    let Some(blob) = need(s.read_current(), "reading the loaded preset") else { return };
+    let Some(mut doc) = need(devpreset::DevicePreset::parse(&blob), "the loaded preset") else { return };
+    if !doc.set_command(slot, id, &args) {
+        eprintln!("the loaded preset has no Command Center slot {slot}");
+        return;
+    }
+    let Some(bytes) = need(doc.encode_checked(), "the document") else { return };
+    if need(s.write_edit_buffer(bytes), "writing the edit buffer").is_none() {
+        return;
+    }
+    let Some(back) = need(s.read_current(), "reading it back").and_then(|b| need(devpreset::DevicePreset::parse(&b), "it")) else { return };
+    println!("written to the pedal's edit buffer (not saved). The loaded preset now has:");
+    for l in crate::cmdtool::describe(&back, &crate::cmdtool::stomp_slots()) {
+        println!("{l}");
+    }
+}
+
+/// `--cc-reload <box address>`: load the loaded preset again from flash.
+fn cc_reload_tool(rest: &[String]) {
+    let Some(host) = rest.first() else {
+        eprintln!("usage: --cc-reload <box address>");
+        return;
+    };
+    let Some(mut s) = open_session(Some(host)) else { return };
+    let Some((sl, idx, name)) = need(s.preset_info(), "the loaded preset") else { return };
+    let other = if idx > 0 { idx - 1 } else { idx + 1 };
+    if need(s.select_preset(sl.max(0), other), "loading another preset").is_none()
+        || need(s.select_preset(sl.max(0), idx), "loading it again").is_none()
+    {
+        return;
+    }
+    println!("reloaded \"{name}\" from flash");
+}
+
 const HELP: &str = "\
 ToneStrand command-line tools (all read-only unless noted):
 
@@ -159,6 +205,8 @@ ToneStrand command-line tools (all read-only unless noted):
   --dump-doc <file.hxpreset>        print a pedal preset document's structure
   --commands <file.hxpreset|slot like 42B> [box address]  print a preset's Command Center as the pedal stores it
   --cc-compare <file.hxpreset|slot> <file.hlx> [box address]  line an HX Edit export up with the pedal's Command Center
+  --cc-raw <box address> <slot 0-12> <id> [arg1 .. arg6]  WRITES one Command Center slot of the loaded preset (edit buffer only)
+  --cc-reload <box address>         reload the loaded preset from flash, dropping edit-buffer changes
   --hlx-check <template.hxpreset> [file.hlx]  try the .hlx -> pedal conversion offline
   --fmt-check                       how a dual cab's knobs read at their edges
   --list-models                     every effect in the picker, with real-gear names
@@ -175,6 +223,14 @@ pub fn run(args: &[String]) -> bool {
     attach_console();
     if wants_help {
         print!("{HELP}");
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--cc-raw") {
+        cc_raw_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--cc-reload") {
+        cc_reload_tool(&args[i + 1..]);
         return true;
     }
     if let Some(i) = args.iter().position(|a| a == "--commands") {
