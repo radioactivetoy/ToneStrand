@@ -361,7 +361,11 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                 let based = s.model.zip(cat).and_then(|(m, c)| c.symbol(m)).and_then(crate::modelinfo::based_on);
                 let symbol = s.model.zip(cat).and_then(|(m, c)| c.symbol(m)).unwrap_or_default().to_owned();
                 let kind = crate::icons::kind_label(&cname, s.paired.is_some());
-                block_header_icon(ui, col, &kind, &symbol, &name, &based_line(&name, based));
+                if matches!(s.kind, Kind::Input | Kind::Output) {
+                    io_header(ui, s.kind == Kind::Input, &name);
+                } else {
+                    block_header_icon(ui, col, &kind, &symbol, &name, &based_line(&name, based));
+                }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Some(mut on) = s.enabled {
@@ -473,14 +477,16 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
         let cab_sym = s.paired.zip(cat).and_then(|(m, c)| c.symbol(m)).map(str::to_owned);
         let side = sym.as_deref().is_some_and(|x| crate::modelinfo::has_side(ui, x, cab_sym.as_deref())) && ui.available_width() > 700.0;
         let full = ui.available_width();
+        let body_h = super::body_height(cab_sym.is_some());
         ui.horizontal_top(|ui| {
+        ui.set_min_height(body_h);
         if side {
             ui.vertical(|ui| {
                 ui.set_width(SIDE_W);
                 crate::modelinfo::side(ui, sym.as_deref().unwrap_or(""), SIDE_W, cab_sym.as_deref());
             });
             ui.add_space(10.0);
-            let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, 150.0), egui::Sense::hover());
+            let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, body_h), egui::Sense::hover());
             ui.painter().rect_filled(r, CornerRadius::ZERO, line());
             ui.add_space(10.0);
         }

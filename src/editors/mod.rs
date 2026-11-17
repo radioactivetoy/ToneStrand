@@ -94,14 +94,16 @@ fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bo
     let input = s.kind == Kind::Input;
     let full = ui.available_width();
     let side = full > 700.0;
+    let body_h = body_height(false);
     ui.horizontal_top(|ui| {
+        ui.set_min_height(body_h);
         if side {
             ui.vertical(|ui| {
                 ui.set_width(SIDE_W);
                 io_tile(ui, input, SIDE_W);
             });
             ui.add_space(10.0);
-            let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, 150.0), egui::Sense::hover());
+            let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, body_h), egui::Sense::hover());
             ui.painter().rect_filled(r, CornerRadius::ZERO, line());
             ui.add_space(10.0);
         }
@@ -173,8 +175,30 @@ fn io_controls(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live:
 /// A field's name in a column of fixed width, so rows of controls line up.
 pub(super) fn field_label(ui: &mut egui::Ui, text: &str) {
     ui.allocate_ui_with_layout(Vec2::new(100.0, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.set_min_size(Vec2::new(100.0, 24.0));
         ui.label(RichText::new(text).color(muted()));
     });
+}
+/// An input's or output's title with a small tile of its own where an effect has its icon: a jack and an
+/// arrow, in the colour of the tile's border.
+fn io_header(ui: &mut egui::Ui, input: bool, title: &str) {
+    let (rect, _) = ui.allocate_exact_size(Vec2::splat(34.0), egui::Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(rect, CornerRadius::same(6), Color32::from_rgb(0x10, 0x11, 0x14));
+    p.rect_stroke(rect, CornerRadius::same(6), Stroke::new(1.5_f32, accent()), egui::StrokeKind::Inside);
+    let steel = Color32::from_rgb(0x8a, 0x90, 0x9a);
+    let c = rect.center() + Vec2::new(if input { 5.0 } else { -5.0 }, 0.0);
+    p.circle_filled(c, 9.0, steel.linear_multiply(0.75));
+    p.circle_filled(c, 5.0, Color32::from_rgb(0x08, 0x09, 0x0b));
+    let (from, to) = if input { (rect.left() + 4.0, c.x - 11.0) } else { (c.x + 11.0, rect.right() - 6.0) };
+    p.line_segment([egui::pos2(from, c.y), egui::pos2(to, c.y)], Stroke::new(2.0_f32, accent()));
+    p.add(egui::Shape::convex_polygon(
+        vec![egui::pos2(to + 3.0, c.y), egui::pos2(to - 2.0, c.y - 3.5), egui::pos2(to - 2.0, c.y + 3.5)],
+        accent(),
+        Stroke::NONE,
+    ));
+    ui.add_space(4.0);
+    ui.label(RichText::new(title).size(19.0).strong().color(ink()));
 }
 
 fn block_header(ui: &mut egui::Ui, colour: Color32, title: &str, extra: &str) {
@@ -968,6 +992,18 @@ fn panel_part() -> bool {
 
 /// Width of the photo-and-notes column beside a block's knobs.
 const SIDE_W: f32 = 210.0;
+
+/// The height of a block panel's body: the same for an input, an output and every effect, so the editor
+/// doesn't jump as blocks are picked; an amp with a cab (or a dual cab) gets two of them.
+const BODY_H: f32 = 175.0;
+
+fn body_height(double: bool) -> f32 {
+    if double {
+        2.0 * BODY_H + 8.0
+    } else {
+        BODY_H
+    }
+}
 
 /// A "Change cab" menu for the second model of a block: the cabs of the same kind
 /// (dual cabs for a dual cab's second cab, single mic cabs for an amp's cab; legacy

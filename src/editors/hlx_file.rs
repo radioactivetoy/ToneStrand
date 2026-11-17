@@ -653,14 +653,16 @@ pub fn hlx_editor(
             .map(str::to_owned);
         let side = crate::modelinfo::has_side(ui, &b.model, cab_sym.as_deref()) && ui.available_width() > 700.0;
         let full = ui.available_width();
+        let body_h = super::body_height(cab_sym.is_some());
         ui.horizontal_top(|ui| {
+            ui.set_min_height(body_h);
             if side {
                 ui.vertical(|ui| {
                     ui.set_width(SIDE_W);
                     crate::modelinfo::side(ui, &b.model, SIDE_W, cab_sym.as_deref());
                 });
                 ui.add_space(10.0);
-                let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, 150.0), egui::Sense::hover());
+                let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, body_h), egui::Sense::hover());
                 ui.painter().rect_filled(r, CornerRadius::ZERO, line());
                 ui.add_space(10.0);
             }
