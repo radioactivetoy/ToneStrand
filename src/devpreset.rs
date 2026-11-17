@@ -604,16 +604,16 @@ impl DevicePreset {
         // The pedal's own rows start with 0, except HX Preset's, which start with its id.
         let mut row = vec![Value::int(if id == 14 { 14 } else { 0 })];
         row.extend((0..6).map(|i| Value::int(if id == 0 { 0 } else { args.get(i).copied().unwrap_or(0) })));
-        if id == 2 {
-            // CC Toggle keeps its Momentary flag in its fifth argument and, when latching, the
-            // current state (starting at the dim value) in its sixth; the flag itself sits in the
-            // footswitch table.
-            if old_id != 2 {
-                self.set_command_momentary(slot, false);
+        if id == 2 || id == 12 {
+            // CC Toggle and Hotkey keep their Momentary flag in the fifth argument (the flag itself sits in the
+            // footswitch table) and a latching CC Toggle its current state, the Dim value at first, in the
+            // sixth. A new CC Toggle starts latching, a new Hotkey momentary.
+            if old_id != id {
+                self.set_command_momentary(slot, id == 12);
             }
-            let momentary = self.command_momentary(slot).unwrap_or(false);
+            let momentary = self.command_momentary(slot).unwrap_or(id == 12);
             row[5] = Value::int(momentary as i64);
-            row[6] = Value::int(if momentary { 0 } else { args.get(2).copied().unwrap_or(0) });
+            row[6] = Value::int(if momentary || id == 12 { 0 } else { args.get(2).copied().unwrap_or(0) });
         }
         let Some(Value::Array(ids, _)) = self.tone.at_mut(&[key::COMMANDS, 0]) else { return false };
         let Some(cell) = ids.get_mut(slot) else { return false };
@@ -663,13 +663,13 @@ impl DevicePreset {
         let Some(rec) = self.fs_record_mut(slot) else { return false };
         let Some(flag) = rec.get_mut(12) else { return false };
         *flag = Value::Bool(momentary);
-        if self.command(slot).is_some_and(|c| c.0 == 2) {
-            let dim = self.command(slot).and_then(|c| c.1.get(2).copied()).unwrap_or(0);
+        if self.command(slot).is_some_and(|c| c.0 == 2 || c.0 == 12) {
+            let (id, dim) = self.command(slot).map(|c| (c.0, c.1.get(2).copied().unwrap_or(0))).unwrap_or((0, 0));
             if let Some(Value::Array(rows, _)) = self.tone.at_mut(&[key::COMMANDS, 1]) {
                 if let Some(Value::Array(row, _)) = rows.get_mut(slot) {
                     if row.len() > 6 {
                         row[5] = Value::int(momentary as i64);
-                        row[6] = Value::int(if momentary { 0 } else { dim });
+                        row[6] = Value::int(if momentary || id == 12 { 0 } else { dim });
                     }
                 }
             }
@@ -685,6 +685,8 @@ impl DevicePreset {
             1 => ("CC Value", true),
             2 => ("CC Toggle", false),
             5 => ("Note", false),
+            6 => ("MMC", true),
+            12 => ("Hotkey", true),
             15 => ("Snapshot", true),
             _ => return,
         };
@@ -1798,6 +1800,12 @@ mod command_tests {
         let back = DevicePreset::parse(&d.encode()).unwrap();
         assert_eq!(back.command_momentary(7), Some(true));
         assert_eq!(back.command(7), d.command(7));
+        // A Hotkey on FS 3 (slot 8) starts momentary, with the flag in its fifth argument and its own name.
+        assert!(d.set_command(8, 12, &[3, 1, 4, 5]));
+        assert_eq!(d.command_momentary(8), Some(true));
+        assert_eq!(d.command(8), Some((12, vec![3, 1, 4, 5, 1, 0])));
+        let name = d.tone.at(&[3, 8]).and_then(Value::as_array).unwrap()[2].as_array().unwrap()[0].get(11).unwrap().get(5).unwrap();
+        assert_eq!(name.as_str(), Some("Hotkey"));
         // A slot that isn't a footswitch has no flag.
         assert_eq!(d.command_momentary(0), None);
         assert!(!d.set_command_momentary(0, true));

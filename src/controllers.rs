@@ -1019,7 +1019,7 @@ pub fn stomp_device_slots() -> Vec<CmdSlot> {
 /// Command types whose arguments have not been seen on a pedal: the switch versions of Bank/Program, MMC,
 /// Hotkey and HX Looper. They follow the same layout as their instant versions in the notes, but
 /// are shown with a mark.
-const UNVERIFIED: [i64; 4] = [4, 6, 12, 16];
+const UNVERIFIED: [i64; 0] = [];
 
 /// What the pedal puts in a command's arguments when its type is set (seen in its change events); the
 /// rest start at 0. Hotkey (switch) keeps a constant 1 in its fifth argument.
@@ -1028,6 +1028,7 @@ fn device_defaults(id: i64) -> Vec<i64> {
         2 | 3 => vec![0, 0, 0, 127],
         5 => vec![0, 48, 100, 1],
         15 => vec![0, 1, 0],
+        16 => vec![0, 1, 0],
         17 => vec![1],
         12 => vec![0, 0, 0, 0, 1],
         _ => Vec::new(),
@@ -1054,7 +1055,7 @@ pub fn device_command_center(
             ui.label(RichText::new("Command Center").size(17.0).strong());
             theme::help(
                 ui,
-                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed. The names are the Command Center's own: FS 1 to FS 5, whatever is printed on the pedal.\nOn the loaded preset a change goes to the pedal at once, and Save on pedal keeps it. A mark means the layout of that command has not been checked on a pedal yet.\nThe wait is 0 to 20 (the pedal's own limit). Each snapshot keeps its own copy of a command's values.",
+                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed. The names are the Command Center's own: FS 1 to FS 5, whatever is printed on the pedal.\nOn the loaded preset a change goes to the pedal at once, and Save on pedal keeps it.\nThe wait is 0 to 20 (the pedal's own limit). Each snapshot keeps its own copy of a command's values.",
             );
         });
         if count == 0 {
@@ -1179,13 +1180,9 @@ pub fn device_command_center(
                     }
                     return;
                 };
-                if id == 12 {
-                    args.resize(6, 0);
-                    args[4] = 1; // a constant the pedal keeps in this command
-                }
                 ui.add_space(4.0);
-                // Only a CC Toggle can latch: the other commands have no such switch.
-                if id == 2 {
+                // Only a CC Toggle and a Hotkey have a Momentary switch (a CC Toggle can latch).
+                if id == 2 || id == 12 {
                     if let Some(mut m) = preset.command_momentary(i) {
                         let resp = ui.checkbox(&mut m, "Momentary").on_hover_text(
                             "On: the value goes out while the switch is held and returns when it is released. Off: latching, each press toggles the command.",

@@ -76,8 +76,8 @@ in this order: Instant 1-6, FS 1-5, EXP 1, EXP 2 (confirmed by live capture; the
 numbers, see COMMAND_CENTER.md section 1). The ids are the ones `.hlx` files
 use (14 HX Preset, 15 HX Snapshot, 16/17 HX Looper, 18 MIDI CC ...) and the arguments follow the
 command's fields in order: HX Preset `[preset]` (0 Next, 1 Prev, 2+ the slot), HX Snapshot
-`[behaviour, press, release/hold]`, MIDI CC `[channel, cc, value, wait]`. The argument order of ids 1, 2, 3, 5, 13,
-14, 15, 17, 18, 19, 20 is checked on a pedal; 4, 6, 12 and 16 are not. `snapshot[n]` entry 1 holds up to 13 per-snapshot command entries `[slot, flag, [0, arg1 .. arg6]]`; an unused entry is
+`[behaviour, press, release/hold]`, MIDI CC `[channel, cc, value, wait]`. The argument order of ids 1 to 6, 12, 13,
+14, 15, 16, 17, 18, 19, 20 is checked on a pedal (HX Looper 16 only for its first argument). `snapshot[n]` entry 1 holds up to 13 per-snapshot command entries `[slot, flag, [0, arg1 .. arg6]]`; an unused entry is
 `[13, false, [0 x 7]]`. Four of the 126 presets read use them (snapshot-specific HX Snapshot presses on FS 4 and FS 5,
 e.g. snapshot 1 presses snapshot 2 on FS 4 and snapshot 3 on FS 5): the entry names the slot it is for, its values
 line up with the command's arguments (arg2 = press), and the flag was false in all of them (its meaning is not

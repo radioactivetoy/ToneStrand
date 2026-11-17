@@ -90,7 +90,7 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
   placed before its send is flagged, not prevented.
 - macOS and Linux builds haven't been tried.
 - Command Center on the pedal document: a trigger grid (Instant 1-6, FS 1-5, EXP 1-2) with a per-trigger
-  editor for the command types checked on a pedal; types 4, 6, 12 and 16 are shown with a mark. Slot
+  editor for the command types checked on a pedal; Slot
   order is Instant 1-6, FS 1-5, EXP 1-2 (live capture). On the loaded preset a change is written to the
   pedal's edit buffer (op 21) and kept by "Save on pedal". Not built: the Latching toggle (op 58, storage
   unconfirmed), editing another snapshot's values, units other than the HX Stomp. `.hlx` files edit all of

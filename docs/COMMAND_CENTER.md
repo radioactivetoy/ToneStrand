@@ -8,7 +8,7 @@ Sources: an existing editor's request builders and document writer (read, not co
 against real HX Stomp presets. **Status:** the document layout matches 126 real presets. The live
 requests in section 6 were then captured from that editor's traffic to a pedal (through the Box with
 `--box-proxy`), which fixed the slot order, the field positions and the argument layouts of ten
-command types. Types 4, 6, 12 and 16 are still unconfirmed (marked in section 2).
+command types. All types in section 2 are now confirmed.
 
 ## 1. Slots (one per trigger)
 
@@ -60,10 +60,15 @@ footswitch index (section 6), so the pedal knows which physical switch it is.
 | 19 | Bank/Program | instant | channel | bank0 | bank32 | program | — | — |
 | 20 | MMC | instant | message | — | — | — | — | — |
 
-**Checked on a pedal** (set from the other editor, read back from the document): 1, 2, 3, 5, 13, 14,
-15, 17, 18, 19, 20; the arguments are in the order of the table. **Not checked: 4, 6, 12, 16** (the
-switch versions of Bank/Program, MMC, Hotkey and HX Looper; assumed to follow their instant
-versions). ToneStrand marks them "(not checked on a pedal)".
+**Checked on a pedal** (set from the other editor, read back from the document): every type in the
+table, with the arguments in the table's order. HX Looper (16) was only seen with its first argument
+set; its press and release/hold fields are assumed (the pedal sets `[0, 1, 0]`, as for HX Snapshot).
+The other editor offers no Note On for an instant: instants are MIDI CC, Bank/Program, MMC, Hotkey and
+HX Looper. MMC's message is an index into Stop, Play, Forward, Rewind, Pause, Record, Punch In, Punch Out.
+A Hotkey has a Momentary switch like CC Toggle: its fifth argument is the flag (1 = momentary, the
+default) and the switch is named "Hotkey" ("MMC" for an MMC), momentary on. Per-snapshot editing is
+op 88 (select the snapshot, 0-based) followed by op 68; the pedal answers with the new snapshot's
+values as events 36.
 
 What the pedal puts in a command's arguments when its type is set (seen in its change events; the rest
 start at 0): CC Toggle and pedal MIDI CC `[0, 0, 0, 127]`, Note On `[0, 48, 100, 1]`, HX Snapshot
