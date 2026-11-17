@@ -45,7 +45,8 @@ pub fn device_overrides(p: &DevicePreset) -> Vec<Override> {
             let on = matches!(r.get(1), Some(Value::Bool(true)));
             let vals: Vec<i64> =
                 r.get(2).and_then(Value::as_array).map(|a| a.iter().map(|v| v.as_i64().unwrap_or(0)).collect()).unwrap_or_default();
-            if head != 13 || on || vals.iter().any(|v| *v != 0) {
+            // An unused entry is [13, false, zeros] in a stored preset and [0, false, zeros] in the pedal's own copy.
+            if on || vals.iter().any(|v| *v != 0) {
                 // The first number is the slot the entry is for (13 means an unused entry).
                 let target = if head < 13 { format!("slot {head}") } else { format!("list position {slot}") };
                 out.push((n, target, format!("flag {on}, values {vals:?}")));
