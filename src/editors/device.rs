@@ -613,12 +613,18 @@ pub fn device_controllers(
         if count(4) > 0 {
             labels.push(format!("Other ({})", count(4)));
         }
+        labels.push("Command Center".to_owned());
+        let cc_tab = labels.len() - 1;
         tab = tab.min(labels.len() - 1);
         let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
         if let Some(t) = theme::segmented(ui, &refs, tab) {
             tab = t;
         }
         ui.data_mut(|d| d.insert_temp(tab_id, tab));
+        if tab == cc_tab {
+            crate::controllers::device_command_center(ui, preset, live, cmds, dirty);
+            return;
+        }
         ui.add_space(4.0);
         if count(tab) == 0 {
             ui.label(
@@ -839,8 +845,6 @@ pub fn device_controllers(
         preset.set_controllers(&list);
         *dirty = true;
     }
-    input_settings_card(ui, preset, live, cmds, dirty);
-    crate::controllers::device_command_center(ui, preset, live, cmds, dirty);
 }
 
 /// The guitar input impedance and pad of a pedal preset, as two drop-downs. "Auto" and "Global" follow
@@ -880,16 +884,4 @@ pub(super) fn guitar_input_controls(ui: &mut egui::Ui, preset: &mut DevicePreset
             }
         }
     }
-}
-
-/// The Controllers tab's card for the same two settings.
-fn input_settings_card(ui: &mut egui::Ui, preset: &mut DevicePreset, live: bool, cmds: &mut Vec<Cmd>, dirty: &mut bool) {
-    if preset.setting_int(crate::devpreset::key::GUITAR_IN_Z).is_none() {
-        return;
-    }
-    ui.add_space(10.0);
-    theme::card(ui, |ui| {
-        ui.label(RichText::new("Guitar input").size(17.0).strong());
-        guitar_input_controls(ui, preset, live, cmds, dirty);
-    });
 }

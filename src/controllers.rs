@@ -1071,10 +1071,8 @@ pub fn device_command_center(
     let device = crate::nam::unit();
     let count = preset.command_count();
     let slots = stomp_device_slots();
-    ui.add_space(10.0);
-    theme::card(ui, |ui| {
+    {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Command Center").size(17.0).strong());
             theme::help(
                 ui,
                 "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed. The names are the Command Center's own: FS 1 to FS 5, whatever is printed on the pedal.\nOn the loaded preset a change goes to the pedal at once, and Save on pedal keeps it.\nThe wait is 0 to 20 (the pedal's own limit). Each snapshot keeps its own copy of a command's values.",
@@ -1088,24 +1086,22 @@ pub fn device_command_center(
             ui.label(RichText::new("The Command Center of this unit isn't read here yet.").color(muted()));
             return;
         }
-        let current = preset.current_snapshot();
+        // The values shown and edited are the selected snapshot's: the preset's own snapshot selector decides.
         let names = preset.snapshot_names();
-        let snap_id = egui::Id::new("dev-cc-snapshot");
-        let mut snap: usize = ui.data(|d| d.get_temp(snap_id)).unwrap_or(current).min(names.len().saturating_sub(1));
+        let snap = preset.current_snapshot().min(names.len().saturating_sub(1));
+        let snap_name = names.get(snap).map(|n| n.trim()).unwrap_or("");
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Snapshot").color(muted()));
-            for (j, name) in names.iter().enumerate() {
-                let text = if name.trim().is_empty() { format!("{}", j + 1) } else { format!("{} · {}", j + 1, name.trim()) };
-                if ui.selectable_label(snap == j, text).clicked() {
-                    snap = j;
-                }
-            }
-            theme::help(
+            theme::pill(
                 ui,
-                "Each snapshot keeps its own values for a command (HX Preset is the same in all). Pick the snapshot to see or change its values; the command itself and its type are shared.",
+                &if snap_name.is_empty() { format!("Snapshot {}", snap + 1) } else { format!("Snapshot {} · {snap_name}", snap + 1) },
+                accent(),
+            );
+            ui.label(
+                RichText::new("Values are per snapshot: change the snapshot with the snapshot bar. HX Preset is the same in all.")
+                    .small()
+                    .color(muted()),
             );
         });
-        ui.data_mut(|d| d.insert_temp(snap_id, snap));
         ui.add_space(6.0);
 
         // Trigger grid in the pedal's own arrangement: the top row carries the instant commands and the
@@ -1269,7 +1265,7 @@ pub fn device_command_center(
                     }
                 }
             });
-    });
+    }
 }
 
 #[cfg(test)]
