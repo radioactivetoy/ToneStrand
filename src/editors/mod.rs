@@ -53,7 +53,7 @@ fn io_params(input: bool) -> Vec<(&'static str, Param)> {
 fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bool, cmds: &mut Vec<Cmd>, dirty: &mut bool) {
     let input = s.kind == Kind::Input;
     ui.horizontal(|ui| {
-        ui.label(RichText::new(if input { "Source" } else { "Destination" }).color(muted()));
+        field_label(ui, if input { "Source" } else { "Destination" });
         if let Some(route) = preset.io_route(s.path, s.position) {
             // The jacks by name, numbered as in .hlx files (the same numbers the pedal keeps).
             let fam = snapshots::family_of_device(crate::nam::unit());
@@ -64,7 +64,7 @@ fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bo
             }
             let shown = names.iter().find(|(v, _)| *v == route).map(|(_, n)| n.clone()).unwrap_or_default();
             let mut pick = route;
-            egui::ComboBox::from_id_salt(("dev-route", s.global)).selected_text(shown).width(150.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt(("dev-route", s.global)).selected_text(shown).width(200.0).show_ui(ui, |ui| {
                 for (v, n) in &names {
                     ui.selectable_value(&mut pick, *v, n);
                 }
@@ -102,6 +102,13 @@ fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bo
                 }
             }
         }
+    });
+}
+
+/// A field's name in a column of fixed width, so rows of controls line up.
+pub(super) fn field_label(ui: &mut egui::Ui, text: &str) {
+    ui.allocate_ui_with_layout(Vec2::new(100.0, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        ui.label(RichText::new(text).color(muted()));
     });
 }
 

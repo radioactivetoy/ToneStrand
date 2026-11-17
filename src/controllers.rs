@@ -1175,7 +1175,7 @@ pub fn device_command_center(
                 ui.label(RichText::new(&slot.title).strong().size(15.0));
                 ui.add_space(4.0);
                 let mut new_id = id;
-                ui.horizontal(|ui| {
+                egui::Grid::new(("dev-cc-g0", i)).min_col_width(110.0).spacing([12.0, 8.0]).show(ui, |ui| {
                     ui.label(RichText::new("Command").color(muted()));
                     egui::ComboBox::from_id_salt(("dev-cc-type", i)).selected_text(format!("{name}{mark}")).width(220.0).show_ui(
                         ui,
@@ -1191,6 +1191,7 @@ pub fn device_command_center(
                             }
                         },
                     );
+                    ui.end_row();
                 });
                 if new_id != id {
                     let start = device_defaults(new_id);
@@ -1213,29 +1214,34 @@ pub fn device_command_center(
                 // Only a CC Toggle and a Hotkey have a Momentary switch (a CC Toggle can latch).
                 if id == 2 || id == 12 {
                     if let Some(mut m) = preset.command_momentary(i) {
-                        let resp = ui.checkbox(&mut m, "Momentary").on_hover_text(
-                            "On: the value goes out while the switch is held and returns when it is released. Off: latching, each press toggles the command.",
-                        );
-                        if resp.changed() && preset.set_command_momentary(i, m) {
-                            *dirty = true;
-                            if live {
-                                cmds.push(crate::device::Cmd::SetMomentary { slot: i, momentary: m });
+                        egui::Grid::new(("dev-cc-g1", i)).min_col_width(110.0).spacing([12.0, 8.0]).show(ui, |ui| {
+                            ui.label(RichText::new("Momentary").color(muted()));
+                            let resp = ui.checkbox(&mut m, "").on_hover_text(
+                                "On: the value goes out while the switch is held and returns when it is released. Off: latching, each press toggles the command.",
+                            );
+                            ui.end_row();
+                            if resp.changed() && preset.set_command_momentary(i, m) {
+                                *dirty = true;
+                                if live {
+                                    cmds.push(crate::device::Cmd::SetMomentary { slot: i, momentary: m });
+                                }
                             }
-                        }
+                        });
                     }
                 }
                 let mut changed = false;
-                for (f, field) in spec.fields.iter().enumerate() {
-                    if args.len() <= f {
-                        args.resize(f + 1, 0);
-                    }
-                    match field {
-                        FieldSpec::Choice { label, options, .. } => {
-                            let cur = args[f];
-                            let text = options.iter().find(|(v, _)| *v == cur).map(|(_, n)| n.clone()).unwrap_or_else(|| format!("{cur}"));
-                            ui.horizontal(|ui| {
+                egui::Grid::new(("dev-cc-g2", i)).min_col_width(110.0).spacing([12.0, 8.0]).show(ui, |ui| {
+                    for (f, field) in spec.fields.iter().enumerate() {
+                        if args.len() <= f {
+                            args.resize(f + 1, 0);
+                        }
+                        match field {
+                            FieldSpec::Choice { label, options, .. } => {
+                                let cur = args[f];
+                                let text =
+                                    options.iter().find(|(v, _)| *v == cur).map(|(_, n)| n.clone()).unwrap_or_else(|| format!("{cur}"));
                                 ui.label(RichText::new(*label).color(muted()));
-                                egui::ComboBox::from_id_salt(("dev-cc-field", i, f)).selected_text(text).width(160.0).show_ui(ui, |ui| {
+                                egui::ComboBox::from_id_salt(("dev-cc-field", i, f)).selected_text(text).width(220.0).show_ui(ui, |ui| {
                                     for (v, n) in options {
                                         if ui.selectable_label(cur == *v, n).clicked() && cur != *v {
                                             args[f] = *v;
@@ -1243,21 +1249,20 @@ pub fn device_command_center(
                                         }
                                     }
                                 });
-                            });
-                        }
-                        FieldSpec::Range { key, label, min, max } => {
-                            let (label, max) = if *key == "@waittime" { ("Wait (0-20)", 20) } else { (*label, *max) };
-                            let mut v = args[f].clamp(*min, max);
-                            ui.horizontal(|ui| {
+                            }
+                            FieldSpec::Range { key, label, min, max } => {
+                                let (label, max) = if *key == "@waittime" { ("Wait (0-20)", 20) } else { (*label, *max) };
+                                let mut v = args[f].clamp(*min, max);
                                 ui.label(RichText::new(label).color(muted()));
                                 if ui.add(egui::DragValue::new(&mut v).range(*min..=max)).changed() {
                                     args[f] = v;
                                     changed = true;
                                 }
-                            });
+                            }
                         }
+                        ui.end_row();
                     }
-                }
+                });
                 if changed && preset.set_command_values(snap, i, &args) {
                     *dirty = true;
                     if live {
