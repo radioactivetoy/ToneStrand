@@ -87,11 +87,11 @@ fn assign_menu(ui: &mut egui::Ui, json: &mut serde_json::Value, b: &hlx::HlxBloc
         }
     });
 }
-const GUITAR_IN_Z: [&str; 9] = ["Auto", "10k Ohm", "22k Ohm", "32k Ohm", "70k Ohm", "90k Ohm", "136k Ohm", "230k Ohm", "1M Ohm"];
-const GUITAR_PAD: [&str; 3] = ["Global", "Off", "On"];
+pub(super) const GUITAR_IN_Z: [&str; 9] = ["Auto", "10k Ohm", "22k Ohm", "32k Ohm", "70k Ohm", "90k Ohm", "136k Ohm", "230k Ohm", "1M Ohm"];
+pub(super) const GUITAR_PAD: [&str; 3] = ["Global", "Off", "On"];
 
 /// A drop-down for a whole-number setting with named choices.
-fn choice_combo(ui: &mut egui::Ui, id: &str, value: &mut i64, choices: &[(i64, &str)]) -> bool {
+pub(super) fn choice_combo(ui: &mut egui::Ui, id: &str, value: &mut i64, choices: &[(i64, &str)]) -> bool {
     let shown = choices.iter().find(|(v, _)| v == value).map(|(_, n)| n.to_string()).unwrap_or_else(|| value.to_string());
     let mut changed = false;
     egui::ComboBox::from_id_salt(id).selected_text(shown).width(200.0).show_ui(ui, |ui| {

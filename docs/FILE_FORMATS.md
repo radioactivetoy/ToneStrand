@@ -24,7 +24,7 @@ tone                    one MessagePack map
 | `0`, `1` | path 0, path 1 (each a map; `22` = its slots) |
 | `3` | footswitches (`{7: 2, 8: [per footswitch: nil or records]}`) |
 | `4` | controllers (one entry per controller number) |
-| `5` | settings (`16` = tempo, `30` = guitar input impedance: 0 Auto, 1 10k, 2 22k, 3 32k, 4 70k, 5 90k, 6 136k, 7 230k, 8 1M; `134` = guitar pad: 0 Global, 1 Off, 2 On). Same numbering as `.hlx` `@guitarinputZ` / `@guitarpad`. The pedal also has global settings under the same ids; a preset value is its own, pad "Global" defers to the pedal's. |
+| `5` | settings (`16` = tempo, `30` = guitar input impedance: 0 Auto, 1 10k, 2 22k, 3 32k, 4 70k, 5 90k, 6 136k, 7 230k, 8 1M; `134` = guitar pad: 0 Global, 1 Off, 2 On). Same numbering as `.hlx` `@guitarinputZ` / `@guitarpad`. The pedal also has global settings under the same ids (read and written with ops 24 and 25). Checked on an HX Stomp: a preset's own value is what the pedal shows and uses (the global stayed Auto); Auto means the pedal picks the impedance from the first effect in the chain, and when a fixed value is set in the pedal's global settings an Auto preset uses that one; pad "Global" likewise defers to the global pad. |
 | `7` | meta |
 | `10` | snapshot section (`6` = current snapshot, `10` = snapshot list) |
 | `35` | firmware |

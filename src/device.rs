@@ -101,6 +101,12 @@ pub enum Cmd {
         index: i64,
         name: String,
     },
+    /// Change a whole-number preset setting of the loaded preset (guitar impedance 30, guitar pad 134): the
+    /// pedal's current document with that setting changed is written back to its edit buffer (not saved to a slot).
+    SetSetting {
+        field: i64,
+        value: i64,
+    },
     /// Set a Command Center slot of the loaded preset: the pedal's current document with that slot
     /// changed is written back to its edit buffer (not saved to a slot).
     SetCommand {
@@ -523,6 +529,15 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                 Cmd::RenameSnapshot { index, name } => {
                     s.rename_snapshot(index, &name).map_err(|e| e.to_string())?;
                     note_name(send, &name, SNAPSHOT_NAME_MAX);
+                }
+                Cmd::SetSetting { field, value } => {
+                    let mut doc = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;
+                    if !doc.set_setting_int(field, value) {
+                        return Err("this preset has no such setting".into());
+                    }
+                    s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
+                    read_live(s, send)?;
+                    send(Event::Done("Changed on the pedal (Save on pedal keeps it)".into()));
                 }
                 Cmd::SetCommand { slot, id, args } => {
                     // Start from the pedal's own document right now, so a knob turned on the pedal isn't overwritten.
