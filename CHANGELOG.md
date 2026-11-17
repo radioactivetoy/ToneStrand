@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.0.0-beta.1 - 2026-11-17
+
+First beta. Checked on an **HX Stomp** (through a Helrig Box for this release); the other units
+(HX Stomp XL, HX Effects, Helix Floor / LT / Rack) are supported on a best-effort basis from their
+documented layouts and panels and have not been tried on real hardware.
+
+### New
+- **Light theme**, or follow the computer (Settings > Display). Text contrast is tested for every
+  surface and accent colour.
+- **Compare two presets** (Open menu): open tabs or files, `.hlx` or pedal documents; lists blocks
+  added, removed or swapped, on/off, knob values, split and merge points, tempo and snapshot names.
+- **Restore the whole pedal** from a "Back up the whole pedal" folder, with a list of what it holds first;
+  every slot it replaces is backed up and every preset is read back.
+- **Command Center on the pedal document**: every command is shown; FS 4 and FS 5 can be set to HX Preset
+  or HX Snapshot, in a file or live on the loaded preset (kept by "Save on pedal").
+- **Snapshot copy on the live preset** through the pedal's own copy and paste.
+- **Auto-reconnect** after a dropped link (USB or Helrig Box): five tries, a little later each time.
+- Stereo sends, returns and FX loops show two jacks; jack hints on hover for the Helix Floor, Rack, LT,
+  HX Stomp, Stomp XL and HX Effects.
+- Input and output choices are listed per unit, and converting a preset between units keeps what the
+  routes mean (and renames the input and output models between the Helix and Stomp families).
+- Sending a `.hlx` to the pedal carries each path's input and output settings, the guitar input
+  impedance and the guitar pad.
+- A connect prompt in the empty pedal list; a plainer conversion dialog.
+
+### Fixed
+- Removing a split no longer puts parallel-lane effects beyond the unit's last place (or deletes them);
+  it refuses with a note when the main lane is full.
+- The Send / Return picker follows the unit of the open file, not the connected pedal; a return is only
+  placed at or after the clicked line, and "before its send" is checked on both lanes.
+- A split or merge imported from a longer path is held to the pedal's columns.
+- Converting between units moves blocks past the new unit's last place and drops the leftovers of a
+  removed Path 2; the HX Stomp XL no longer offers Ext Amp; the HX Effects has two FX loops, not four.
+- A damaged `.hxb` can no longer crash the app; presets taken from backups get the usual `.hlx` wrapper;
+  `.hlx` files saved with a byte-order mark open.
+- Sending a `.hxpreset` made for another unit is refused; the editor's Send is off for a file of
+  another unit; a write into the playing slot refreshes the live tab; a failed IR delete refreshes the list.
+- The pedal model is read from its own name, not from a Helrig Box's label.
+- A bypassed FX Loop keeps the dry line drawn.
+
+### Known limits
+- Only the HX Stomp has been tried on real hardware; slot copy / swap / move by drag, USB (not re-run for this beta), restore of IRs
+  and several setlists have not.
+- Command Center on the pedal: only FS 4 and FS 5, and only HX Preset and HX Snapshot, can be changed;
+  other commands are shown and kept as they are (change them in HX Edit).
+- The Helrig Box token is kept in plain text in the settings file, and the Box link is not encrypted.
+- Windows only; the installer is not code-signed, so SmartScreen may warn.
+
 ## 0.3.0 - 2026-11-16
 
 First tagged release.

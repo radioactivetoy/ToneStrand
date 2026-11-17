@@ -38,9 +38,12 @@ The effect pictures and names come from Line 6; see "Third-party material" below
   presets, F2 to rename, Ctrl+S to save, Ctrl+Z / Y for undo and redo; F1 lists them all.
 - **Pedal presets**: drag one preset onto another slot to copy, swap or move it (the slot it
   replaces is backed up first and the write is read back).
-- **Snapshots**: recall, rename, copy/paste, duplicate, delete; per-snapshot knob values.
-- **Controllers**: footswitches, expression pedals, snapshots, MIDI CC and (for `.hlx`) Command
-  Center, both on files and live on the pedal.
+- **Snapshots**: recall, rename, copy (on the live preset too, with the pedal's own copy and paste), duplicate, delete; per-snapshot knob values.
+- **Controllers**: footswitches, expression pedals, snapshots and MIDI CC, on files and live on the pedal.
+- **Command Center**: all of it in `.hlx` files; on the pedal, every command is shown and FS 4 / FS 5 can be
+  set to HX Preset or HX Snapshot, in a file or live on the loaded preset.
+- **Compare two presets** (files, open tabs or a slot's preset) and **restore** a backed-up preset or a
+  whole-pedal backup, after a list of what it holds.
 - **Preset library** on disk (real folders), import of HX Edit backups (`.hxb`) and setlists
   (`.hls`), conversion between units with a report of what doesn't fit.
 - **User IRs**: list, upload (any `.wav`, resampled to the pedal's format), download, rename,
@@ -63,7 +66,7 @@ The effect pictures and names come from Line 6; see "Third-party material" below
 
 ## Download
 
-Get the latest Windows build from the [Releases](https://github.com/radioactivetoy/ToneStrand/releases)
+Get the latest Windows build (a beta is marked as a pre-release) from the [Releases](https://github.com/radioactivetoy/ToneStrand/releases)
 page, in either form:
 
 - **`ToneStrand-Setup-<version>.exe`**: the installer. It installs for your user only (no
@@ -105,6 +108,9 @@ pairings as the box's own documentation describes, then pair again.
 | [AGENTS.md](AGENTS.md) | Working rules and checklists for coding agents (Claude, Antigravity, ...) |
 
 ## Status
+
+**Beta.** Built and checked on an HX Stomp; the other units are supported from their documented layouts
+and have not been tried on real hardware, so back up before writing to them.
 
 Used daily on an HX Stomp, over USB and through a Helrig Box (live editing, IR upload and
 preset writes have been exercised with the self-test). Things not yet tried on real hardware

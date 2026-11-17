@@ -1,6 +1,7 @@
 name: Release
 
-# Push a tag like v0.3.0 to build the Windows installer and zip and publish a GitHub release.
+# Push a tag like v1.0.0 (or v1.0.0-beta.1, published as a pre-release) to build the Windows installer
+# and zip and publish a GitHub release.
 # "Run workflow" (workflow_dispatch) does the same build without publishing, to try it out:
 # the files are attached to the run.
 on:
@@ -73,5 +74,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --title "ToneStrand $VERSION" --notes-file notes.md \
+          PRE=""
+          # A version with a dash (1.0.0-beta.1) is published as a pre-release.
+          if [[ "$VERSION" == *-* ]]; then PRE="--prerelease"; fi
+          gh release create "$GITHUB_REF_NAME" --title "ToneStrand $VERSION" --notes-file notes.md $PRE \
             "ToneStrand-$VERSION-windows.zip" "installer/Output/ToneStrand-Setup-$VERSION.exe"
