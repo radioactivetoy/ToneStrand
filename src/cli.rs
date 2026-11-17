@@ -188,6 +188,9 @@ fn dump_loaded_tool(rest: &[String]) {
     };
     let Some(mut s) = open_session(Some(host)) else { return };
     let Some(blob) = need(s.read_current(), "reading the loaded preset") else { return };
+    if let Some(dir) = std::path::Path::new(file).parent().filter(|d| !d.as_os_str().is_empty()) {
+        let _ = std::fs::create_dir_all(dir);
+    }
     match std::fs::write(file, &blob) {
         Ok(()) => println!("saved the loaded preset ({} bytes) to {file}", blob.len()),
         Err(e) => eprintln!("can't write {file}: {e}"),
