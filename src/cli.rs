@@ -4,7 +4,8 @@
 use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnames, session, wire};
 
 /// The command-line tools (everything else opens the window).
-pub const CLI_FLAGS: [&str; 17] = [
+pub const CLI_FLAGS: [&str; 18] = [
+    "--dump-loaded",
     "--box-proxy",
     "--cc-raw",
     "--cc-reload",
@@ -178,6 +179,21 @@ fn cc_raw_tool(rest: &[String]) {
     }
 }
 
+/// `--dump-loaded <box address> <file.hxpreset>`: save the loaded preset's edit buffer (what the pedal
+/// holds right now, unsaved changes included) to a file. Reads only.
+fn dump_loaded_tool(rest: &[String]) {
+    let (Some(host), Some(file)) = (rest.first(), rest.get(1)) else {
+        eprintln!("usage: --dump-loaded <box address> <file.hxpreset>");
+        return;
+    };
+    let Some(mut s) = open_session(Some(host)) else { return };
+    let Some(blob) = need(s.read_current(), "reading the loaded preset") else { return };
+    match std::fs::write(file, &blob) {
+        Ok(()) => println!("saved the loaded preset ({} bytes) to {file}", blob.len()),
+        Err(e) => eprintln!("can't write {file}: {e}"),
+    }
+}
+
 /// `--cc-reload <box address>`: load the loaded preset again from flash.
 fn cc_reload_tool(rest: &[String]) {
     let Some(host) = rest.first() else {
@@ -228,6 +244,7 @@ ToneStrand command-line tools (all read-only unless noted):
   --cc-compare <file.hxpreset|slot> <file.hlx> [box address]  line an HX Edit export up with the pedal's Command Center
   --cc-raw <box address> <slot 0-12> <id> [arg1 .. arg6]  WRITES one Command Center slot of the loaded preset (edit buffer only)
   --cc-reload <box address>         reload the loaded preset from flash, dropping edit-buffer changes
+  --dump-loaded <box address> <file.hxpreset>  save the loaded preset (edit buffer, unsaved changes included) to a file
   --box-proxy <listen address:port> <box address> [folder for documents]  log what another editor sends the pedal through the box
   --hlx-check <template.hxpreset> [file.hlx]  try the .hlx -> pedal conversion offline
   --fmt-check                       how a dual cab's knobs read at their edges
@@ -253,6 +270,10 @@ pub fn run(args: &[String]) -> bool {
     }
     if let Some(i) = args.iter().position(|a| a == "--cc-raw") {
         cc_raw_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--dump-loaded") {
+        dump_loaded_tool(&args[i + 1..]);
         return true;
     }
     if let Some(i) = args.iter().position(|a| a == "--cc-reload") {

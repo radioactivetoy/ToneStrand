@@ -109,6 +109,7 @@ Handy when working on formats or the protocol; none of them writes to the pedal.
 | `--cc-compare <file or slot> <file.hlx> [host]` | Line an HX Edit `.hlx` export up with the pedal's Command Center: slot positions and which argument holds each field |
 | `--cc-raw <host> <slot 0-12> <id> [args]` | WRITES one Command Center slot of the loaded preset into the pedal's edit buffer (not saved), for trying argument layouts |
 | `--cc-reload <host>` | Reload the loaded preset from flash, dropping edit-buffer changes (wait a few seconds after another tool; the pedal needs a moment between sessions) |
+| `--dump-loaded <host> <file>` | Save the loaded preset's edit buffer (unsaved changes included) to a `.hxpreset` file; reads only |
 | `--box-proxy <listen address:port> <box address[:port]> [folder]` | A logging pass-through: point another editor at this computer instead of the box, and see the pedal's requests and replies it makes (documents are saved to the folder) |
 | `--ctl-check <files>` | Read and rewrite each document's controllers; must stay byte-identical |
 | `--attach-check <files>` | Move split/merge positions in memory and read them back |
