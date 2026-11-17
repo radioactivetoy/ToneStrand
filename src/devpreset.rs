@@ -627,8 +627,10 @@ impl DevicePreset {
             _ => false,
         };
         if set {
-            if id != old_id {
-                self.set_command_label(slot, id);
+            if id == 0 {
+                self.remove_cc_record(slot);
+            } else {
+                self.set_command_label(slot, id, id != old_id);
             }
             // The snapshots keep their own copy of what each command does: bring them in step.
             self.sync_snapshot_commands(Some(slot));
@@ -636,13 +638,54 @@ impl DevicePreset {
         set
     }
 
-    /// The footswitch table's record of a Command Center footswitch (slots 6 to 10 on an HX Stomp).
-    fn fs_record_mut(&mut self, slot: usize) -> Option<&mut Value> {
+    /// The footswitch table's Command Center record of a footswitch (slots 6 to 10 on an HX Stomp): the one
+    /// whose kind (field 11, entry 0) is 3. A switch can also carry block on/off records. With `create`, a
+    /// missing record is made with that name.
+    fn fs_record_mut(&mut self, slot: usize, create: Option<&str>) -> Option<&mut Value> {
         let i = slot.checked_sub(6).filter(|i| *i < 5)?;
         let Some(Value::Array(table, _)) = self.tone.at_mut(&[3, 8]) else { return None };
-        match table.get_mut(i)? {
-            Value::Array(recs, _) => recs.get_mut(0),
+        let sw = table.get_mut(i)?;
+        let is_cc = |r: &Value| r.get(11).and_then(|k| k.get(0)).and_then(Value::as_i64) == Some(3);
+        if !matches!(sw, Value::Array(recs, _) if recs.iter().any(is_cc)) {
+            let label = create?;
+            let rec = Value::map(vec![
+                (10, Value::int(0)),
+                (
+                    11,
+                    Value::map(vec![
+                        (0, Value::int(3)),
+                        (5, Value::str(&format!("{label}\0"))),
+                        (6, Value::int(462860)),
+                        (7, Value::Bool(false)),
+                    ]),
+                ),
+                (12, Value::Bool(false)),
+                (13, Value::Bool(false)),
+                (14, Value::str("\0")),
+                (15, Value::Bool(false)),
+                (16, Value::int(0)),
+            ]);
+            match sw {
+                Value::Array(recs, _) => recs.push(rec),
+                _ => *sw = Value::Array(vec![rec], crate::msgpack::AUTO),
+            }
+        }
+        match sw {
+            Value::Array(recs, _) => recs.iter_mut().find(|r| is_cc(r)),
             _ => None,
+        }
+    }
+
+    /// Take a footswitch's Command Center record away (its command was removed).
+    fn remove_cc_record(&mut self, slot: usize) {
+        let Some(i) = slot.checked_sub(6).filter(|i| *i < 5) else { return };
+        let Some(Value::Array(table, _)) = self.tone.at_mut(&[3, 8]) else { return };
+        let Some(sw) = table.get_mut(i) else { return };
+        if let Value::Array(recs, _) = sw {
+            recs.retain(|r| r.get(11).and_then(|k| k.get(0)).and_then(Value::as_i64) != Some(3));
+            if recs.is_empty() {
+                *sw = Value::Nil;
+            }
         }
     }
 
@@ -650,17 +693,18 @@ impl DevicePreset {
     /// "Momentary" switch, off = latching). None for a slot that isn't a footswitch or has no record.
     pub fn command_momentary(&self, slot: usize) -> Option<bool> {
         let i = slot.checked_sub(6).filter(|i| *i < 5)?;
-        let rec = self.tone.at(&[3, 8])?.as_array()?.get(i)?.as_array()?.first()?;
+        let sw = self.tone.at(&[3, 8])?.as_array()?.get(i)?.as_array()?;
+        let rec = sw.iter().find(|r| r.get(11).and_then(|k| k.get(0)).and_then(Value::as_i64) == Some(3))?;
         match rec.get(12)? {
             Value::Bool(b) => Some(*b),
             _ => None,
         }
     }
 
-    /// Set the Momentary flag of a Command Center footswitch. A CC Toggle also keeps it in its fifth
-    /// argument. False when the slot has no footswitch record.
+    /// Set the Momentary flag of a Command Center footswitch. A CC Toggle or Hotkey also keeps it in its
+    /// fifth argument. False when the slot isn't a footswitch.
     pub fn set_command_momentary(&mut self, slot: usize, momentary: bool) -> bool {
-        let Some(rec) = self.fs_record_mut(slot) else { return false };
+        let Some(rec) = self.fs_record_mut(slot, Some("Command")) else { return false };
         let Some(flag) = rec.get_mut(12) else { return false };
         *flag = Value::Bool(momentary);
         if self.command(slot).is_some_and(|c| c.0 == 2 || c.0 == 12) {
@@ -678,24 +722,31 @@ impl DevicePreset {
         true
     }
 
-    /// When a footswitch gets a new command type the pedal names the switch after it and picks whether it
-    /// is momentary (seen on an HX Stomp for the types below; the others are left as they are).
-    fn set_command_label(&mut self, slot: usize, id: i64) {
+    /// A footswitch with a command has a record in the footswitch table, named after the command type. When
+    /// the type is new the pedal also picks whether the switch is momentary. Seen on an HX Stomp: CC Value,
+    /// CC Toggle, Note, MMC, Hotkey, Preset, Snapshot; the names and defaults of Bank/Program and HX
+    /// Looper are guesses.
+    fn set_command_label(&mut self, slot: usize, id: i64, new_type: bool) {
         let (label, momentary) = match id {
             1 => ("CC Value", true),
             2 => ("CC Toggle", false),
+            4 => ("Bank/Program", true),
             5 => ("Note", false),
             6 => ("MMC", true),
             12 => ("Hotkey", true),
+            14 => ("Preset", false),
             15 => ("Snapshot", true),
+            16 => ("Looper", true),
             _ => return,
         };
-        let Some(rec) = self.fs_record_mut(slot) else { return };
-        if let Some(Value::Str(s, _)) = rec.get_mut(11).and_then(|i| i.get_mut(5)) {
-            *s = label.to_owned();
-        }
-        if let Some(flag) = rec.get_mut(12) {
-            *flag = Value::Bool(momentary);
+        let Some(rec) = self.fs_record_mut(slot, Some(label)) else { return };
+        if new_type {
+            if let Some(Value::Str(s, _)) = rec.get_mut(11).and_then(|i| i.get_mut(5)) {
+                *s = format!("{label}\0");
+            }
+            if let Some(flag) = rec.get_mut(12) {
+                *flag = Value::Bool(momentary);
+            }
         }
     }
 
@@ -1210,7 +1261,144 @@ impl DevicePreset {
             }
         }
         out.apply_hlx_controllers(doc, cat, &placed, &mut notes);
+        out.apply_hlx_commands(doc, &mut notes);
         Ok((out, notes))
+    }
+
+    /// A command's values in one snapshot (its six arguments), or None when that snapshot has no record for
+    /// the slot (no command, or HX Preset, which is the same everywhere).
+    pub fn snapshot_command_args(&self, snapshot: usize, slot: usize) -> Option<Vec<i64>> {
+        let snap = self.tone.at(&[key::SNAPSHOT_SECTION, key::SNAPSHOTS])?.as_array()?.get(snapshot)?;
+        Self::snapshot_command_rows(snap)
+            .into_iter()
+            .find(|(h, _, _)| *h == slot as i64)
+            .map(|(_, _, v)| v.into_iter().skip(1).take(6).collect())
+    }
+
+    /// Change a command's values in one snapshot, as the pedal does when a value is set while that snapshot is
+    /// selected: the snapshot's record changes, and the command's own row too when it is the snapshot the
+    /// pedal has selected. HX Preset has one set of values for all, kept in its row.
+    pub fn set_command_values(&mut self, snapshot: usize, slot: usize, args: &[i64]) -> bool {
+        let Some((id, _)) = self.command(slot) else { return false };
+        if id == 14 {
+            return self.set_command(slot, id, args);
+        }
+        if !self.set_snapshot_command(snapshot, slot, args) {
+            return false;
+        }
+        if snapshot == self.current_snapshot() {
+            if let Some(Value::Array(rows, _)) = self.tone.at_mut(&[key::COMMANDS, 1]) {
+                if let Some(Value::Array(row, _)) = rows.get_mut(slot) {
+                    for (i, a) in args.iter().take(6).enumerate() {
+                        if let Some(v) = row.get_mut(i + 1) {
+                            *v = Value::int(*a);
+                        }
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    /// Change a snapshot's own values for a command: the first arguments of its record (the rest, such as a
+    /// CC Toggle's state, stay). False when the slot has no record (no command, or HX Preset).
+    pub fn set_snapshot_command(&mut self, snapshot: usize, slot: usize, args: &[i64]) -> bool {
+        self.sync_snapshot_commands(None);
+        let Some(Value::Array(rows, _)) = self
+            .tone
+            .at_mut(&[key::SNAPSHOT_SECTION, key::SNAPSHOTS])
+            .and_then(|v| v.as_array_mut())
+            .and_then(|a| a.get_mut(snapshot))
+            .and_then(|s| s.get_mut(1))
+        else {
+            return false;
+        };
+        for row in rows.iter_mut() {
+            let Value::Array(parts, _) = row else { continue };
+            if parts.first().and_then(Value::as_i64) != Some(slot as i64) {
+                continue;
+            }
+            let Some(Value::Array(vals, _)) = parts.get_mut(2) else { return false };
+            for (i, a) in args.iter().take(6).enumerate() {
+                if let Some(v) = vals.get_mut(i + 1) {
+                    *v = Value::int(*a);
+                }
+            }
+            return true;
+        }
+        false
+    }
+
+    /// The Command Center of a `.hlx` (`commandInst1`, `commandFS2`, ... and each snapshot's own copy) into
+    /// this document: every slot is cleared first, then the file's commands are set in the pedal's argument
+    /// order, with the wait held to the pedal's 20, the Momentary flags and the snapshots' own values.
+    fn apply_hlx_commands(&mut self, doc: &serde_json::Value, notes: &mut Vec<String>) {
+        use crate::controllers::{hlx_arg_keys, stomp_device_slots, stomp_slot_of_hlx_key};
+        let Some(tone) = doc.pointer("/data/tone").and_then(serde_json::Value::as_object) else { return };
+        let in_file = tone.keys().any(|k| k.starts_with("command"));
+        if self.command_count() != 13 {
+            if in_file {
+                notes.push("This pedal's Command Center isn't carried over from a .hlx yet (only the HX Stomp's is).".into());
+            }
+            return;
+        }
+        let slots = stomp_device_slots();
+        for slot in 0..slots.len() {
+            self.set_command(slot, 0, &[]);
+        }
+        let number = |v: Option<&serde_json::Value>| v.and_then(serde_json::Value::as_i64);
+        let clamp = |key: &str, v: i64| if key == "@waittime" { v.clamp(0, 20) } else { v };
+        for (k, cmd) in tone.iter().filter(|(k, _)| k.starts_with("command")) {
+            let Some(slot) = stomp_slot_of_hlx_key(k) else {
+                notes.push(format!("{k} has no place on this pedal; left out."));
+                continue;
+            };
+            let id = number(cmd.get("@command")).unwrap_or(0);
+            if id == 0 {
+                continue;
+            }
+            let keys = hlx_arg_keys(slots[slot].kind, id);
+            if keys.is_empty() {
+                notes.push(format!("{k}: command {id} isn't one this pedal's {} takes; left out.", slots[slot].title));
+                continue;
+            }
+            let args: Vec<i64> = keys.iter().map(|key| clamp(key, number(cmd.get(*key)).unwrap_or(0))).collect();
+            if keys.contains(&"@waittime")
+                && keys.iter().zip(&args).any(|(key, a)| *key == "@waittime" && Some(*a) != number(cmd.get(*key)))
+            {
+                notes.push(format!("{}'s wait was held to the pedal's limit of 20.", slots[slot].title));
+            }
+            self.set_command(slot, id, &args);
+            if let Some(m) = cmd.get("@fs_momentary").and_then(serde_json::Value::as_bool) {
+                if matches!(id, 2 | 12) {
+                    self.set_command_momentary(slot, m);
+                } else if let Some(rec) = self.fs_record_mut(slot, None) {
+                    if let Some(flag) = rec.get_mut(12) {
+                        *flag = Value::Bool(m);
+                    }
+                }
+            }
+        }
+        // Each snapshot's own values.
+        for n in 0..self.snapshot_names().len() {
+            let Some(own) = doc.pointer(&format!("/data/tone/snapshot{n}/commands")).and_then(serde_json::Value::as_object) else {
+                continue;
+            };
+            for (k, cmd) in own {
+                let Some(slot) = stomp_slot_of_hlx_key(k) else { continue };
+                let Some((id, base)) = self.command(slot) else { continue };
+                if id == 14 {
+                    continue;
+                }
+                let keys = hlx_arg_keys(slots[slot].kind, id);
+                let args: Vec<i64> = keys
+                    .iter()
+                    .enumerate()
+                    .map(|(i, key)| clamp(key, number(cmd.get(*key)).unwrap_or(base.get(i).copied().unwrap_or(0))))
+                    .collect();
+                self.set_snapshot_command(n, slot, &args);
+            }
+        }
     }
 
     /// Controllers, per-snapshot knob values and footswitches from a .hlx, laid out
@@ -1770,6 +1958,44 @@ mod command_tests {
         d
     }
 
+    /// `HX_FIXTURE` is a pedal document, `HLX_FIXTURE` the Stomp preset "Wish acoustic" exported by another
+    /// editor: its Command Center goes to the pedal document, with the wait held to 20 and the snapshots'
+    /// own values.
+    #[test]
+    fn a_hlx_command_center_goes_to_the_pedal_document() {
+        let (Ok(tpl), Ok(file), Some(dir)) = (std::env::var("HX_FIXTURE"), std::env::var("HLX_FIXTURE"), crate::catalog::find_dir(None))
+        else {
+            return;
+        };
+        let cat = crate::catalog::Catalog::load(&dir).unwrap();
+        let template = DevicePreset::parse(&std::fs::read(tpl).unwrap()).unwrap();
+        let json = crate::hlx::parse_text(&std::fs::read_to_string(file).unwrap()).unwrap();
+        if json.pointer("/data/tone/commandInst1/@command").and_then(serde_json::Value::as_i64) != Some(18) {
+            return;
+        }
+        let (out, notes) = DevicePreset::from_hlx(&template, &json, &cat).unwrap();
+        assert_eq!(out.command(0), Some((18, vec![5, 55, 66, 20, 0, 0])), "wait held to 20");
+        assert!(notes.iter().any(|n| n.contains("limit of 20")), "{notes:?}");
+        assert_eq!(out.command(1), Some((19, vec![5, 7, 9, 11, 0, 0])));
+        assert_eq!(out.command(2), Some((20, vec![2, 0, 0, 0, 0, 0])));
+        assert_eq!(out.command(3), Some((13, vec![1, 3, 1, 3, 20, 0])));
+        assert_eq!(out.command(4), Some((17, vec![4, 0, 0, 0, 0, 0])));
+        assert_eq!(out.command(6), Some((2, vec![1, 0, 0, 0, 1, 0])), "FS 1: CC Toggle, momentary");
+        assert_eq!(out.command_momentary(6), Some(true));
+        assert_eq!(out.command(7), Some((2, vec![3, 22, 33, 11, 0, 33])), "FS 2: CC Toggle, latching");
+        assert_eq!(out.command_momentary(7), Some(false));
+        assert_eq!(out.command(8), Some((5, vec![4, 4, 22, 0, 0, 0])));
+        assert_eq!(out.command(9), Some((15, vec![0, 4, 0, 0, 0, 0])));
+        assert_eq!(out.command(10), Some((15, vec![1, 4, 5, 0, 0, 0])));
+        assert_eq!(out.command(11), Some((3, vec![5, 23, 11, 99, 0, 0])));
+        assert_eq!(out.command(12), None, "the file has no EXP 2");
+        let back = DevicePreset::parse(&out.encode()).unwrap();
+        assert_eq!(back.command(7), out.command(7));
+        // Snapshot 1 keeps the file's own values for Instant 1.
+        let rows = back.tone.at(&[10, 10]).and_then(Value::as_array).unwrap();
+        let snap0 = DevicePreset::snapshot_command_rows(&rows[0]);
+        assert_eq!(snap0[0], (0, false, vec![0, 5, 55, 66, 20, 0, 0]));
+    }
     /// The pedal's own rows (captured from an HX Stomp): the id is in the list, rows start with 0 except
     /// HX Preset's, and a CC Toggle's fifth argument is its Momentary flag.
     #[test]
@@ -1789,7 +2015,7 @@ mod command_tests {
         assert_eq!(d.command_momentary(7), Some(false));
         assert_eq!(d.command(7), Some((2, vec![3, 22, 33, 11, 0, 33])));
         let name = d.tone.at(&[3, 8]).and_then(Value::as_array).unwrap()[1].as_array().unwrap()[0].get(11).unwrap().get(5).unwrap();
-        assert_eq!(name.as_str(), Some("CC Toggle"));
+        assert_eq!(name.as_str().map(|s| s.trim_end_matches('\0')), Some("CC Toggle"));
         // Momentary on: the flag and the fifth argument change, the current state goes back to 0.
         assert!(d.set_command_momentary(7, true));
         assert_eq!(d.command_momentary(7), Some(true));
@@ -1805,7 +2031,7 @@ mod command_tests {
         assert_eq!(d.command_momentary(8), Some(true));
         assert_eq!(d.command(8), Some((12, vec![3, 1, 4, 5, 1, 0])));
         let name = d.tone.at(&[3, 8]).and_then(Value::as_array).unwrap()[2].as_array().unwrap()[0].get(11).unwrap().get(5).unwrap();
-        assert_eq!(name.as_str(), Some("Hotkey"));
+        assert_eq!(name.as_str().map(|s| s.trim_end_matches('\0')), Some("Hotkey"));
         // A slot that isn't a footswitch has no flag.
         assert_eq!(d.command_momentary(0), None);
         assert!(!d.set_command_momentary(0, true));
@@ -1938,6 +2164,27 @@ mod snapshot_command_tests {
         assert_eq!(rows(&d, 1)[1], (7, vec![0, 0, 4, 0, 0, 0, 0]));
     }
 
+    #[test]
+    fn a_value_set_in_one_snapshot_leaves_the_others_and_the_type_alone() {
+        let mut d = doc();
+        d.set_command(7, 15, &[0, 4, 0]);
+        let current = d.current_snapshot();
+        let other = if current == 1 { 2 } else { 1 };
+        assert!(d.set_command_values(other, 7, &[0, 5, 0]));
+        assert_eq!(d.snapshot_command_args(other, 7), Some(vec![0, 5, 0, 0, 0, 0]));
+        assert_eq!(d.snapshot_command_args(current, 7), Some(vec![0, 4, 0, 0, 0, 0]));
+        assert_eq!(d.command(7), Some((15, vec![0, 4, 0, 0, 0, 0])), "the row follows the selected snapshot only");
+        // In the selected snapshot the row changes too.
+        assert!(d.set_command_values(current, 7, &[0, 3, 0]));
+        assert_eq!(d.command(7), Some((15, vec![0, 3, 0, 0, 0, 0])));
+        assert_eq!(d.snapshot_command_args(other, 7), Some(vec![0, 5, 0, 0, 0, 0]));
+        // HX Preset has one value for all.
+        d.set_command(6, 14, &[2]);
+        assert!(d.set_command_values(other, 6, &[7]));
+        assert_eq!(d.command(6), Some((14, vec![7, 0, 0, 0, 0, 0])));
+        assert_eq!(d.snapshot_command_args(other, 6), None);
+        assert!(!d.set_command_values(other, 0, &[1]), "no command in slot 0");
+    }
     #[test]
     fn hx_preset_has_no_record_and_clearing_a_command_removes_its_record() {
         let mut d = doc();

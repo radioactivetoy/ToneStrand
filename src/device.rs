@@ -114,6 +114,12 @@ pub enum Cmd {
         id: i64,
         args: Vec<i64>,
     },
+    /// Change a command's values in one snapshot of the loaded preset (the other snapshots keep theirs).
+    SetCommandValues {
+        snapshot: usize,
+        slot: usize,
+        args: Vec<i64>,
+    },
     /// Make a Command Center footswitch momentary or latching on the loaded preset.
     SetMomentary {
         slot: usize,
@@ -543,6 +549,15 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
                     read_live(s, send)?;
                     send(Event::Done("Changed on the pedal (Save on pedal keeps it)".into()));
+                }
+                Cmd::SetCommandValues { snapshot, slot, args } => {
+                    let mut doc = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;
+                    if !doc.set_command_values(snapshot, slot, &args) {
+                        return Err("this preset has no such Command Center slot".into());
+                    }
+                    s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
+                    read_live(s, send)?;
+                    send(Event::Done("Command Center changed on the pedal (Save on pedal keeps it)".into()));
                 }
                 Cmd::SetMomentary { slot, momentary } => {
                     let mut doc = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;

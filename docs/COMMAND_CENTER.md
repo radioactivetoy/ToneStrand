@@ -154,6 +154,8 @@ snapshot[n][1] = [
 
 ## 5. Building a preset (`.hlx` → pedal document)
 
+*Implemented* in `DevicePreset::apply_hlx_commands` for the HX Stomp (checked with an export of "Wish acoustic": every command, the wait held to 20, Momentary flags, per-snapshot values). Other units get a note that their Command Center was not carried over.
+
 1. Get the slot list for the unit (section 1). For each `command<Slot>` in the `.hlx`, find its slot
    index; refuse a key the unit doesn't have (e.g. `commandFS8` on an HX Stomp), saying why.
 2. Refuse a type outside the table, and a set field the type has no place for (e.g. `@waittime` on

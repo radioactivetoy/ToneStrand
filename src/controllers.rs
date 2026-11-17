@@ -1035,6 +1035,28 @@ fn device_defaults(id: i64) -> Vec<i64> {
     }
 }
 
+/// A command type's `.hlx` field names in the pedal's argument order (`@channel`, `@cc`, ...), for the
+/// kind of trigger it sits on.
+pub fn hlx_arg_keys(kind: SlotKind, id: i64) -> Vec<&'static str> {
+    specs_for(kind, crate::nam::unit(), 3)
+        .into_iter()
+        .find(|s| s.id == id)
+        .map(|s| {
+            s.fields
+                .iter()
+                .map(|f| match f {
+                    FieldSpec::Range { key, .. } | FieldSpec::Choice { key, .. } => *key,
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The HX Stomp's slot number for a `.hlx` key such as `commandFS2`.
+pub fn stomp_slot_of_hlx_key(key: &str) -> Option<usize> {
+    stomp_device_slots().iter().position(|s| s.key == key)
+}
+
 /// The Command Center of a pedal document: what each trigger does, and a place to change it. On the
 /// loaded preset a change goes to the pedal at once (Save on pedal keeps it); on a file or a slot's copy it
 /// changes the document. Only the HX Stomp's layout is read so far.
@@ -1066,14 +1088,24 @@ pub fn device_command_center(
             ui.label(RichText::new("The Command Center of this unit isn't read here yet.").color(muted()));
             return;
         }
-        let snap = preset.current_snapshot();
+        let current = preset.current_snapshot();
         let names = preset.snapshot_names();
-        let snap_name = names.get(snap).map(|n| n.trim().to_owned()).unwrap_or_default();
-        let badge = if snap_name.is_empty() { format!("Snapshot {}", snap + 1) } else { format!("Snapshot {} · {snap_name}", snap + 1) };
+        let snap_id = egui::Id::new("dev-cc-snapshot");
+        let mut snap: usize = ui.data(|d| d.get_temp(snap_id)).unwrap_or(current).min(names.len().saturating_sub(1));
         ui.horizontal_wrapped(|ui| {
-            theme::pill(ui, &badge, accent());
-            ui.label(RichText::new("A command's values are kept per snapshot, as on the pedal.").small().color(muted()));
+            ui.label(RichText::new("Snapshot").color(muted()));
+            for (j, name) in names.iter().enumerate() {
+                let text = if name.trim().is_empty() { format!("{}", j + 1) } else { format!("{} · {}", j + 1, name.trim()) };
+                if ui.selectable_label(snap == j, text).clicked() {
+                    snap = j;
+                }
+            }
+            theme::help(
+                ui,
+                "Each snapshot keeps its own values for a command (HX Preset is the same in all). Pick the snapshot to see or change its values; the command itself and its type are shared.",
+            );
         });
+        ui.data_mut(|d| d.insert_temp(snap_id, snap));
         ui.add_space(6.0);
 
         // Trigger grid in the pedal's own arrangement: the top row carries the instant commands and the
@@ -1133,7 +1165,8 @@ pub fn device_command_center(
         let i = sel;
         let slot = &slots[i];
         let specs: Vec<CmdSpec> = specs_for(slot.kind, device, fam.snapshot_count).into_iter().filter(|s| s.id != 7 && s.id != 8).collect();
-        let (id, mut args) = preset.command(i).unwrap_or((0, vec![0; 6]));
+        let (id, base_args) = preset.command(i).unwrap_or((0, vec![0; 6]));
+        let mut args = preset.snapshot_command_args(snap, i).filter(|_| id != 14).unwrap_or(base_args);
         let spec = specs.iter().find(|s| s.id == id);
         let name = if id == 0 { "None".to_owned() } else { spec.map(|s| s.name.to_owned()).unwrap_or_else(|| format!("command {id}")) };
         let mark = if UNVERIFIED.contains(&id) { " (not checked on a pedal)" } else { "" };
@@ -1229,10 +1262,10 @@ pub fn device_command_center(
                         }
                     }
                 }
-                if changed && preset.set_command(i, id, &args) {
+                if changed && preset.set_command_values(snap, i, &args) {
                     *dirty = true;
                     if live {
-                        cmds.push(crate::device::Cmd::SetCommand { slot: i, id, args: args.clone() });
+                        cmds.push(crate::device::Cmd::SetCommandValues { snapshot: snap, slot: i, args: args.clone() });
                     }
                 }
             });
