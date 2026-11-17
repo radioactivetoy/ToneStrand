@@ -185,6 +185,10 @@ pub struct App {
     slot_drop: Option<(usize, usize)>,
     /// When a live change was last sent to the pedal (shows "sent" for a moment).
     last_live_send: Option<Instant>,
+    /// Live copies of the preset still due from the pedal (one per edit sent that gets one back), and when the
+    /// last such edit was sent; only the newest copy is shown.
+    refresh_due: u32,
+    refresh_due_at: Option<Instant>,
     close_ask: Option<CloseAsk>,
     /// The person chose to quit even with unsaved changes.
     quit_ok: bool,
@@ -300,6 +304,8 @@ impl App {
             show_shortcuts: false,
             slot_drop: None,
             last_live_send: None,
+            refresh_due: 0,
+            refresh_due_at: None,
             close_ask: None,
             quit_ok: false,
             last_error: None,
@@ -422,6 +428,10 @@ impl App {
                     | Cmd::Snapshot(_)
             ) {
                 self.last_live_send = Some(Instant::now());
+            }
+            if cmd.refreshes_live() {
+                self.refresh_due += 1;
+                self.refresh_due_at = Some(Instant::now());
             }
             let _ = l.tx.send(cmd);
         } else {

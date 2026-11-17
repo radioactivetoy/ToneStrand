@@ -260,6 +260,31 @@ pub enum Event {
     },
 }
 
+impl Cmd {
+    /// Whether the pedal thread answers this command with a fresh copy of the loaded preset. The window
+    /// counts these so that an older copy, still on its way when the next edit is made, doesn't put the
+    /// previous state back on screen.
+    pub fn refreshes_live(&self) -> bool {
+        matches!(
+            self,
+            Cmd::SetModel { .. }
+                | Cmd::ReplaceBlock { .. }
+                | Cmd::AddBlock { .. }
+                | Cmd::MoveBlock { .. }
+                | Cmd::MoveSplit { .. }
+                | Cmd::MoveJoin { .. }
+                | Cmd::ClearBlock { .. }
+                | Cmd::Snapshot(_)
+                | Cmd::SetSetting { .. }
+                | Cmd::CopySnapshot { .. }
+                | Cmd::AssignController { .. }
+                | Cmd::UnassignController { .. }
+                | Cmd::AssignFootswitch { .. }
+                | Cmd::UnassignFootswitch { .. }
+        )
+    }
+}
+
 pub struct Link {
     pub tx: Sender<Cmd>,
     pub rx: Receiver<Event>,
