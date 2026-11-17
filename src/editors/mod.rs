@@ -49,8 +49,73 @@ fn io_params(input: bool) -> Vec<(&'static str, Param)> {
     }
 }
 
-/// The settings of a path's input or output: where the sound comes from or goes, and its knobs.
+/// The picture beside an input's or output's settings, where an effect has its photo: a jack with an arrow
+/// showing which way the sound goes.
+fn io_tile(ui: &mut egui::Ui, input: bool, width: f32) {
+    egui::Frame::new()
+        .fill(Color32::from_rgb(0x10, 0x11, 0x14))
+        .corner_radius(CornerRadius::same(8))
+        .inner_margin(egui::Margin::same(6))
+        .show(ui, |ui| {
+            ui.set_width(width - 12.0);
+            let (rect, _) = ui.allocate_exact_size(Vec2::new(width - 24.0, 110.0), egui::Sense::hover());
+            let p = ui.painter();
+            let c = rect.center() + Vec2::new(if input { 14.0 } else { -14.0 }, -6.0);
+            let steel = Color32::from_rgb(0x8a, 0x90, 0x9a);
+            // The jack: a nut, its sleeve, and the hole.
+            p.circle_filled(c, 30.0, Color32::from_rgb(0x2a, 0x2d, 0x33));
+            p.circle_stroke(c, 30.0, Stroke::new(2.0_f32, steel.linear_multiply(0.55)));
+            p.circle_filled(c, 21.0, steel.linear_multiply(0.75));
+            p.circle_filled(c, 13.0, Color32::from_rgb(0x08, 0x09, 0x0b));
+            p.circle_filled(c, 4.0, steel.linear_multiply(0.5));
+            // An arrow into the jack (input) or out of it (output).
+            let y = c.y;
+            let (from, to) = if input { (c.x - 78.0, c.x - 38.0) } else { (c.x + 38.0, c.x + 78.0) };
+            let col = accent();
+            p.line_segment([egui::pos2(from, y), egui::pos2(to, y)], Stroke::new(3.0_f32, col));
+            let tip = to;
+            p.add(egui::Shape::convex_polygon(
+                vec![egui::pos2(tip + 8.0, y), egui::pos2(tip - 2.0, y - 7.0), egui::pos2(tip - 2.0, y + 7.0)],
+                col,
+                Stroke::NONE,
+            ));
+            p.text(
+                egui::pos2(rect.center().x, rect.bottom() - 8.0),
+                egui::Align2::CENTER_CENTER,
+                if input { "INPUT" } else { "OUTPUT" },
+                egui::FontId::proportional(11.0),
+                muted(),
+            );
+        });
+}
+
+/// An input's or output's panel, laid out like an effect's: the picture on the left, the settings on the right.
 fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bool, cmds: &mut Vec<Cmd>, dirty: &mut bool) {
+    let input = s.kind == Kind::Input;
+    let full = ui.available_width();
+    let side = full > 700.0;
+    ui.horizontal_top(|ui| {
+        if side {
+            ui.vertical(|ui| {
+                ui.set_width(SIDE_W);
+                io_tile(ui, input, SIDE_W);
+            });
+            ui.add_space(10.0);
+            let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, 150.0), egui::Sense::hover());
+            ui.painter().rect_filled(r, CornerRadius::ZERO, line());
+            ui.add_space(10.0);
+        }
+        let rest = if side { full - SIDE_W - 21.0 } else { full };
+        ui.vertical(|ui| {
+            ui.set_max_width(rest);
+            ui.set_min_width(rest.min(200.0));
+            io_controls(ui, preset, s, live, cmds, dirty);
+        });
+    });
+}
+
+/// The settings of a path's input or output: where the sound comes from or goes, and its knobs.
+fn io_controls(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bool, cmds: &mut Vec<Cmd>, dirty: &mut bool) {
     let input = s.kind == Kind::Input;
     ui.horizontal(|ui| {
         field_label(ui, if input { "Source" } else { "Destination" });
