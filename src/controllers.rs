@@ -619,6 +619,11 @@ fn specs_for(kind: SlotKind, device: i64, snap_count: usize) -> Vec<CmdSpec> {
     }
 }
 
+/// What a Command Center command id is called for a kind of trigger (None when the kind has no such command).
+pub fn command_name(kind: SlotKind, id: i64) -> Option<String> {
+    specs_for(kind, 2162694, 3).into_iter().find(|s| s.id == id).map(|s| s.name.to_owned())
+}
+
 /// Rows of Command Center trigger slots for the unit, matching the pedal's layout.
 pub fn slots_for_family(fam: snapshots::Family) -> Vec<Vec<CmdSlot>> {
     let inst: Vec<CmdSlot> = (1..=6)
