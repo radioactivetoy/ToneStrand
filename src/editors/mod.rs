@@ -119,8 +119,8 @@ fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bo
 /// The settings of a path's input or output: where the sound comes from or goes, and its knobs.
 fn io_controls(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bool, cmds: &mut Vec<Cmd>, dirty: &mut bool) {
     let input = s.kind == Kind::Input;
-    ui.horizontal(|ui| {
-        field_label(ui, if input { "Source" } else { "Destination" });
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new(if input { "Source" } else { "Destination" }).color(muted()));
         if let Some(route) = preset.io_route(s.path, s.position) {
             // The jacks by name, numbered as in .hlx files (the same numbers the pedal keeps).
             let fam = snapshots::family_of_device(crate::nam::unit());
@@ -131,7 +131,7 @@ fn io_controls(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live:
             }
             let shown = names.iter().find(|(v, _)| *v == route).map(|(_, n)| n.clone()).unwrap_or_default();
             let mut pick = route;
-            egui::ComboBox::from_id_salt(("dev-route", s.global)).selected_text(shown).width(200.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt(("dev-route", s.global)).selected_text(shown).width(150.0).show_ui(ui, |ui| {
                 for (v, n) in &names {
                     ui.selectable_value(&mut pick, *v, n);
                 }
@@ -145,12 +145,12 @@ fn io_controls(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live:
             }
             theme::help(ui, if input { "Where this path's sound comes from." } else { "Where this path's sound goes." });
         }
+        // The guitar input impedance and pad belong to the preset; they sit with the first path's input.
+        if input && s.path == 0 {
+            ui.add_space(14.0);
+            device::guitar_input_controls(ui, preset, live, cmds, dirty);
+        }
     });
-    // The guitar input impedance and pad belong to the preset; they sit with the first path's input.
-    if input && s.path == 0 {
-        ui.add_space(6.0);
-        device::guitar_input_controls(ui, preset, live, cmds, dirty);
-    }
     ui.add_space(8.0);
     let names = io_params(input);
     ui.horizontal_wrapped(|ui| {
@@ -172,14 +172,6 @@ fn io_controls(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live:
     });
 }
 
-/// A field's name in a column of fixed width, so rows of controls line up.
-pub(super) fn field_label(ui: &mut egui::Ui, text: &str) {
-    ui.allocate_ui_with_layout(Vec2::new(100.0, 24.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-        ui.set_min_size(Vec2::new(100.0, 24.0));
-        ui.label(RichText::new(text).color(muted()));
-    });
-}
-/// An input's or output's title with a small tile of its own where an effect has its icon: a jack and an
 /// arrow, in the colour of the tile's border.
 fn io_header(ui: &mut egui::Ui, input: bool, title: &str) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(34.0), egui::Sense::hover());

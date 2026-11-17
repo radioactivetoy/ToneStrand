@@ -855,24 +855,20 @@ pub(super) fn guitar_input_controls(ui: &mut egui::Ui, preset: &mut DevicePreset
     };
     let mut change: Option<(i64, i64)> = None;
     let help = "Guitar In-Z: Auto lets the pedal pick the impedance from the first effect in the chain (if you fixed a value in the pedal's Global Settings, an Auto preset uses that). Any other value is this preset's own and wins.\nGuitar Pad: Global uses the pedal's Global Settings; Off or On is this preset's own.";
-    ui.horizontal(|ui| {
-        super::field_label(ui, "Guitar In-Z");
-        let mut v = z;
-        let choices: Vec<(i64, &str)> = super::hlx_file::GUITAR_IN_Z.iter().enumerate().map(|(i, n)| (i as i64, *n)).collect();
-        if super::hlx_file::choice_combo(ui, "dev-inz", &mut v, &choices) {
-            change = Some((crate::devpreset::key::GUITAR_IN_Z, v));
-        }
-        theme::help(ui, help);
-    });
-    ui.horizontal(|ui| {
-        super::field_label(ui, "Guitar Pad");
-        let mut p = pad;
-        let choices: Vec<(i64, &str)> = super::hlx_file::GUITAR_PAD.iter().enumerate().map(|(i, n)| (i as i64, *n)).collect();
-        if super::hlx_file::choice_combo(ui, "dev-pad", &mut p, &choices) {
-            change = Some((crate::devpreset::key::GUITAR_PAD, p));
-        }
-        theme::help(ui, help);
-    });
+    ui.label(RichText::new("Guitar In-Z").color(muted()));
+    let mut v = z;
+    let choices: Vec<(i64, &str)> = super::hlx_file::GUITAR_IN_Z.iter().enumerate().map(|(i, n)| (i as i64, *n)).collect();
+    if super::hlx_file::choice_combo_w(ui, "dev-inz", &mut v, &choices, 100.0) {
+        change = Some((crate::devpreset::key::GUITAR_IN_Z, v));
+    }
+    ui.add_space(14.0);
+    ui.label(RichText::new("Guitar Pad").color(muted()));
+    let mut p = pad;
+    let choices: Vec<(i64, &str)> = super::hlx_file::GUITAR_PAD.iter().enumerate().map(|(i, n)| (i as i64, *n)).collect();
+    if super::hlx_file::choice_combo_w(ui, "dev-pad", &mut p, &choices, 100.0) {
+        change = Some((crate::devpreset::key::GUITAR_PAD, p));
+    }
+    theme::help(ui, help);
     if let Some((field, value)) = change {
         if preset.set_setting_int(field, value) {
             *dirty = true;

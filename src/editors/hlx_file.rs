@@ -92,9 +92,14 @@ pub(super) const GUITAR_PAD: [&str; 3] = ["Global", "Off", "On"];
 
 /// A drop-down for a whole-number setting with named choices.
 pub(super) fn choice_combo(ui: &mut egui::Ui, id: &str, value: &mut i64, choices: &[(i64, &str)]) -> bool {
+    choice_combo_w(ui, id, value, choices, 200.0)
+}
+
+/// A drop-down of named values, of the given width.
+pub(super) fn choice_combo_w(ui: &mut egui::Ui, id: &str, value: &mut i64, choices: &[(i64, &str)], width: f32) -> bool {
     let shown = choices.iter().find(|(v, _)| v == value).map(|(_, n)| n.to_string()).unwrap_or_else(|| value.to_string());
     let mut changed = false;
-    egui::ComboBox::from_id_salt(id).selected_text(shown).width(200.0).show_ui(ui, |ui| {
+    egui::ComboBox::from_id_salt(id).selected_text(shown).width(width).show_ui(ui, |ui| {
         for (v, n) in choices {
             if ui.selectable_label(*value == *v, *n).clicked() {
                 *value = *v;
