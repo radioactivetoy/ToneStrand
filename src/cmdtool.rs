@@ -232,7 +232,7 @@ pub fn compare(dev: &[DevCmd], hlx: &[HlxCmd], slots: &[CmdSlot]) -> Vec<String>
 
 /// The HX Stomp's Command Center triggers in the order of the pedal document's slots (the only layout read so far).
 pub fn stomp_slots() -> Vec<CmdSlot> {
-    controllers::slots_for_family(crate::snapshots::family_of_device(2162694)).into_iter().flatten().collect()
+    controllers::stomp_device_slots()
 }
 
 /// "42B" (a slot label) to the slot's index.

@@ -843,47 +843,53 @@ pub fn device_controllers(
     crate::controllers::device_command_center(ui, preset, live, cmds, dirty);
 }
 
-/// The guitar input impedance and pad of a pedal preset. "Auto" and "Global" follow the pedal's own global
-/// settings; any other value is this preset's own. On the loaded preset a change goes to the pedal at once.
-fn input_settings_card(ui: &mut egui::Ui, preset: &mut DevicePreset, live: bool, cmds: &mut Vec<Cmd>, dirty: &mut bool) {
+/// The guitar input impedance and pad of a pedal preset, as two drop-downs. "Auto" and "Global" follow
+/// the pedal's own settings; any other value is this preset's own. On the loaded preset a change goes to the
+/// pedal at once. Nothing is drawn for a document without these settings.
+pub(super) fn guitar_input_controls(ui: &mut egui::Ui, preset: &mut DevicePreset, live: bool, cmds: &mut Vec<Cmd>, dirty: &mut bool) {
     let (Some(z), Some(pad)) =
         (preset.setting_int(crate::devpreset::key::GUITAR_IN_Z), preset.setting_int(crate::devpreset::key::GUITAR_PAD))
     else {
         return;
     };
-    ui.add_space(10.0);
-    theme::card(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Guitar input").size(17.0).strong());
-            theme::help(
-                ui,
-                "Guitar In-Z: Auto lets the pedal pick the impedance from the first effect in the chain (if you fixed a value in the pedal's Global Settings, an Auto preset uses that). Any other value is this preset's own and wins.
-Guitar Pad: Global uses the pedal's Global Settings; Off or On is this preset's own.",
-            );
-        });
-        let mut change: Option<(i64, i64)> = None;
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Guitar In-Z").color(muted()));
-            let mut v = z;
-            let choices: Vec<(i64, &str)> = super::hlx_file::GUITAR_IN_Z.iter().enumerate().map(|(i, n)| (i as i64, *n)).collect();
-            if super::hlx_file::choice_combo(ui, "dev-inz", &mut v, &choices) {
-                change = Some((crate::devpreset::key::GUITAR_IN_Z, v));
-            }
-            ui.add_space(16.0);
-            ui.label(RichText::new("Guitar Pad").color(muted()));
-            let mut p = pad;
-            let choices: Vec<(i64, &str)> = super::hlx_file::GUITAR_PAD.iter().enumerate().map(|(i, n)| (i as i64, *n)).collect();
-            if super::hlx_file::choice_combo(ui, "dev-pad", &mut p, &choices) {
-                change = Some((crate::devpreset::key::GUITAR_PAD, p));
-            }
-        });
-        if let Some((field, value)) = change {
-            if preset.set_setting_int(field, value) {
-                *dirty = true;
-                if live {
-                    cmds.push(Cmd::SetSetting { field, value });
-                }
+    let mut change: Option<(i64, i64)> = None;
+    ui.horizontal_wrapped(|ui| {
+        ui.label(RichText::new("Guitar In-Z").color(muted()));
+        let mut v = z;
+        let choices: Vec<(i64, &str)> = super::hlx_file::GUITAR_IN_Z.iter().enumerate().map(|(i, n)| (i as i64, *n)).collect();
+        if super::hlx_file::choice_combo(ui, "dev-inz", &mut v, &choices) {
+            change = Some((crate::devpreset::key::GUITAR_IN_Z, v));
+        }
+        ui.add_space(16.0);
+        ui.label(RichText::new("Guitar Pad").color(muted()));
+        let mut p = pad;
+        let choices: Vec<(i64, &str)> = super::hlx_file::GUITAR_PAD.iter().enumerate().map(|(i, n)| (i as i64, *n)).collect();
+        if super::hlx_file::choice_combo(ui, "dev-pad", &mut p, &choices) {
+            change = Some((crate::devpreset::key::GUITAR_PAD, p));
+        }
+        theme::help(
+            ui,
+            "Guitar In-Z: Auto lets the pedal pick the impedance from the first effect in the chain (if you fixed a value in the pedal's Global Settings, an Auto preset uses that). Any other value is this preset's own and wins.\nGuitar Pad: Global uses the pedal's Global Settings; Off or On is this preset's own.",
+        );
+    });
+    if let Some((field, value)) = change {
+        if preset.set_setting_int(field, value) {
+            *dirty = true;
+            if live {
+                cmds.push(Cmd::SetSetting { field, value });
             }
         }
+    }
+}
+
+/// The Controllers tab's card for the same two settings.
+fn input_settings_card(ui: &mut egui::Ui, preset: &mut DevicePreset, live: bool, cmds: &mut Vec<Cmd>, dirty: &mut bool) {
+    if preset.setting_int(crate::devpreset::key::GUITAR_IN_Z).is_none() {
+        return;
+    }
+    ui.add_space(10.0);
+    theme::card(ui, |ui| {
+        ui.label(RichText::new("Guitar input").size(17.0).strong());
+        guitar_input_controls(ui, preset, live, cmds, dirty);
     });
 }
