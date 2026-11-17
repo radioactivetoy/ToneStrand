@@ -79,6 +79,11 @@ fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bo
             theme::help(ui, if input { "Where this path's sound comes from." } else { "Where this path's sound goes." });
         }
     });
+    // The guitar input impedance and pad belong to the preset; they sit with the first path's input.
+    if input && s.path == 0 {
+        ui.add_space(6.0);
+        device::guitar_input_controls(ui, preset, live, cmds, dirty);
+    }
     ui.add_space(8.0);
     let names = io_params(input);
     ui.horizontal_wrapped(|ui| {

@@ -153,8 +153,10 @@ impl BoxWire {
     /// Open `ws://<host>/raw` with the box's token and read its hello.
     pub fn open(host: &str, token: &str, label: &str) -> Result<BoxWire, String> {
         use tungstenite::client::IntoClientRequest;
+        // "192.168.1.5" or, for a box behind a forwarder, "192.168.1.5:8080".
+        let (host, port) = split_port(host);
         let url_host = crate::boxes::url_host(host);
-        let addr: SocketAddr = format!("{url_host}:80")
+        let addr: SocketAddr = format!("{url_host}:{port}")
             .to_socket_addrs()
             .map_err(|e| format!("could not find {host}: {e}"))?
             .next()
@@ -163,7 +165,8 @@ impl BoxWire {
             TcpStream::connect_timeout(&addr, Duration::from_secs(4)).map_err(|e| format!("the box at {host} did not answer: {e}"))?;
         let _ = stream.set_nodelay(true);
         stream.set_read_timeout(Some(Duration::from_secs(5))).map_err(|e| e.to_string())?;
-        let mut req = format!("ws://{url_host}/raw").into_client_request().map_err(|e| e.to_string())?;
+        let at = if port == 80 { url_host.clone() } else { format!("{url_host}:{port}") };
+        let mut req = format!("ws://{at}/raw").into_client_request().map_err(|e| e.to_string())?;
         req.headers_mut().insert("Authorization", format!("Bearer {token}").parse().map_err(|_| "bad token")?);
         let (mut ws, _) = tungstenite::client(req, stream).map_err(|e| format!("the box refused the link: {e}"))?;
 
@@ -195,6 +198,18 @@ impl BoxWire {
         let product = v.get("product").and_then(|p| p.as_str()).unwrap_or("Helix").trim().to_owned();
         Ok(BoxWire { name: format!("{product} via {label}"), ws, last_sent: Instant::now() })
     }
+}
+
+/// A box address with an optional port ("192.168.1.5", "192.168.1.5:8080"; an IPv6 address has none): the host and the port.
+fn split_port(addr: &str) -> (&str, u16) {
+    if let Some((h, p)) = addr.rsplit_once(':') {
+        if !h.contains(':') && !p.is_empty() {
+            if let Ok(p) = p.parse::<u16>() {
+                return (h, p);
+            }
+        }
+    }
+    (addr, 80)
 }
 
 pub fn explain_box_error(code: &str) -> String {

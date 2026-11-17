@@ -348,8 +348,9 @@ const LOOPER_FNS: [&str; 14] = [
 const BEHAVIORS: [&str; 2] = ["Press/Release", "Press/Hold"];
 
 fn channel_options() -> Vec<(i64, String)> {
-    let mut out = vec![(0, "Base".into()), (1, "Base".into())];
-    for ch in 2..=16 {
+    // HX Edit lists 0 as "Base" and 1 to 16 as the numbers (HelixControls.json, midi_channel).
+    let mut out = vec![(0, "Base".into())];
+    for ch in 1..=16 {
         out.push((ch, ch.to_string()));
     }
     out
@@ -617,6 +618,11 @@ fn specs_for(kind: SlotKind, device: i64, snap_count: usize) -> Vec<CmdSpec> {
             ],
         }],
     }
+}
+
+/// What a Command Center command id is called for a kind of trigger (None when the kind has no such command).
+pub fn command_name(kind: SlotKind, id: i64) -> Option<String> {
+    specs_for(kind, 2162694, 3).into_iter().find(|s| s.id == id).map(|s| s.name.to_owned())
 }
 
 /// Rows of Command Center trigger slots for the unit, matching the pedal's layout.
@@ -984,15 +990,53 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
 
 // ------------------------------------------------ Command Center on the pedal ---
 
-/// The slots whose place in the pedal's document has been checked against real presets: FS 4 and
-/// FS 5 (the others follow the same order but haven't been confirmed).
-const DEVICE_EDITABLE: [&str; 2] = ["commandFS4", "commandFS5"];
-/// The commands whose arguments have been checked: HX Preset and HX Snapshot.
-const DEVICE_COMMANDS: [i64; 2] = [14, 15];
+/// The HX Stomp's Command Center slots in the order of the pedal document, as the pedal numbers them
+/// (confirmed from another editor's live traffic): Instant 1 to 6, FS 1 to 5, EXP 1 and EXP 2.
+pub fn stomp_device_slots() -> Vec<CmdSlot> {
+    let mut v: Vec<CmdSlot> = (1..=6)
+        .map(|i| CmdSlot {
+            key: format!("commandInst{i}"),
+            short: format!("⚡ {i}"),
+            title: format!("Instant {i}"),
+            kind: SlotKind::Instant,
+        })
+        .collect();
+    v.extend((1..=5).map(|n| CmdSlot {
+        key: format!("commandFS{n}"),
+        short: format!("FS {n}"),
+        title: format!("FS {n}"),
+        kind: SlotKind::Switch,
+    }));
+    v.extend((1..=2).map(|n| CmdSlot {
+        key: format!("commandExpPedal{n}"),
+        short: format!("EXP {n}"),
+        title: format!("EXP {n}"),
+        kind: SlotKind::Pedal,
+    }));
+    v
+}
 
-/// The Command Center of a pedal document: what each trigger does. FS 4 and FS 5 can be set to HX
-/// Preset or HX Snapshot on a preset that isn't the loaded one (it is written to its slot after);
-/// everything else is shown as it is.
+/// Command types whose arguments have not been seen on a pedal: the switch versions of Bank/Program, MMC,
+/// Hotkey and HX Looper. They follow the same layout as their instant versions in the notes, but
+/// are shown with a mark.
+const UNVERIFIED: [i64; 4] = [4, 6, 12, 16];
+
+/// What the pedal puts in a command's arguments when its type is set (seen in its change events); the
+/// rest start at 0. Hotkey (switch) keeps a constant 1 in its fifth argument.
+fn device_defaults(id: i64) -> Vec<i64> {
+    match id {
+        2 | 3 => vec![0, 0, 0, 127],
+        5 => vec![0, 48, 100, 1],
+        15 => vec![0, 1, 0],
+        17 => vec![1],
+        12 => vec![0, 0, 0, 0, 1],
+        _ => Vec::new(),
+    }
+}
+
+/// The Command Center of a pedal document: what each trigger does, and a place to change it. On the
+/// loaded preset a change goes to the pedal at once (Save on pedal keeps it); on a file or a slot's copy it
+/// changes the document. Only the HX Stomp's layout is read so far.
 pub fn device_command_center(
     ui: &mut egui::Ui,
     preset: &mut crate::devpreset::DevicePreset,
@@ -1003,14 +1047,14 @@ pub fn device_command_center(
     let fam = snapshots::family_of_device(crate::nam::unit());
     let device = crate::nam::unit();
     let count = preset.command_count();
-    let slots: Vec<CmdSlot> = slots_for_family(fam).into_iter().flatten().collect();
+    let slots = stomp_device_slots();
     ui.add_space(10.0);
     theme::card(ui, |ui| {
         ui.horizontal(|ui| {
             ui.label(RichText::new("Command Center").size(17.0).strong());
             theme::help(
                 ui,
-                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed.\nFS 4 and FS 5 can be set to HX Preset or HX Snapshot here (on the loaded preset the pedal changes at once, and Save on pedal keeps it); other commands (MIDI, hotkeys, looper) are shown and kept as they are. Change the rest in HX Edit.",
+                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed. The names are the Command Center's own: FS 1 to FS 5, whatever is printed on the pedal.\nOn the loaded preset a change goes to the pedal at once, and Save on pedal keeps it. A mark means the layout of that command has not been checked on a pedal yet.\nThe wait is 0 to 20 (the pedal's own limit). Each snapshot keeps its own copy of a command's values.",
             );
         });
         if count == 0 {
@@ -1021,73 +1065,158 @@ pub fn device_command_center(
             ui.label(RichText::new("The Command Center of this unit isn't read here yet.").color(muted()));
             return;
         }
-        let snap_count = fam.snapshot_count;
-        for (i, slot) in slots.iter().enumerate() {
-            let editable = DEVICE_EDITABLE.contains(&slot.key.as_str());
-            let cmd = preset.command(i);
-            if cmd.is_none() && !editable {
-                continue;
-            }
-            let specs = specs_for(slot.kind, device, snap_count);
-            let name_of = |id: i64| specs.iter().find(|s| s.id == id).map(|s| s.name.to_owned()).unwrap_or_else(|| format!("Command {id}"));
+        let snap = preset.current_snapshot();
+        let names = preset.snapshot_names();
+        let snap_name = names.get(snap).map(|n| n.trim().to_owned()).unwrap_or_default();
+        let badge = if snap_name.is_empty() { format!("Snapshot {}", snap + 1) } else { format!("Snapshot {} · {snap_name}", snap + 1) };
+        ui.horizontal_wrapped(|ui| {
+            theme::pill(ui, &badge, accent());
+            ui.label(RichText::new("A command's values are kept per snapshot, as on the pedal.").small().color(muted()));
+        });
+        ui.add_space(6.0);
+
+        // Trigger grid in the pedal's own arrangement: the top row carries the instant commands and the
+        // two upper switches, the bottom row the lower switches and the expression pedals.
+        let rows: [&[usize]; 2] = [&[0, 1, 2, 3, 4, 5, 9, 10], &[6, 7, 8, 11, 12]];
+        let sel_id = egui::Id::new("dev-cc-selected");
+        let mut sel: usize = ui.data(|d| d.get_temp(sel_id)).unwrap_or(0usize).min(slots.len() - 1);
+        for row in rows {
             ui.horizontal_wrapped(|ui| {
-                ui.add_sized([70.0, 20.0], egui::Label::new(RichText::new(&slot.title).strong()));
-                let (id, mut args) = cmd.clone().unwrap_or((0, vec![0; 6]));
-                if !editable {
-                    let kept = if DEVICE_COMMANDS.contains(&id) { "" } else { "  (kept as it is)" };
-                    ui.label(format!("{}{kept}", name_of(id)));
-                    return;
+                for &i in row {
+                    let slot = &slots[i];
+                    let in_use = preset.command(i).is_some_and(|(id, _)| id != 0);
+                    let is_sel = i == sel;
+                    let (rect, resp) = ui.allocate_exact_size(Vec2::new(66.0, 52.0), egui::Sense::click());
+                    let p = ui.painter();
+                    let fill = if is_sel {
+                        card_hi()
+                    } else if resp.hovered() {
+                        crate::theme::panel()
+                    } else {
+                        bg()
+                    };
+                    p.rect_filled(rect, egui::CornerRadius::same(8), fill);
+                    let stroke = if is_sel {
+                        egui::Stroke::new(2.0_f32, accent())
+                    } else if in_use {
+                        egui::Stroke::new(1.0_f32, good().linear_multiply(0.55))
+                    } else {
+                        egui::Stroke::new(1.0_f32, line())
+                    };
+                    p.rect_stroke(rect, egui::CornerRadius::same(8), stroke, egui::StrokeKind::Inside);
+                    p.text(
+                        rect.center_top() + Vec2::new(0.0, 12.0),
+                        egui::Align2::CENTER_CENTER,
+                        "▲",
+                        egui::FontId::proportional(10.0),
+                        if in_use { good() } else { muted().linear_multiply(0.5) },
+                    );
+                    p.text(
+                        rect.center_bottom() + Vec2::new(0.0, -14.0),
+                        egui::Align2::CENTER_CENTER,
+                        &slot.short,
+                        egui::FontId::proportional(13.0),
+                        if is_sel || in_use { ink() } else { muted() },
+                    );
+                    if resp.clicked() {
+                        sel = i;
+                    }
                 }
-                let shown = if id == 0 { "None".to_owned() } else { name_of(id) };
+            });
+            ui.add_space(4.0);
+        }
+        ui.data_mut(|d| d.insert_temp(sel_id, sel));
+        ui.add_space(6.0);
+
+        // The selected trigger.
+        let i = sel;
+        let slot = &slots[i];
+        let specs: Vec<CmdSpec> = specs_for(slot.kind, device, fam.snapshot_count).into_iter().filter(|s| s.id != 7 && s.id != 8).collect();
+        let (id, mut args) = preset.command(i).unwrap_or((0, vec![0; 6]));
+        let spec = specs.iter().find(|s| s.id == id);
+        let name = if id == 0 { "None".to_owned() } else { spec.map(|s| s.name.to_owned()).unwrap_or_else(|| format!("command {id}")) };
+        let mark = if UNVERIFIED.contains(&id) { " (not checked on a pedal)" } else { "" };
+        egui::Frame::new()
+            .fill(crate::theme::panel())
+            .stroke(egui::Stroke::new(1.0_f32, line()))
+            .corner_radius(egui::CornerRadius::same(8))
+            .inner_margin(egui::Margin::same(14))
+            .show(ui, |ui| {
+                ui.label(RichText::new(&slot.title).strong().size(15.0));
+                ui.add_space(4.0);
                 let mut new_id = id;
-                egui::ComboBox::from_id_salt(("dev-cc-type", i)).selected_text(shown).width(150.0).show_ui(ui, |ui| {
-                    if ui.selectable_label(id == 0, "None").clicked() {
-                        new_id = 0;
-                    }
-                    for want in DEVICE_COMMANDS {
-                        if ui.selectable_label(id == want, name_of(want)).clicked() {
-                            new_id = want;
-                        }
-                    }
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("Command").color(muted()));
+                    egui::ComboBox::from_id_salt(("dev-cc-type", i)).selected_text(format!("{name}{mark}")).width(220.0).show_ui(
+                        ui,
+                        |ui| {
+                            if ui.selectable_label(id == 0, "None").clicked() {
+                                new_id = 0;
+                            }
+                            for s in &specs {
+                                let tag = if UNVERIFIED.contains(&s.id) { " (not checked on a pedal)" } else { "" };
+                                if ui.selectable_label(id == s.id, format!("{}{tag}", s.name)).clicked() {
+                                    new_id = s.id;
+                                }
+                            }
+                        },
+                    );
                 });
                 if new_id != id {
-                    // A new command starts from its first choices (Next preset, or snapshot press "Next").
-                    let start: &[i64] = match new_id {
-                        14 => &[0],
-                        15 => &[0, 1, 0],
-                        _ => &[],
-                    };
-                    if preset.set_command(i, new_id, start) {
+                    let start = device_defaults(new_id);
+                    if preset.set_command(i, new_id, &start) {
                         *dirty = true;
                         if live {
-                            cmds.push(crate::device::Cmd::SetCommand { slot: i, id: new_id, args: start.to_vec() });
+                            cmds.push(crate::device::Cmd::SetCommand { slot: i, id: new_id, args: start });
                         }
                     }
                     return;
                 }
-                let Some(spec) = specs.iter().find(|s| s.id == id && DEVICE_COMMANDS.contains(&id)) else {
-                    if id != 0 {
-                        ui.label(RichText::new("kept as it is").small().color(muted()));
+                let Some(spec) = spec else {
+                    if id == 0 {
+                        ui.add_space(4.0);
+                        ui.label(RichText::new("Nothing happens on this trigger.").color(muted()));
                     }
                     return;
                 };
+                if id == 12 {
+                    args.resize(6, 0);
+                    args[4] = 1; // a constant the pedal keeps in this command
+                }
+                ui.add_space(4.0);
                 let mut changed = false;
                 for (f, field) in spec.fields.iter().enumerate() {
-                    let FieldSpec::Choice { label, options, .. } = field else { continue };
-                    ui.label(RichText::new(*label).color(muted()));
-                    let cur = args.get(f).copied().unwrap_or(0);
-                    let text = options.iter().find(|(v, _)| *v == cur).map(|(_, n)| n.clone()).unwrap_or_else(|| format!("{cur}"));
-                    egui::ComboBox::from_id_salt(("dev-cc-field", i, f)).selected_text(text).width(130.0).show_ui(ui, |ui| {
-                        for (v, n) in options {
-                            if ui.selectable_label(cur == *v, n).clicked() && cur != *v {
-                                if args.len() <= f {
-                                    args.resize(f + 1, 0);
-                                }
-                                args[f] = *v;
-                                changed = true;
-                            }
+                    if args.len() <= f {
+                        args.resize(f + 1, 0);
+                    }
+                    match field {
+                        FieldSpec::Choice { label, options, .. } => {
+                            let cur = args[f];
+                            let text = options.iter().find(|(v, _)| *v == cur).map(|(_, n)| n.clone()).unwrap_or_else(|| format!("{cur}"));
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new(*label).color(muted()));
+                                egui::ComboBox::from_id_salt(("dev-cc-field", i, f)).selected_text(text).width(160.0).show_ui(ui, |ui| {
+                                    for (v, n) in options {
+                                        if ui.selectable_label(cur == *v, n).clicked() && cur != *v {
+                                            args[f] = *v;
+                                            changed = true;
+                                        }
+                                    }
+                                });
+                            });
                         }
-                    });
+                        FieldSpec::Range { key, label, min, max } => {
+                            let (label, max) = if *key == "@waittime" { ("Wait (0-20)", 20) } else { (*label, *max) };
+                            let mut v = args[f].clamp(*min, max);
+                            ui.horizontal(|ui| {
+                                ui.label(RichText::new(label).color(muted()));
+                                if ui.add(egui::DragValue::new(&mut v).range(*min..=max)).changed() {
+                                    args[f] = v;
+                                    changed = true;
+                                }
+                            });
+                        }
+                    }
                 }
                 if changed && preset.set_command(i, id, &args) {
                     *dirty = true;
@@ -1096,9 +1225,9 @@ pub fn device_command_center(
                     }
                 }
             });
-        }
     });
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

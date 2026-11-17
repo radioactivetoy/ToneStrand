@@ -4,7 +4,12 @@
 use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnames, session, wire};
 
 /// The command-line tools (everything else opens the window).
-pub const CLI_FLAGS: [&str; 12] = [
+pub const CLI_FLAGS: [&str; 17] = [
+    "--box-proxy",
+    "--cc-raw",
+    "--cc-reload",
+    "--commands",
+    "--cc-compare",
     "--probe",
     "--nam2ir",
     "--read-backup",
@@ -61,6 +66,153 @@ fn read_preset(f: &str) -> Option<devpreset::DevicePreset> {
     need(devpreset::DevicePreset::parse(&b), f)
 }
 
+/// A session to the first USB pedal, or to a paired Helrig Box at `host`.
+fn open_session(host: Option<&str>) -> Option<session::Session> {
+    let w: Box<dyn wire::Wire> = if let Some(host) = host {
+        let settings = boxes::Settings::load();
+        // A box behind a forwarder ("192.168.1.5:8080") uses the pairing saved for its address.
+        let bare = host.rsplit_once(':').filter(|(h, _)| !h.contains(':')).map_or(host, |(h, _)| h);
+        // TONESTRAND_BOX_PAIRING=<address> names the pairing to use when the address is a forwarder's.
+        let named = std::env::var("TONESTRAND_BOX_PAIRING").unwrap_or_default();
+        let token = [host, bare, named.as_str()].iter().filter(|h| !h.is_empty()).find_map(|h| {
+            settings.tokens.get(*h).cloned().or_else(|| settings.saved.iter().find(|b| b.host == *h).and_then(|b| settings.token_for(b)))
+        });
+        let Some(token) = token else {
+            eprintln!("no saved pairing for {host}");
+            return None;
+        };
+        Box::new(need(wire::BoxWire::open(host, &token, "box"), "the box")?)
+    } else {
+        let pedals = wire::list_usb_pedals();
+        let Some(p) = pedals.first() else {
+            eprintln!("no USB pedal found (name a Helrig Box address as the last argument to use one)");
+            return None;
+        };
+        Box::new(need(wire::UsbWire::open(p.pid), "the pedal")?)
+    };
+    need(session::Session::open(w), "the session")
+}
+
+/// A pedal document from a file, or from a slot of the pedal ("42B").
+fn load_source(src: &str, host: Option<&str>) -> Option<devpreset::DevicePreset> {
+    if src.to_ascii_lowercase().ends_with(".hxpreset") {
+        return read_preset(src);
+    }
+    let Some(slot) = crate::cmdtool::slot_index(src) else {
+        eprintln!("{src}: not a .hxpreset file or a slot like 42B");
+        return None;
+    };
+    let mut s = open_session(host)?;
+    let blob = need(s.fetch_slot(0, slot as i64), "reading the slot")?;
+    let Some(blob) = blob else {
+        eprintln!("slot {src} is empty");
+        return None;
+    };
+    need(devpreset::DevicePreset::parse(&blob), "the slot's document")
+}
+
+/// `--commands <file|slot> [box address]`
+fn commands_tool(rest: &[String]) {
+    let Some(src) = rest.first() else {
+        eprintln!("usage: --commands <file.hxpreset | slot like 42B> [box address]");
+        return;
+    };
+    let Some(p) = load_source(src, rest.get(1).map(String::as_str)) else { return };
+    for l in crate::cmdtool::describe(&p, &crate::cmdtool::stomp_slots()) {
+        println!("{l}");
+    }
+}
+
+/// `--cc-compare <file|slot> <file.hlx> [box address]`
+fn cc_compare_tool(rest: &[String]) {
+    let (Some(src), Some(hlx_path)) = (rest.first(), rest.get(1)) else {
+        eprintln!("usage: --cc-compare <file.hxpreset | slot like 42B> <file.hlx> [box address]");
+        return;
+    };
+    let Some(text) = need(std::fs::read_to_string(hlx_path), hlx_path) else { return };
+    let Some(json) = need(hlx::parse_text(&text), hlx_path) else { return };
+    let Some(p) = load_source(src, rest.get(2).map(String::as_str)) else { return };
+    let slots = crate::cmdtool::stomp_slots();
+    let dev = crate::cmdtool::device_commands(&p);
+    let hlx_cmds = crate::cmdtool::hlx_commands(&json);
+    println!("pedal: {} command(s) set in {} slots; .hlx: {} command(s)", dev.len(), p.command_count(), hlx_cmds.len());
+    for l in crate::cmdtool::compare(&dev, &hlx_cmds, &slots) {
+        println!("{l}");
+    }
+    let (d, h) = (crate::cmdtool::device_overrides(&p), crate::cmdtool::hlx_overrides(&json));
+    if !d.is_empty() || !h.is_empty() {
+        println!("per-snapshot command entries");
+        for (n, what, v) in d {
+            println!("  pedal: snapshot {} {what}: {v}", n + 1);
+        }
+        for (n, key, v) in h {
+            println!("  .hlx:  snapshot {n} {key}: {v}");
+        }
+    }
+}
+
+/// `--cc-raw <box address> <slot> <id> [args]`: change one Command Center slot of the loaded preset in the
+/// pedal's edit buffer (nothing is saved to a slot; `--cc-reload` or loading the preset drops it).
+fn cc_raw_tool(rest: &[String]) {
+    let (Some(host), Some(slot), Some(id)) = (rest.first(), rest.get(1), rest.get(2)) else {
+        eprintln!("usage: --cc-raw <box address> <slot 0-12> <command id> [arg1 .. arg6]");
+        return;
+    };
+    let (Some(slot), Some(id)) = (need(slot.parse::<usize>(), "slot"), need(id.parse::<i64>(), "command id")) else { return };
+    let Some(args) = rest[3..].iter().map(|a| need(a.parse::<i64>(), a)).collect::<Option<Vec<i64>>>() else { return };
+    let Some(mut s) = open_session(Some(host)) else { return };
+    let Some(blob) = need(s.read_current(), "reading the loaded preset") else { return };
+    let Some(mut doc) = need(devpreset::DevicePreset::parse(&blob), "the loaded preset") else { return };
+    if !doc.set_command(slot, id, &args) {
+        eprintln!("the loaded preset has no Command Center slot {slot}");
+        return;
+    }
+    let Some(bytes) = need(doc.encode_checked(), "the document") else { return };
+    if need(s.write_edit_buffer(bytes), "writing the edit buffer").is_none() {
+        return;
+    }
+    let Some(back) = need(s.read_current(), "reading it back").and_then(|b| need(devpreset::DevicePreset::parse(&b), "it")) else { return };
+    println!("written to the pedal's edit buffer (not saved). The loaded preset now has:");
+    for l in crate::cmdtool::describe(&back, &crate::cmdtool::stomp_slots()) {
+        println!("{l}");
+    }
+}
+
+/// `--cc-reload <box address>`: load the loaded preset again from flash.
+fn cc_reload_tool(rest: &[String]) {
+    let Some(host) = rest.first() else {
+        eprintln!("usage: --cc-reload <box address>");
+        return;
+    };
+    let Some(mut s) = open_session(Some(host)) else { return };
+    let Some((sl, idx, name)) = need(s.preset_info(), "the loaded preset") else { return };
+    let other = if idx > 0 { idx - 1 } else { idx + 1 };
+    if need(s.select_preset(sl.max(0), other), "loading another preset").is_none()
+        || need(s.select_preset(sl.max(0), idx), "loading it again").is_none()
+    {
+        return;
+    }
+    println!("reloaded \"{name}\" from flash");
+}
+
+/// `--box-proxy <listen address:port> <box address[:port]> [folder for documents]`
+fn box_proxy_tool(rest: &[String]) {
+    let (Some(listen), Some(target)) = (rest.first(), rest.get(1)) else {
+        eprintln!("usage: --box-proxy <listen address:port, e.g. 0.0.0.0:8080> <box address[:port]> [folder for documents]");
+        return;
+    };
+    let target = if target.rsplit_once(':').is_some_and(|(_, p)| p.chars().all(|c| c.is_ascii_digit())) && !target.contains("::") {
+        target.clone()
+    } else {
+        format!("{target}:80")
+    };
+    let docs = rest.get(2).map(std::path::PathBuf::from);
+    let log = docs.as_ref().map(|d| d.join("box-proxy.log"));
+    if let Err(e) = crate::boxproxy::run(listen, &target, docs, log) {
+        eprintln!("{e}");
+    }
+}
+
 const HELP: &str = "\
 ToneStrand command-line tools (all read-only unless noted):
 
@@ -72,6 +224,11 @@ ToneStrand command-line tools (all read-only unless noted):
   --dsp-report <file.hxpreset>...   DSP estimate per path, block by block
   --ctl-check <file.hxpreset>...    controllers must round-trip unchanged
   --dump-doc <file.hxpreset>        print a pedal preset document's structure
+  --commands <file.hxpreset|slot like 42B> [box address]  print a preset's Command Center as the pedal stores it
+  --cc-compare <file.hxpreset|slot> <file.hlx> [box address]  line an HX Edit export up with the pedal's Command Center
+  --cc-raw <box address> <slot 0-12> <id> [arg1 .. arg6]  WRITES one Command Center slot of the loaded preset (edit buffer only)
+  --cc-reload <box address>         reload the loaded preset from flash, dropping edit-buffer changes
+  --box-proxy <listen address:port> <box address> [folder for documents]  log what another editor sends the pedal through the box
   --hlx-check <template.hxpreset> [file.hlx]  try the .hlx -> pedal conversion offline
   --fmt-check                       how a dual cab's knobs read at their edges
   --list-models                     every effect in the picker, with real-gear names
@@ -88,6 +245,26 @@ pub fn run(args: &[String]) -> bool {
     attach_console();
     if wants_help {
         print!("{HELP}");
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--box-proxy") {
+        box_proxy_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--cc-raw") {
+        cc_raw_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--cc-reload") {
+        cc_reload_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--commands") {
+        commands_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--cc-compare") {
+        cc_compare_tool(&args[i + 1..]);
         return true;
     }
     if let Some(i) = args.iter().position(|a| a == "--probe") {
