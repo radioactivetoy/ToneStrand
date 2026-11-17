@@ -518,6 +518,78 @@ impl DevicePreset {
         Some((id, row.iter().skip(1).map(|v| v.as_i64().unwrap_or(0)).collect()))
     }
 
+    /// The per-snapshot command records of one snapshot as (slot or padding number, flag, seven values).
+    fn snapshot_command_rows(snap: &Value) -> Vec<(i64, bool, Vec<i64>)> {
+        let Some(rows) = snap.get(1).and_then(Value::as_array) else { return Vec::new() };
+        rows.iter()
+            .map(|r| {
+                let a = r.as_array().map(Vec::as_slice).unwrap_or(&[]);
+                let head = a.first().and_then(Value::as_i64).unwrap_or(0);
+                let on = matches!(a.get(1), Some(Value::Bool(true)));
+                let vals =
+                    a.get(2).and_then(Value::as_array).map(|v| v.iter().map(|x| x.as_i64().unwrap_or(0)).collect()).unwrap_or_default();
+                (head, on, vals)
+            })
+            .collect()
+    }
+
+    /// Keep every snapshot's command records in step with the commands, as the pedal does: one record
+    /// `[slot, false, [0, arg1 .. arg6]]` per slot in use, in slot order, except HX Preset (14), which has
+    /// none, then padding `[slot count, false, zeros]` up to the number of records the document has.
+    /// A slot whose command is `changed` starts from its base arguments; the others keep the values the
+    /// snapshot has for them. Nothing is touched when the records are already right.
+    pub fn sync_snapshot_commands(&mut self, changed: Option<usize>) {
+        let count = self.command_count();
+        if count == 0 {
+            return;
+        }
+        let used: Vec<(usize, Vec<i64>)> =
+            (0..count).filter_map(|s| self.command(s).filter(|(id, _)| *id != 14).map(|(_, args)| (s, args))).collect();
+        let snaps: Vec<Value> =
+            self.tone.at(&[key::SNAPSHOT_SECTION, key::SNAPSHOTS]).and_then(Value::as_array).cloned().unwrap_or_default();
+        for (n, snap) in snaps.iter().enumerate() {
+            let have = Self::snapshot_command_rows(snap);
+            if have.is_empty() {
+                continue;
+            }
+            let existing = |slot: usize| have.iter().find(|(h, _, _)| *h == slot as i64);
+            let mut want: Vec<(i64, bool, Vec<i64>)> = Vec::new();
+            for (slot, args) in &used {
+                let kept = if changed == Some(*slot) { None } else { existing(*slot) };
+                want.push(match kept {
+                    Some(r) => r.clone(),
+                    None => {
+                        let mut vals = vec![0];
+                        vals.extend((0..6).map(|i| args.get(i).copied().unwrap_or(0)));
+                        (*slot as i64, false, vals)
+                    }
+                });
+            }
+            while want.len() < have.len() {
+                want.push((count as i64, false, vec![0; 7]));
+            }
+            want.truncate(have.len().max(used.len()));
+            if want == have {
+                continue;
+            }
+            let ints = |v: &[i64]| Value::Array(v.iter().map(|x| Value::int(*x)).collect(), crate::msgpack::AUTO);
+            let rows: Vec<Value> = want
+                .iter()
+                .map(|(h, on, vals)| Value::Array(vec![Value::int(*h), Value::Bool(*on), ints(vals)], crate::msgpack::AUTO))
+                .collect();
+            // A snapshot is a map; its field 1 holds the command records.
+            let target = self
+                .tone
+                .at_mut(&[key::SNAPSHOT_SECTION, key::SNAPSHOTS])
+                .and_then(|v| v.as_array_mut())
+                .and_then(|a| a.get_mut(n))
+                .and_then(|s| s.get_mut(1));
+            if let Some(Value::Array(old, _)) = target {
+                *old = rows;
+            }
+        }
+    }
+
     /// Put a command in a slot (id 0 empties it). The arguments follow the command's fields in the
     /// order `.hlx` files list them; missing ones are 0. False when the slot doesn't exist.
     pub fn set_command(&mut self, slot: usize, id: i64, args: &[i64]) -> bool {
@@ -528,13 +600,18 @@ impl DevicePreset {
         let Some(cell) = ids.get_mut(slot) else { return false };
         *cell = Value::int(id);
         let Some(Value::Array(rows, _)) = self.tone.at_mut(&[key::COMMANDS, 1]) else { return false };
-        match rows.get_mut(slot) {
+        let set = match rows.get_mut(slot) {
             Some(Value::Array(items, _)) => {
                 *items = row;
                 true
             }
             _ => false,
+        };
+        if set {
+            // The snapshots keep their own copy of what each command does: bring them in step.
+            self.sync_snapshot_commands(Some(slot));
         }
+        set
     }
 
     /// Whether a path is split (the split's own "active" flag, set when it's placed).
@@ -1627,5 +1704,122 @@ mod setting_tests {
         assert!(!notes.iter().any(|n| n.contains("guitar")), "{notes:?}");
         let back = DevicePreset::parse(&out.encode()).unwrap();
         assert_eq!((back.setting_int(key::GUITAR_IN_Z), back.setting_int(key::GUITAR_PAD)), (Some(8), Some(2)));
+    }
+}
+
+#[cfg(test)]
+mod snapshot_command_tests {
+    use super::*;
+
+    fn row(head: i64, vals: &[i64]) -> Value {
+        Value::Array(
+            vec![Value::int(head), Value::Bool(false), Value::Array(vals.iter().map(|v| Value::int(*v)).collect(), crate::msgpack::AUTO)],
+            crate::msgpack::AUTO,
+        )
+    }
+
+    /// A document with 13 empty Command Center slots and three snapshots, each with 13 unused records.
+    fn doc() -> DevicePreset {
+        let zeros = || Value::Array((0..7).map(|_| Value::int(0)).collect(), crate::msgpack::AUTO);
+        let cc = Value::map(vec![
+            (0, Value::Array((0..13).map(|_| Value::int(0)).collect(), crate::msgpack::AUTO)),
+            (1, Value::Array((0..13).map(|_| zeros()).collect(), crate::msgpack::AUTO)),
+        ]);
+        // A snapshot is a map: 0 valid, 1 the command records.
+        let snap = || {
+            Value::map(vec![(0, Value::Bool(true)), (1, Value::Array((0..13).map(|_| row(13, &[0; 7])).collect(), crate::msgpack::AUTO))])
+        };
+        let snaps = Value::map(vec![(10, Value::Array((0..3).map(|_| snap()).collect(), crate::msgpack::AUTO))]);
+        let mut pairs: Vec<(Value, Value)> =
+            [0i64, 1, 3, 4, 5, 6, 7].iter().map(|k| (Value::int(*k), Value::map(vec![(1, Value::int(*k))]))).collect();
+        pairs.insert(4, (Value::int(2), cc));
+        pairs.push((Value::int(10), snaps));
+        DevicePreset {
+            magic: Value::str("l6-helix\0"),
+            table_fmt: 0xc4,
+            table: vec![0; 48],
+            tone: Value::Map(pairs, 0x80),
+            rest: Vec::new(),
+        }
+    }
+
+    fn rows(d: &DevicePreset, snap: usize) -> Vec<(i64, Vec<i64>)> {
+        let s = d.tone.at(&[10, 10]).and_then(Value::as_array).unwrap();
+        DevicePreset::snapshot_command_rows(&s[snap]).into_iter().map(|(h, _, v)| (h, v)).collect()
+    }
+
+    #[test]
+    fn snapshot_commands_get_one_record_per_snapshot_in_slot_order_with_padding() {
+        let mut d = doc();
+        assert!(d.set_command(7, 15, &[0, 4, 0]));
+        for n in 0..3 {
+            let r = rows(&d, n);
+            assert_eq!(r.len(), 13);
+            assert_eq!(r[0], (7, vec![0, 0, 4, 0, 0, 0, 0]));
+            assert!(r[1..].iter().all(|(h, v)| *h == 13 && v.iter().all(|x| *x == 0)), "padding after the record");
+        }
+        // A second command sorts before it; the first keeps its values.
+        assert!(d.set_command(6, 15, &[0, 3, 0]));
+        let r = rows(&d, 0);
+        assert_eq!((r[0].0, r[1].0), (6, 7));
+        assert_eq!(r[0].1, vec![0, 0, 3, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn a_snapshots_own_value_survives_changes_to_other_slots_and_resets_with_its_own() {
+        let mut d = doc();
+        d.set_command(6, 15, &[0, 3, 0]);
+        d.set_command(7, 15, &[0, 4, 0]);
+        // Snapshot 2 presses snapshot 3 on slot 7 instead of the base 4.
+        if let Some(Value::Array(rows, _)) =
+            d.tone.at_mut(&[10, 10]).and_then(Value::as_array_mut).and_then(|a| a.get_mut(1)).and_then(|s| s.get_mut(1))
+        {
+            rows[1] = row(7, &[0, 0, 5, 0, 0, 0, 0]);
+        }
+        // Changing slot 6 leaves slot 7's own value alone.
+        d.set_command(6, 15, &[0, 2, 0]);
+        assert_eq!(rows(&d, 1)[0], (6, vec![0, 0, 2, 0, 0, 0, 0]));
+        assert_eq!(rows(&d, 1)[1], (7, vec![0, 0, 5, 0, 0, 0, 0]));
+        // Changing slot 7 itself starts it again from its base.
+        d.set_command(7, 15, &[0, 4, 0]);
+        assert_eq!(rows(&d, 1)[1], (7, vec![0, 0, 4, 0, 0, 0, 0]));
+    }
+
+    #[test]
+    fn hx_preset_has_no_record_and_clearing_a_command_removes_its_record() {
+        let mut d = doc();
+        d.set_command(6, 14, &[5]);
+        assert!(rows(&d, 0).iter().all(|(h, _)| *h == 13), "an HX Preset command has no per-snapshot record");
+        d.set_command(7, 15, &[0, 4, 0]);
+        d.set_command(6, 15, &[0, 3, 0]);
+        assert_eq!(rows(&d, 2).iter().filter(|(h, _)| *h != 13).count(), 2);
+        d.set_command(6, 0, &[]);
+        assert_eq!(rows(&d, 2).iter().filter(|(h, _)| *h != 13).count(), 1);
+        // From a snapshot command to HX Preset, the record goes.
+        d.set_command(7, 14, &[0]);
+        assert_eq!(rows(&d, 2).iter().filter(|(h, _)| *h != 13).count(), 0);
+    }
+
+    /// Every real preset's records are already what the rules produce: nothing is rewritten.
+    /// `HX_PRESETS_DIR` is a folder of pedal documents (`.hxpreset`).
+    #[test]
+    fn the_rules_reproduce_the_records_of_every_real_preset() {
+        let Ok(dir) = std::env::var("HX_PRESETS_DIR") else { return };
+        let mut seen = 0;
+        let mut with_records = 0;
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = e.path();
+            if path.extension().and_then(|x| x.to_str()) != Some("hxpreset") {
+                continue;
+            }
+            let mut d = DevicePreset::parse(&std::fs::read(&path).unwrap()).unwrap();
+            let before = d.encode();
+            d.sync_snapshot_commands(None);
+            assert_eq!(d.encode(), before, "{} would be rewritten", path.display());
+            seen += 1;
+            with_records += (0..3).any(|n| rows(&d, n).iter().any(|(h, _)| *h != 13)) as usize;
+        }
+        assert!(seen > 0);
+        println!("{seen} presets unchanged; {with_records} of them have per-snapshot records");
     }
 }
