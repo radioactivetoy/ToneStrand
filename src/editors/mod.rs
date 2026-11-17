@@ -172,6 +172,7 @@ fn io_controls(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live:
     });
 }
 
+/// An input's or output's title with a small tile of its own where an effect has its icon: a jack and an
 /// arrow, in the colour of the tile's border.
 fn io_header(ui: &mut egui::Ui, input: bool, title: &str) {
     let (rect, _) = ui.allocate_exact_size(Vec2::splat(34.0), egui::Sense::hover());
