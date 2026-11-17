@@ -32,7 +32,7 @@ FS 4 / FS 5; that is superseded: the presets whose HX Preset commands sit in slo
 the Command Center's FS 1 and FS 2. When a switch is used by Command Center, the editor also sends the
 footswitch index (section 6), so the pedal knows which physical switch it is.
 
-`.hlx` keys are `command` + slot name: `commandInst1`, `commandFS2`, `commandExpPedal1`, ...
+`.hlx` keys are `command` + slot name: `commandInst1`, `commandFS2`, `commandExpPedal1`, ... Confirmed with a Stomp preset exported by the other editor ("Wish acoustic.hlx"): `commandFS1` to `commandFS5` are slots 6 to 10 and only `commandExpPedal1` is written (no `commandExpPedal2`). That file keeps a wait of 5000 where the pedal clamps to 20, so clamp when converting.
 
 ## 2. Command types
 
@@ -169,7 +169,7 @@ All on the data channel, service 6, keys: `24` slot, `77` command type, `28` fie
 | 48 | command info | `{24: slot}` | read the slot back after changing its type |
 | 68 | set command value | `{24: slot, 77: type, 28: position, 81: value}` | set one field; `position` = the field's **1-based** argument number (confirmed: channel is 1, CC is 2 on a MIDI CC) |
 | 33 | footswitch index | `{102: fs}` | after setting a type on an FS slot, tells the pedal which physical switch it is (1-based) |
-| 58 | latching | `{102: fs, 65: bool}` | the Latching toggle of an FS slot (`fs` 0-based); the flag is stored in the footswitch table, where is not yet confirmed |
+| 58 | latching | `{102: fs, 65: bool}` | the Latching toggle of an FS slot (`fs` 0-based). Only **CC Toggle (type 2)** has it; MIDI CC and the rest have none. The other editor calls it "Momentary" and writes it to `.hlx` as `@fs_momentary` (momentary = not latching); the pedal keeps it in the footswitch table (probably field 12), polarity of op 58 not yet confirmed |
 | 88 | select snapshot | `{92: n}` | values are per snapshot, so select the snapshot first |
 
 The pedal answers a type change with event 35 and a value change with event 36, which carries the old value
