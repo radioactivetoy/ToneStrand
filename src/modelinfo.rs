@@ -109,6 +109,33 @@ pub fn has_side(ui: &egui::Ui, symbol: &str, cab: Option<&str>) -> bool {
         || cab.is_some_and(|c| photo(ui.ctx(), c).is_some())
 }
 
+/// A framed photo of a model at a fixed size, the same for every model and for an amp's and a cab's. Shows an
+/// empty frame when the model has no photo.
+pub fn photo_tile(ui: &mut egui::Ui, symbol: Option<&str>, width: f32, height: f32) {
+    egui::Frame::new()
+        .fill(egui::Color32::from_rgb(0x10, 0x11, 0x14))
+        .corner_radius(egui::CornerRadius::same(8))
+        .inner_margin(egui::Margin::same(6))
+        .show(ui, |ui| {
+            ui.set_min_size(Vec2::new(width - 12.0, height - 12.0));
+            ui.set_max_size(Vec2::new(width - 12.0, height - 12.0));
+            if let Some(t) = symbol.and_then(|s| photo(ui.ctx(), s)) {
+                ui.centered_and_justified(|ui| image(ui, &t, Vec2::new(width - 24.0, height - 24.0)));
+            }
+        });
+}
+
+/// What a model is, for a help pop-up: its description and notable players.
+pub fn about(symbol: &str) -> Option<String> {
+    let i = info(symbol)?;
+    let mut text = i.description.clone()?;
+    if let Some(n) = &i.notable_users {
+        text.push_str("\n\nNotable players: ");
+        text.push_str(n);
+    }
+    Some(text)
+}
+
 /// A narrow column beside the knobs: the photo (with the cab's photo under it for an amp + cab
 /// or a dual cab), a few lines about the model, and more on demand.
 pub fn side(ui: &mut egui::Ui, symbol: &str, width: f32, cab: Option<&str>) {

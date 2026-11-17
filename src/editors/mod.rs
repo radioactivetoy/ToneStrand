@@ -94,7 +94,7 @@ fn io_panel(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live: bo
     let input = s.kind == Kind::Input;
     let full = ui.available_width();
     let side = full > 700.0;
-    let body_h = body_height(false);
+    let body_h = BODY_H;
     ui.horizontal_top(|ui| {
         ui.set_min_height(body_h);
         if side {
@@ -995,16 +995,31 @@ const SIDE_W: f32 = 210.0;
 
 /// The height of a block panel's body: the same for an input, an output and every effect, so the editor
 /// doesn't jump as blocks are picked; an amp with a cab (or a dual cab) gets two of them.
-const BODY_H: f32 = 175.0;
+const BODY_H: f32 = 190.0;
 
-fn body_height(double: bool) -> f32 {
-    if double {
-        2.0 * BODY_H + 8.0
-    } else {
-        BODY_H
-    }
+/// One section of a block panel: the photo tile on the left, a divider, the settings on the right, all at the
+/// panel's body height. An amp with a cab has two of these, one above the other.
+fn body_section(ui: &mut egui::Ui, side: bool, full: f32, h: f32, photo: Option<&str>, content: impl FnOnce(&mut egui::Ui)) {
+    ui.horizontal_top(|ui| {
+        ui.set_min_height(h);
+        if side {
+            ui.vertical(|ui| {
+                ui.set_width(SIDE_W);
+                crate::modelinfo::photo_tile(ui, photo, SIDE_W, h);
+            });
+            ui.add_space(10.0);
+            let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, h), egui::Sense::hover());
+            ui.painter().rect_filled(r, CornerRadius::ZERO, line());
+            ui.add_space(10.0);
+        }
+        let rest = if side { full - SIDE_W - 21.0 } else { full };
+        ui.vertical(|ui| {
+            ui.set_max_width(rest);
+            ui.set_min_width(rest.min(200.0));
+            content(ui);
+        });
+    });
 }
-
 /// A "Change cab" menu for the second model of a block: the cabs of the same kind
 /// (dual cabs for a dual cab's second cab, single mic cabs for an amp's cab; legacy
 /// cabs for legacy ones). Returns the cab picked.

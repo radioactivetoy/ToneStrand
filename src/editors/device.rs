@@ -365,6 +365,9 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                     io_header(ui, s.kind == Kind::Input, &name);
                 } else {
                     block_header_icon(ui, col, &kind, &symbol, &name, &based_line(&name, based));
+                    if let Some(about) = crate::modelinfo::about(&symbol) {
+                        theme::help(ui, &about);
+                    }
                 }
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -473,33 +476,19 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
             ui.label(RichText::new("This block has no knobs.").color(muted()));
         }
         let sym = cat.zip(s.model).and_then(|(c, m)| c.symbol(m)).map(str::to_owned);
-        // An amp + cab (or dual cab) shows the cab's photo under the amp's.
+        // An amp + cab (or dual cab) is two sections, each with its own photo.
         let cab_sym = s.paired.zip(cat).and_then(|(m, c)| c.symbol(m)).map(str::to_owned);
-        let side = sym.as_deref().is_some_and(|x| crate::modelinfo::has_side(ui, x, cab_sym.as_deref())) && ui.available_width() > 700.0;
+        let has_photo = |x: &Option<String>| x.as_deref().is_some_and(|x| crate::modelinfo::photo(ui.ctx(), x).is_some());
+        let side = (has_photo(&sym) || has_photo(&cab_sym)) && ui.available_width() > 700.0;
         let full = ui.available_width();
-        let body_h = super::body_height(cab_sym.is_some());
-        ui.horizontal_top(|ui| {
-        ui.set_min_height(body_h);
-        if side {
-            ui.vertical(|ui| {
-                ui.set_width(SIDE_W);
-                crate::modelinfo::side(ui, sym.as_deref().unwrap_or(""), SIDE_W, cab_sym.as_deref());
-            });
-            ui.add_space(10.0);
-            let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, body_h), egui::Sense::hover());
-            ui.painter().rect_filled(r, CornerRadius::ZERO, line());
-            ui.add_space(10.0);
-        }
-        let rest = if side { full - SIDE_W - 21.0 } else { full };
-        ui.vertical(|ui| {
-        ui.set_max_width(rest);
-        ui.set_min_width(rest.min(200.0));
-        // Which footswitch turns this block on and off.
-        if s.kind == Kind::Block {
-            let fam = snapshots::family_of_device(crate::nam::unit());
-            let wire = s.wire_block();
-            let current = preset.block_footswitch(wire);
-            ui.horizontal(|ui| {
+        let h = super::BODY_H;
+        super::body_section(ui, side, full, h, sym.as_deref(), |ui| {
+            // Which footswitch turns this block on and off.
+            if s.kind == Kind::Block {
+                let fam = snapshots::family_of_device(crate::nam::unit());
+                let wire = s.wire_block();
+                let current = preset.block_footswitch(wire);
+                ui.horizontal(|ui| {
                 ui.label(RichText::new("Footswitch").color(muted()));
                 let mut pick = current.unwrap_or(0);
                 egui::ComboBox::from_id_salt(("dev-fs", wire))
@@ -525,33 +514,35 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                 }
                 theme::help(ui, "The footswitch that turns this block on and off. Knobs on footswitches, expression pedals, snapshots and MIDI are in the Controllers card below.");
             });
-            ui.add_space(4.0);
-        }
-        knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, false);
-        if let Some(cab) = s.paired {
-            ui.add_space(10.0);
-            ui.separator();
-            let (name, _, col) = describe(cat, cab);
-            let dual = s.model.zip(cat).is_some_and(|(m, c)| c.symbol(m).is_some_and(|x| x.starts_with("HD2_Cab")));
-            let mut pick = None;
-            ui.horizontal(|ui| {
-                block_header(ui, col, &name, if dual { "second cab" } else { "cab in this block" });
-                if let Some(c) = cat {
-                    pick = cab_menu(ui, c, cab, dual);
-                }
-            });
-            if let (Some(new), Some(c), Some(first)) = (pick, cat, s.model) {
-                preset.set_paired_model(c, s.path, s.position, new);
-                *dirty = true;
-                if live {
-                    cmds.push(Cmd::SetModel { block: s.wire_block(), model: first, paired: Some(new) });
-                }
+                ui.add_space(4.0);
             }
-            ui.add_space(4.0);
-            knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, true);
+            knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, false);
+        });
+        if let Some(cab) = s.paired {
+            ui.add_space(6.0);
+            ui.separator();
+            ui.add_space(6.0);
+            super::body_section(ui, side, full, h, cab_sym.as_deref(), |ui| {
+                let (name, _, col) = describe(cat, cab);
+                let dual = s.model.zip(cat).is_some_and(|(m, c)| c.symbol(m).is_some_and(|x| x.starts_with("HD2_Cab")));
+                let mut pick = None;
+                ui.horizontal(|ui| {
+                    block_header(ui, col, &name, if dual { "second cab" } else { "cab in this block" });
+                    if let Some(c) = cat {
+                        pick = cab_menu(ui, c, cab, dual);
+                    }
+                });
+                if let (Some(new), Some(c), Some(first)) = (pick, cat, s.model) {
+                    preset.set_paired_model(c, s.path, s.position, new);
+                    *dirty = true;
+                    if live {
+                        cmds.push(Cmd::SetModel { block: s.wire_block(), model: first, paired: Some(new) });
+                    }
+                }
+                ui.add_space(4.0);
+                knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, true);
+            });
         }
-        });
-        });
     });
 }
 

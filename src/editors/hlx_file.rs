@@ -653,7 +653,7 @@ pub fn hlx_editor(
             .map(str::to_owned);
         let side = crate::modelinfo::has_side(ui, &b.model, cab_sym.as_deref()) && ui.available_width() > 700.0;
         let full = ui.available_width();
-        let body_h = super::body_height(cab_sym.is_some());
+        let body_h = super::BODY_H;
         ui.horizontal_top(|ui| {
             ui.set_min_height(body_h);
             if side {
