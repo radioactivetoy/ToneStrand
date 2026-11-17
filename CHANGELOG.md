@@ -23,6 +23,9 @@
   and keep the type in a separate list, so every command except HX Preset showed as empty. Both are now read and
   written as the pedal does.
 - Command Center footswitch labels: the pedal's FS 1 to FS 5 are slots 6 to 10 (FS 4 / FS 5 were wrong).
+- Changing a Command Center command on the loaded preset could jump back to "None" or change again: the window
+  was refreshed from the pedal after every edit and an older refresh overwrote the next change. It now keeps
+  what you set and only reloads if the pedal kept something different.
 
 ### Known gaps
 - Command Center is read and edited on the HX Stomp only; other units get a note that it wasn't carried over.
