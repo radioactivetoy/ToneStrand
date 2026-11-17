@@ -97,6 +97,9 @@ impl SlotView {
     }
 }
 
+/// One slot's Command Center as `command_state` reports it: command, Momentary flag, values per snapshot.
+pub type CommandState = (Option<(i64, Vec<i64>)>, Option<bool>, Vec<Option<Vec<i64>>>);
+
 #[derive(Clone)]
 pub struct DevicePreset {
     /// The mark as it arrived (the pedal writes it with a trailing zero byte).
@@ -1263,6 +1266,17 @@ impl DevicePreset {
         out.apply_hlx_controllers(doc, cat, &placed, &mut notes);
         out.apply_hlx_commands(doc, &mut notes);
         Ok((out, notes))
+    }
+
+    /// Everything about the Command Center that an edit can change, for comparing two documents: each slot's
+    /// command, its Momentary flag and its values in every snapshot.
+    pub fn command_state(&self) -> Vec<CommandState> {
+        let snaps = self.snapshot_names().len();
+        (0..self.command_count())
+            .map(|slot| {
+                (self.command(slot), self.command_momentary(slot), (0..snaps).map(|n| self.snapshot_command_args(n, slot)).collect())
+            })
+            .collect()
     }
 
     /// A command's values in one snapshot (its six arguments), or None when that snapshot has no record for

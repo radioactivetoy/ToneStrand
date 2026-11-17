@@ -332,6 +332,19 @@ fn read_live(s: &mut Session, send: &dyn Fn(Event)) -> Result<i64, String> {
     Ok(idx)
 }
 
+/// Write a changed Command Center to the pedal's edit buffer. The window already shows the change, so it is
+/// only handed the pedal's document back when the pedal kept something different (a refresh after every edit
+/// raced with the next one and put an older state back on screen).
+fn write_command_center(s: &mut Session, send: &dyn Fn(Event), doc: &crate::devpreset::DevicePreset) -> Result<(), String> {
+    s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
+    let blob = s.read_current().map_err(|e| e.to_string())?;
+    let same = crate::devpreset::DevicePreset::parse(&blob).is_ok_and(|back| back.command_state() == doc.command_state());
+    if !same {
+        read_live(s, send)?;
+    }
+    Ok(())
+}
+
 fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
     if let Err(e) = refresh(s, send) {
         send(Event::Error(format!("Could not read the preset list: {e}")));
@@ -555,8 +568,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     if !doc.set_command_values(snapshot, slot, &args) {
                         return Err("this preset has no such Command Center slot".into());
                     }
-                    s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
-                    read_live(s, send)?;
+                    write_command_center(s, send, &doc)?;
                     send(Event::Done("Command Center changed on the pedal (Save on pedal keeps it)".into()));
                 }
                 Cmd::SetMomentary { slot, momentary } => {
@@ -564,8 +576,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     if !doc.set_command_momentary(slot, momentary) {
                         return Err("this preset has no such footswitch".into());
                     }
-                    s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
-                    read_live(s, send)?;
+                    write_command_center(s, send, &doc)?;
                     send(Event::Done("Footswitch changed on the pedal (Save on pedal keeps it)".into()));
                 }
                 Cmd::SetCommand { slot, id, args } => {
@@ -574,8 +585,7 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     if !doc.set_command(slot, id, &args) {
                         return Err("this preset has no such Command Center slot".into());
                     }
-                    s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
-                    read_live(s, send)?;
+                    write_command_center(s, send, &doc)?;
                     send(Event::Done("Command Center changed on the pedal (Save on pedal keeps it)".into()));
                 }
                 Cmd::CopySnapshot { from, to, keep_name } => {
