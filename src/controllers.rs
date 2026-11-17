@@ -1184,6 +1184,20 @@ pub fn device_command_center(
                     args[4] = 1; // a constant the pedal keeps in this command
                 }
                 ui.add_space(4.0);
+                // Only a CC Toggle can latch: the other commands have no such switch.
+                if id == 2 {
+                    if let Some(mut m) = preset.command_momentary(i) {
+                        let resp = ui.checkbox(&mut m, "Momentary").on_hover_text(
+                            "On: the value goes out while the switch is held and returns when it is released. Off: latching, each press toggles the command.",
+                        );
+                        if resp.changed() && preset.set_command_momentary(i, m) {
+                            *dirty = true;
+                            if live {
+                                cmds.push(crate::device::Cmd::SetMomentary { slot: i, momentary: m });
+                            }
+                        }
+                    }
+                }
                 let mut changed = false;
                 for (f, field) in spec.fields.iter().enumerate() {
                     if args.len() <= f {

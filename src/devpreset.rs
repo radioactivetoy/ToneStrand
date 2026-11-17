@@ -511,7 +511,13 @@ impl DevicePreset {
     /// The ids are the ones `.hlx` files use (14 HX Preset, 15 HX Snapshot, 18 MIDI CC ...).
     pub fn command(&self, slot: usize) -> Option<(i64, Vec<i64>)> {
         let row = self.tone.at(&[key::COMMANDS, 1])?.as_array()?.get(slot)?.as_array()?;
-        let id = row.first()?.as_i64()?;
+        // The type is in the list of ids; a row only repeats it for HX Preset (the pedal's own output
+        // starts every other row with 0).
+        let listed = self.tone.at(&[key::COMMANDS, 0]).and_then(Value::as_array).and_then(|a| a.get(slot)).and_then(Value::as_i64);
+        let id = match listed {
+            Some(id) if id > 0 => id,
+            _ => row.first()?.as_i64()?,
+        };
         if id <= 0 {
             return None;
         }
@@ -594,8 +600,21 @@ impl DevicePreset {
     /// order `.hlx` files list them; missing ones are 0. False when the slot doesn't exist.
     pub fn set_command(&mut self, slot: usize, id: i64, args: &[i64]) -> bool {
         let id = id.max(0);
-        let mut row = vec![Value::int(id)];
+        let old_id = self.command(slot).map_or(0, |c| c.0);
+        // The pedal's own rows start with 0, except HX Preset's, which start with its id.
+        let mut row = vec![Value::int(if id == 14 { 14 } else { 0 })];
         row.extend((0..6).map(|i| Value::int(if id == 0 { 0 } else { args.get(i).copied().unwrap_or(0) })));
+        if id == 2 {
+            // CC Toggle keeps its Momentary flag in its fifth argument and, when latching, the
+            // current state (starting at the dim value) in its sixth; the flag itself sits in the
+            // footswitch table.
+            if old_id != 2 {
+                self.set_command_momentary(slot, false);
+            }
+            let momentary = self.command_momentary(slot).unwrap_or(false);
+            row[5] = Value::int(momentary as i64);
+            row[6] = Value::int(if momentary { 0 } else { args.get(2).copied().unwrap_or(0) });
+        }
         let Some(Value::Array(ids, _)) = self.tone.at_mut(&[key::COMMANDS, 0]) else { return false };
         let Some(cell) = ids.get_mut(slot) else { return false };
         *cell = Value::int(id);
@@ -608,10 +627,74 @@ impl DevicePreset {
             _ => false,
         };
         if set {
+            if id != old_id {
+                self.set_command_label(slot, id);
+            }
             // The snapshots keep their own copy of what each command does: bring them in step.
             self.sync_snapshot_commands(Some(slot));
         }
         set
+    }
+
+    /// The footswitch table's record of a Command Center footswitch (slots 6 to 10 on an HX Stomp).
+    fn fs_record_mut(&mut self, slot: usize) -> Option<&mut Value> {
+        let i = slot.checked_sub(6).filter(|i| *i < 5)?;
+        let Some(Value::Array(table, _)) = self.tone.at_mut(&[3, 8]) else { return None };
+        match table.get_mut(i)? {
+            Value::Array(recs, _) => recs.get_mut(0),
+            _ => None,
+        }
+    }
+
+    /// Whether a Command Center footswitch is momentary (the footswitch table's flag; the other editor's
+    /// "Momentary" switch, off = latching). None for a slot that isn't a footswitch or has no record.
+    pub fn command_momentary(&self, slot: usize) -> Option<bool> {
+        let i = slot.checked_sub(6).filter(|i| *i < 5)?;
+        let rec = self.tone.at(&[3, 8])?.as_array()?.get(i)?.as_array()?.first()?;
+        match rec.get(12)? {
+            Value::Bool(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    /// Set the Momentary flag of a Command Center footswitch. A CC Toggle also keeps it in its fifth
+    /// argument. False when the slot has no footswitch record.
+    pub fn set_command_momentary(&mut self, slot: usize, momentary: bool) -> bool {
+        let Some(rec) = self.fs_record_mut(slot) else { return false };
+        let Some(flag) = rec.get_mut(12) else { return false };
+        *flag = Value::Bool(momentary);
+        if self.command(slot).is_some_and(|c| c.0 == 2) {
+            let dim = self.command(slot).and_then(|c| c.1.get(2).copied()).unwrap_or(0);
+            if let Some(Value::Array(rows, _)) = self.tone.at_mut(&[key::COMMANDS, 1]) {
+                if let Some(Value::Array(row, _)) = rows.get_mut(slot) {
+                    if row.len() > 6 {
+                        row[5] = Value::int(momentary as i64);
+                        row[6] = Value::int(if momentary { 0 } else { dim });
+                    }
+                }
+            }
+            self.sync_snapshot_commands(Some(slot));
+        }
+        true
+    }
+
+    /// When a footswitch gets a new command type the pedal names the switch after it and picks whether it
+    /// is momentary (seen on an HX Stomp for the types below; the others are left as they are).
+    fn set_command_label(&mut self, slot: usize, id: i64) {
+        let (label, momentary) = match id {
+            1 => ("CC Value", true),
+            2 => ("CC Toggle", false),
+            5 => ("Note", false),
+            15 => ("Snapshot", true),
+            _ => return,
+        };
+        let Some(rec) = self.fs_record_mut(slot) else { return };
+        if let Some(Value::Str(s, _)) = rec.get_mut(11).and_then(|i| i.get_mut(5)) {
+            *s = label.to_owned();
+        }
+        if let Some(flag) = rec.get_mut(12) {
+            *flag = Value::Bool(momentary);
+        }
     }
 
     /// Whether a path is split (the split's own "active" flag, set when it's placed).
@@ -1656,6 +1739,68 @@ mod command_tests {
         assert!(d.set_command(6, 0, &[39]));
         assert_eq!(d.command(6), None);
         assert!(!d.set_command(13, 14, &[]), "there is no slot 13");
+    }
+
+    /// A document with the footswitch table's records for five Command Center switches.
+    fn with_switches() -> DevicePreset {
+        let mut d = with_commands();
+        let rec = || {
+            Value::Array(
+                vec![Value::map(vec![
+                    (10, Value::int(7)),
+                    (
+                        11,
+                        Value::map(vec![(0, Value::int(3)), (5, Value::str("CC Value")), (6, Value::int(462860)), (7, Value::Bool(false))]),
+                    ),
+                    (12, Value::Bool(true)),
+                ])],
+                crate::msgpack::AUTO,
+            )
+        };
+        let table = Value::map(vec![(7, Value::int(2)), (8, Value::Array((0..5).map(|_| rec()).collect(), crate::msgpack::AUTO))]);
+        if let Value::Map(pairs, _) = &mut d.tone {
+            for (k, v) in pairs.iter_mut() {
+                if k.as_i64() == Some(3) {
+                    *v = table.clone();
+                }
+            }
+        }
+        d
+    }
+
+    /// The pedal's own rows (captured from an HX Stomp): the id is in the list, rows start with 0 except
+    /// HX Preset's, and a CC Toggle's fifth argument is its Momentary flag.
+    #[test]
+    fn rows_follow_the_pedals_own_layout_and_momentary_is_kept_in_two_places() {
+        let mut d = with_switches();
+        assert!(d.set_command(0, 18, &[5, 55, 66, 20]));
+        assert!(d.set_command(6, 14, &[1]));
+        let rows = d.tone.at(&[2, 1]).and_then(Value::as_array).unwrap();
+        let first = |i: usize| rows[i].as_array().unwrap()[0].as_i64().unwrap();
+        assert_eq!((first(0), first(6)), (0, 14), "only HX Preset repeats its id");
+        assert_eq!(d.command(0), Some((18, vec![5, 55, 66, 20, 0, 0])));
+        // A row the pedal wrote (id only in the list) is read too.
+        assert_eq!(d.command(6), Some((14, vec![1, 0, 0, 0, 0, 0])));
+
+        // A CC Toggle on FS 2 (slot 7): the switch is named and starts latching.
+        assert!(d.set_command(7, 2, &[3, 22, 33, 11]));
+        assert_eq!(d.command_momentary(7), Some(false));
+        assert_eq!(d.command(7), Some((2, vec![3, 22, 33, 11, 0, 33])));
+        let name = d.tone.at(&[3, 8]).and_then(Value::as_array).unwrap()[1].as_array().unwrap()[0].get(11).unwrap().get(5).unwrap();
+        assert_eq!(name.as_str(), Some("CC Toggle"));
+        // Momentary on: the flag and the fifth argument change, the current state goes back to 0.
+        assert!(d.set_command_momentary(7, true));
+        assert_eq!(d.command_momentary(7), Some(true));
+        assert_eq!(d.command(7), Some((2, vec![3, 22, 33, 11, 1, 0])));
+        // Editing a field keeps the flag.
+        assert!(d.set_command(7, 2, &[4, 22, 33, 11]));
+        assert_eq!(d.command(7), Some((2, vec![4, 22, 33, 11, 1, 0])));
+        let back = DevicePreset::parse(&d.encode()).unwrap();
+        assert_eq!(back.command_momentary(7), Some(true));
+        assert_eq!(back.command(7), d.command(7));
+        // A slot that isn't a footswitch has no flag.
+        assert_eq!(d.command_momentary(0), None);
+        assert!(!d.set_command_momentary(0, true));
     }
 
     /// The presets read from a real HX Stomp: "Shine on 2" has HX Preset on FS 1 and FS 2.

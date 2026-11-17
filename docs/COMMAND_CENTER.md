@@ -114,6 +114,7 @@ tone[2] = {
 
 - Both lists have exactly the unit's slot count (13 / 16 / 14 / 24).
 - An unused slot: id `0` and `[0, 0, 0, 0, 0, 0, 0]`.
+- **Row layout, checked on a pedal:** the type is in the list `tone[2][0]`. A row in `tone[2][1]` starts with `0` and then the six arguments; only HX Preset's row repeats its id as the first element (`[14, preset, 0, ...]`). An earlier version of this brief had every row start with its id; a reader that trusts the first element sees every other command as empty.
 - Each argument is written as `value & 255`. For a slot with type `t`, the args are the type's
   fields in table order; a constant in the table (type 12's `1`) is written as-is.
 - Keep each value's MessagePack format when editing an existing document (`msgpack.rs` does this),
@@ -169,7 +170,7 @@ All on the data channel, service 6, keys: `24` slot, `77` command type, `28` fie
 | 48 | command info | `{24: slot}` | read the slot back after changing its type |
 | 68 | set command value | `{24: slot, 77: type, 28: position, 81: value}` | set one field; `position` = the field's **1-based** argument number (confirmed: channel is 1, CC is 2 on a MIDI CC) |
 | 33 | footswitch index | `{102: fs}` | after setting a type on an FS slot, tells the pedal which physical switch it is (1-based) |
-| 58 | latching | `{102: fs, 65: bool}` | the Latching toggle of an FS slot (`fs` 0-based). Only **CC Toggle (type 2)** has it; MIDI CC and the rest have none. The other editor calls it "Momentary" and writes it to `.hlx` as `@fs_momentary` (momentary = not latching); the pedal keeps it in the footswitch table (probably field 12), polarity of op 58 not yet confirmed |
+| 58 | momentary | `{102: fs, 65: bool}` | the Momentary switch of an FS slot (`fs` 0-based; **true = momentary**, false = latching; confirmed). Only **CC Toggle (type 2)** has it. The pedal keeps it in the footswitch table, `tone[3][8][fs][0][12]`, and in the CC Toggle's fifth argument (1 = momentary); a latching CC Toggle's sixth argument holds its current state (the Dim value at first). A new type also renames the switch (`tone[3][8][fs][0][11][5]`: "CC Value", "CC Toggle", "Note", "Snapshot") and CC Toggle starts latching |
 | 88 | select snapshot | `{92: n}` | values are per snapshot, so select the snapshot first |
 
 The pedal answers a type change with event 35 and a value change with event 36, which carries the old value
