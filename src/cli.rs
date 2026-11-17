@@ -4,7 +4,8 @@
 use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnames, session, wire};
 
 /// The command-line tools (everything else opens the window).
-pub const CLI_FLAGS: [&str; 16] = [
+pub const CLI_FLAGS: [&str; 17] = [
+    "--box-proxy",
     "--cc-raw",
     "--cc-reload",
     "--commands",
@@ -69,11 +70,13 @@ fn read_preset(f: &str) -> Option<devpreset::DevicePreset> {
 fn open_session(host: Option<&str>) -> Option<session::Session> {
     let w: Box<dyn wire::Wire> = if let Some(host) = host {
         let settings = boxes::Settings::load();
-        let token = settings
-            .tokens
-            .get(host)
-            .cloned()
-            .or_else(|| settings.saved.iter().find(|b| b.host == host).and_then(|b| settings.token_for(b)));
+        // A box behind a forwarder ("192.168.1.5:8080") uses the pairing saved for its address.
+        let bare = host.rsplit_once(':').filter(|(h, _)| !h.contains(':')).map_or(host, |(h, _)| h);
+        // TONESTRAND_BOX_PAIRING=<address> names the pairing to use when the address is a forwarder's.
+        let named = std::env::var("TONESTRAND_BOX_PAIRING").unwrap_or_default();
+        let token = [host, bare, named.as_str()].iter().filter(|h| !h.is_empty()).find_map(|h| {
+            settings.tokens.get(*h).cloned().or_else(|| settings.saved.iter().find(|b| b.host == *h).and_then(|b| settings.token_for(b)))
+        });
         let Some(token) = token else {
             eprintln!("no saved pairing for {host}");
             return None;
@@ -192,6 +195,24 @@ fn cc_reload_tool(rest: &[String]) {
     println!("reloaded \"{name}\" from flash");
 }
 
+/// `--box-proxy <listen address:port> <box address[:port]> [folder for documents]`
+fn box_proxy_tool(rest: &[String]) {
+    let (Some(listen), Some(target)) = (rest.first(), rest.get(1)) else {
+        eprintln!("usage: --box-proxy <listen address:port, e.g. 0.0.0.0:8080> <box address[:port]> [folder for documents]");
+        return;
+    };
+    let target = if target.rsplit_once(':').is_some_and(|(_, p)| p.chars().all(|c| c.is_ascii_digit())) && !target.contains("::") {
+        target.clone()
+    } else {
+        format!("{target}:80")
+    };
+    let docs = rest.get(2).map(std::path::PathBuf::from);
+    let log = docs.as_ref().map(|d| d.join("box-proxy.log"));
+    if let Err(e) = crate::boxproxy::run(listen, &target, docs, log) {
+        eprintln!("{e}");
+    }
+}
+
 const HELP: &str = "\
 ToneStrand command-line tools (all read-only unless noted):
 
@@ -207,6 +228,7 @@ ToneStrand command-line tools (all read-only unless noted):
   --cc-compare <file.hxpreset|slot> <file.hlx> [box address]  line an HX Edit export up with the pedal's Command Center
   --cc-raw <box address> <slot 0-12> <id> [arg1 .. arg6]  WRITES one Command Center slot of the loaded preset (edit buffer only)
   --cc-reload <box address>         reload the loaded preset from flash, dropping edit-buffer changes
+  --box-proxy <listen address:port> <box address> [folder for documents]  log what another editor sends the pedal through the box
   --hlx-check <template.hxpreset> [file.hlx]  try the .hlx -> pedal conversion offline
   --fmt-check                       how a dual cab's knobs read at their edges
   --list-models                     every effect in the picker, with real-gear names
@@ -223,6 +245,10 @@ pub fn run(args: &[String]) -> bool {
     attach_console();
     if wants_help {
         print!("{HELP}");
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--box-proxy") {
+        box_proxy_tool(&args[i + 1..]);
         return true;
     }
     if let Some(i) = args.iter().position(|a| a == "--cc-raw") {

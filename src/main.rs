@@ -2,6 +2,7 @@
 
 mod backup;
 mod boxes;
+mod boxproxy;
 mod catalog;
 mod chain;
 mod cli;
