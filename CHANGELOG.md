@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.0.0-beta.3 - 2026-11-18
+
+### New
+- **Command Center on the pedal (HX Stomp)**, now complete: a Command Center tab in the Controllers card with a
+  trigger grid (Instant 1-6, FS 1-5, EXP 1-2) and an editor per trigger for every command type (MIDI CC,
+  CC Toggle, Note On, Bank/Program, MMC, Hotkey, HX Preset, HX Snapshot, HX Looper, pedal MIDI CC). Each snapshot
+  keeps its own values (the preset's snapshot bar picks which), CC Toggle and Hotkey have a Momentary switch, and
+  the footswitch gets its name from the command. On the loaded preset a change reaches the pedal at once (kept by
+  "Save on pedal"). The slot order and every argument layout were checked against another editor's traffic on a pedal.
+- **A `.hlx` sent to the pedal carries its Command Center** (waits held to the pedal's limit of 20, Momentary
+  flags, each snapshot's own values).
+- **Input and output panels** follow the layout of an effect's: icon tile, jack picture, one row of settings.
+  Guitar In-Z and Guitar Pad moved from the Controllers tab to the Input block's panel.
+- **Block panels have one height**; an amp with a cab is two sections of it, each with its own photo and a
+  line between. A model's description is behind a (?) next to its name.
+- Tools: `--commands`, `--cc-compare`, `--cc-raw`, `--cc-reload`, `--box-proxy` (log what another editor sends
+  the pedal), `--dump-loaded`, `--send-hlx`, `--cc-snap`, `--put-slot` (see docs/BUILDING.md).
+
+### Fixed
+- A pedal document's Command Center was read from the first element of each row; the pedal's own rows start with 0
+  and keep the type in a separate list, so every command except HX Preset showed as empty. Both are now read and
+  written as the pedal does.
+- Command Center footswitch labels: the pedal's FS 1 to FS 5 are slots 6 to 10 (FS 4 / FS 5 were wrong).
+
+### Known gaps
+- Command Center is read and edited on the HX Stomp only; other units get a note that it wasn't carried over.
+- The names and defaults of the Bank/Program and HX Looper switches, and HX Looper's press and release/hold fields,
+  are not checked on a pedal.
+- The `.hlx` editor's amp and cab panel keeps the older single-column layout.
+- Command Center changes use the whole-preset write (op 21), not the pedal's own live commands.
+
 ## 1.0.0-beta.2 - 2026-11-17
 
 ### New
