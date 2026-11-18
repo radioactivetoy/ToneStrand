@@ -61,6 +61,14 @@ pub enum Cmd {
         index: i64,
         value: Value,
     },
+    /// A value the pedal keeps after the parameters it can address one by one (a single cab's Mic, a delay's Trails): it refuses
+    /// a parameter change for it ("no such block or setting"), so the document is read, changed and written back.
+    SetHidden {
+        block: i64,
+        cab: bool,
+        index: i64,
+        value: Value,
+    },
     SetEnabled {
         block: i64,
         enabled: bool,
@@ -276,6 +284,7 @@ impl Cmd {
                 | Cmd::ClearBlock { .. }
                 | Cmd::Snapshot(_)
                 | Cmd::SetSetting { .. }
+                | Cmd::SetHidden { .. }
                 | Cmd::CopySnapshot { .. }
                 | Cmd::AssignController { .. }
                 | Cmd::UnassignController { .. }
@@ -612,6 +621,17 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                 }
                 Cmd::SetParam { block, path, index, value } => {
                     s.set_param(block, path, index, value).map_err(|e| e.to_string())?;
+                }
+                Cmd::SetHidden { block, cab, index, value } => {
+                    let mut doc = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;
+                    let (path, position) = (block / 20, (block % 20) as usize);
+                    if cab {
+                        doc.set_paired_value(path, position, index as usize, value);
+                    } else {
+                        doc.set_value(path, position, index as usize, value);
+                    }
+                    s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
+                    read_live(s, send)?;
                 }
                 Cmd::SetEnabled { block, enabled } => {
                     s.set_enabled(block, enabled).map_err(|e| e.to_string())?;

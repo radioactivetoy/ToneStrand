@@ -1,10 +1,11 @@
 //! The command-line tools: read-only checks and helpers run as `tonestrand --<tool> ...`.
 //! Anything else opens the window. `tonestrand --help` lists them.
 
+use crate::msgpack::Value;
 use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnames, session, wire};
 
 /// The command-line tools (everything else opens the window).
-pub const CLI_FLAGS: [&str; 23] = [
+pub const CLI_FLAGS: [&str; 24] = [
     "--to-hlx",
     "--cc-live",
     "--put-slot",
@@ -13,6 +14,7 @@ pub const CLI_FLAGS: [&str; 23] = [
     "--dump-loaded",
     "--box-proxy",
     "--cc-raw",
+    "--op-raw",
     "--cc-reload",
     "--commands",
     "--cc-compare",
@@ -421,6 +423,7 @@ Lab tools (WRITE to the pedal; use a spare preset and keep a backup):
   --cc-live <box address> type <slot> <id> [args] | value <snapshot> <slot> <args> | momentary <slot> <0|1>  an edit the way the app makes it (the pedal's own requests; edit buffer only)
   --cc-snap <box address> <snapshot 1-based> <slot 0-12> [arg1 .. arg6]  one command's values in one snapshot (edit buffer only)
   --cc-reload <box address>         reload the loaded preset from flash, dropping edit-buffer changes
+  --op-raw <box address> <op> <key=value>...  one raw request to the pedal, printing the reply (lab: to find out how the pedal wants something asked)
   --send-hlx <box address> <slot like 42B> <file.hlx> <backup folder>  a .hlx to a slot, after saving the slot's document
   --put-slot <box address> <slot like 42B> <file.hxpreset> <name>  a saved pedal document to a slot (undo a test)
 ";
@@ -466,6 +469,10 @@ pub fn run(args: &[String]) -> bool {
     }
     if let Some(i) = args.iter().position(|a| a == "--dump-loaded") {
         dump_loaded_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--op-raw") {
+        op_raw_tool(&args[i + 1..]);
         return true;
     }
     if let Some(i) = args.iter().position(|a| a == "--cc-reload") {
@@ -881,4 +888,47 @@ fn probe(host: Option<String>) {
         let _ = s.read_current();
     }
     let _ = s.idle(std::time::Duration::from_millis(300));
+}
+
+/// `--op-raw <box address> <op> <key=value>...`: LAB tool, sends one request to the pedal as given and prints the reply, to find out
+/// how the pedal wants something asked (it changes the edit buffer only if the request does). Values: true, false, a whole number, or a
+/// number ending in `f` for a 32-bit float (`0.5f`). Keys are numbers.
+fn op_raw_tool(rest: &[String]) {
+    let (Some(host), Some(op)) = (rest.first(), rest.get(1)) else {
+        eprintln!("usage: --op-raw <box address> <op> <key=value>...   e.g. 30 98=8 29=true 26=0 28=6 119=false");
+        return;
+    };
+    let Some(op) = need(op.parse::<i64>(), "op") else { return };
+    let mut pairs = Vec::new();
+    for kv in &rest[2..] {
+        let Some((k, v)) = kv.split_once('=') else {
+            eprintln!("{kv}: write key=value");
+            return;
+        };
+        let Some(k) = need(k.parse::<i64>(), k) else { return };
+        let value = match v {
+            "true" => Value::Bool(true),
+            "false" => Value::Bool(false),
+            _ if v.ends_with('f') => match v.trim_end_matches('f').parse::<f32>() {
+                Ok(f) => Value::F32(f),
+                Err(_) => {
+                    eprintln!("{v}: not a number");
+                    return;
+                }
+            },
+            _ => match v.parse::<i64>() {
+                Ok(n) => Value::int(n),
+                Err(_) => {
+                    eprintln!("{v}: not a number");
+                    return;
+                }
+            },
+        };
+        pairs.push((k, value));
+    }
+    let Some(mut s) = open_session(Some(host)) else { return };
+    match s.request(op, Value::map(pairs)) {
+        Ok((status, result)) => println!("status {status}, result {}", result.summary()),
+        Err(e) => println!("error: {e}"),
+    }
 }

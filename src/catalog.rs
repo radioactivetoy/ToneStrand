@@ -833,6 +833,12 @@ impl Catalog {
         (name, meta)
     }
 
+    /// Whether value `index` of model `number` sits after the parameters the pedal lets be set one by one (a single cab's Mic, a
+    /// delay's Trails): those are changed by writing the document back.
+    pub fn is_hidden_value(&self, number: i64, index: usize) -> bool {
+        self.sym.get(usize::try_from(number).unwrap_or(usize::MAX)).is_some_and(|s| index >= s.params.len())
+    }
+
     /// The matching cab for an amp, by the pedal's number.
     pub fn paired_cab(&self, number: i64) -> Option<i64> {
         let link = self.info(number)?.cablink.clone()?;

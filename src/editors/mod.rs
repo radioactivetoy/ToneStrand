@@ -1145,8 +1145,13 @@ fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: b
                         preset.slots().get(sel).and_then(|x| x.values.get(vi).cloned())
                     };
                     if let Some(value) = cur {
-                        // Key 26 picks the block's own knobs (0) or its cab's (1).
-                        cmds.push(Cmd::SetParam { block: s.wire_block(), path: cab as i64, index: vi as i64, value });
+                        // Key 26 picks the block's own knobs (0) or its cab's (1). The Mic and Trails are not settable that way.
+                        let hidden = model.zip(cat).is_some_and(|(m, c)| c.is_hidden_value(m, vi));
+                        cmds.push(if hidden {
+                            Cmd::SetHidden { block: s.wire_block(), cab, index: vi as i64, value }
+                        } else {
+                            Cmd::SetParam { block: s.wire_block(), path: cab as i64, index: vi as i64, value }
+                        });
                     }
                 }
             }
