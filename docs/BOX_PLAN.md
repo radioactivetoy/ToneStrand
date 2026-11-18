@@ -49,11 +49,17 @@ Read first (done): `helrig-box` issue 6 (the three board problems), `docs/dev/bu
 - Send phases 2 and 3 upstream (pull requests to ToneRelay and helrig-box) once they hold on the bench.
 
 ### 4. Editing with no Wi-Fi infrastructure: the box's own network (half a day)
+**Done and verified (2026-11-18):** BOOT held 2 to 4 s is "direct mode" (own network, no router, until restart), with a
+password set from the setup page; ToneStrand shows it. Verified with an HX Stomp: connect, test page, live editing.
+(Original plan, kept for the record:)
 - Test: join the box's network, add it in ToneStrand by address (192.168.4.1), pair with BOOT, edit.
 - If it works: a "Direct" switch on the setup page that keeps the network up beside the joined one, with a password
   (the default is open today), and a hint in ToneStrand's connect panel.
 
 ### 5. Bluetooth editing (3 to 4 days), with Bluetooth MIDI kept
+**Deferred.** Direct mode already covers "no router" with a computer, at Wi-Fi speed and with no new client code.
+Bluetooth editing would add only phone and tablet use without a Wi-Fi join (and ToneStrand is a desktop app), for
+3 to 4 days of work and a lower speed. Revisit if a phone or tablet editor appears.
 Firmware
 - A GATT service `raw relay`: `tx` (notify, box to computer), `rx` (write without response, computer to box), `status`
   (read: hello JSON, protocol, busy). Frames fragmented over the negotiated MTU (up to 512) with a one-byte header and a
@@ -98,3 +104,14 @@ ToneStrand
   `~/box/tonestrand-box` in WSL. Image copied to `C:\Users\nesto\Downloads\tonestrand-box-fw` (ELF + partitions.csv).
 - Phases 2 and 3 (C6 image embedded, Bluetooth controller started): in the build, **not yet flashed or tested** on the board.
   The earlier C6 image was reused; the script that builds it when missing is untested.
+
+### Update (2026-11-18, evening)
+- Everything above is now in one repository, `radioactivetoy/tonestrand-box` (the ToneRelay fork is archived), with
+  documentation that states where it comes from (PROVENANCE.md, NOTICE.md).
+- Phases 2 and 3 flashed and verified: C6 2.12.13, Wi-Fi scan, Wi-Fi join, BLE advertising. Bluetooth MIDI from a phone
+  or tablet is **not** tested yet.
+- A browser flasher is published with GitHub Pages (https://radioactivetoy.github.io/tonestrand-box/), Helrig branding and
+  analytics removed. Release `v0.2.1` (pre-release). Faster flash speeds (460800, 921600) stall on this board; 115200 only.
+- Verified with an HX Stomp and ToneStrand: editing over the home Wi-Fi and over the box's own network (direct mode).
+- Left: replace the Helrig mark debossed in the lid STL files, Bluetooth MIDI test, a longer direct-mode session,
+  other pedals, a status page and over-the-air updates.

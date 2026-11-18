@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### New
+- **The box is the ToneStrand Box.** It is now called ToneStrand Box in the app; ToneStrand finds it by `_tonestrandbox` or
+  `tonestrandbox.local` (Helrig Box and ToneRelay builds are still found), and keeps asking for about a minute when the
+  first lookup misses. The box details show **Direct mode** when the box is on its own network (hold BOOT 2 to 4 s).
+  Firmware, flasher and guides: https://github.com/radioactivetoy/tonestrand-box
+
 ## 1.0.0-beta.4 - 2026-11-18
 
 ### New
