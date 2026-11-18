@@ -1113,7 +1113,14 @@ fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: b
     let model = if cab { s.paired } else { s.model };
     // For splits, merges, inputs and outputs the parameter names come from the same table.
     let per_row = ((ui.available_width() + 6.0) / 116.0).floor().max(1.0) as usize;
-    let all: Vec<(usize, &Value)> = values.iter().enumerate().collect();
+    let mut all: Vec<(usize, &Value)> = values.iter().enumerate().collect();
+    // A single cab keeps its Mic last in the pedal's list, but it is the first control of a cab block (and in HX Edit): show it first.
+    if let (Some(m), Some(c)) = (model, cat) {
+        if let Some(at) = all.iter().position(|(vi, _)| c.param(m, *vi).1.is_some_and(|p| p.id == "@mic")) {
+            let mic = all.remove(at);
+            all.insert(0, mic);
+        }
+    }
     for row in all.chunks(per_row) {
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = Vec2::new(6.0, 12.0);
