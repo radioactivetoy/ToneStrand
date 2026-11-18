@@ -7,6 +7,24 @@ use super::*;
 pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<usize>, picker: &mut Option<PickerState>) {
     let DeviceEdit { preset, live, cmds, cat, dirty } = ed;
     if chain_part() {
+        // A pedal document keeps the layout of the unit it came from; setting another unit does not convert it.
+        {
+            let fam = snapshots::family_of_device(crate::nam::unit());
+            let have = preset.layout().len();
+            if have != fam.paths && have > 0 {
+                ui.label(
+                    RichText::new(format!(
+                        "This pedal preset has {have} path{}; the unit is set to {}, which has {}. A pedal preset can't change unit here: it keeps its own layout. For {}'s paths, start a new preset (New preset) or open a preset made for it.",
+                        if have == 1 { "" } else { "s" },
+                        fam.name,
+                        fam.paths,
+                        fam.name
+                    ))
+                    .small()
+                    .color(orange()),
+                );
+            }
+        }
         let slots = preset.slots();
         let mut toggle = None;
         let mut menu_change: Option<usize> = None;
