@@ -1,5 +1,5 @@
 //! The two ways bytes reach the pedal: its USB bulk endpoints directly, or a
-//! Helrig Box on the network that carries those same transfers over a WebSocket.
+//! ToneStrand Box on the network that carries those same transfers over a WebSocket.
 
 use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
@@ -14,7 +14,7 @@ pub trait Wire: Send {
         Ok(())
     }
     fn describe(&self) -> String;
-    /// A link that needs gentler pacing of large transfers (the Helrig Box relays USB over Wi-Fi).
+    /// A link that needs gentler pacing of large transfers (the ToneStrand Box relays USB over Wi-Fi).
     fn slow(&self) -> bool {
         false
     }
@@ -141,7 +141,7 @@ impl Wire for UsbWire {
     }
 }
 
-// --------------------------------------------------------------- Helrig Box ---
+// --------------------------------------------------------------- ToneStrand Box ---
 
 pub struct BoxWire {
     name: String,

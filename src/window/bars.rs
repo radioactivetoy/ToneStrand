@@ -4,7 +4,7 @@ use super::*;
 
 impl App {
     /// Have something picked so Connect is one click away: a pedal on USB first, else the
-    /// first paired Helrig Box, else the first box found. A pick the person made stays.
+    /// first paired ToneStrand Box, else the first box found. A pick the person made stays.
     pub(super) fn auto_pick(&mut self) {
         if self.link.is_some() {
             return;
@@ -199,7 +199,7 @@ impl App {
                             self.send(Cmd::ListIrs);
                         }
                     }
-                    // The pedal: one click opens the connection options (USB, Helrig Boxes, pairing).
+                    // The pedal: one click opens the connection options (USB, ToneStrand Boxes, pairing).
                     ui.add_space(8.0);
                     let (dot, text) = match (&self.connected, self.connecting) {
                         (Some(n), _) => (good(), n.clone()),
@@ -214,7 +214,7 @@ impl App {
                         ui.set_min_width(340.0);
                         self.devices_card(ui, ctx);
                     });
-                    r.response.on_hover_text("Connect to the pedal (USB or Helrig Box)");
+                    r.response.on_hover_text("Connect to the pedal (USB or ToneStrand Box)");
                     // The pill only when there is room left for it and the controls on the right.
                     if let (Some((_, idx, name)), true) = (&self.current, ui.available_width() > 620.0) {
                         ui.add_space(8.0);

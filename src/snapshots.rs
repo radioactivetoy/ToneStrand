@@ -54,7 +54,7 @@ pub const UNITS: [(i64, &str); 6] = [
 /// The device number for a pedal's USB product name ("HX Stomp", "HELIX LT"...).
 pub fn unit_for_product(product: &str) -> Option<i64> {
     // "HX Stomp (USB)" or "Helix LT via Stage box": only the pedal's own name counts, not the
-    // connection note or the name given to a Helrig Box.
+    // connection note or the name given to a ToneStrand Box.
     let lower = product.to_ascii_lowercase();
     let name = lower.split(" via ").next().unwrap_or(&lower);
     let words: Vec<&str> = name.split(|c: char| !c.is_ascii_alphanumeric()).filter(|w| !w.is_empty()).collect();

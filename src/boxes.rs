@@ -1,4 +1,4 @@
-//! Helrig Boxes: finding them on the network, pairing, and remembering tokens.
+//! ToneStrand Boxes: finding them on the network, pairing, and remembering tokens.
 
 use std::collections::BTreeMap;
 use std::sync::mpsc::Sender;
@@ -7,7 +7,8 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 /// mDNS service types a box announces.
-pub const SERVICES: [&str; 2] = ["_helrigbox._tcp.local.", "_tonerelay._tcp.local."];
+/// (`_helrigbox` and `_tonerelay` are the Helrig Box and plain ToneRelay builds of the same firmware.)
+pub const SERVICES: [&str; 3] = ["_tonestrandbox._tcp.local.", "_helrigbox._tcp.local.", "_tonerelay._tcp.local."];
 /// How long the box keeps a pairing window open.
 pub const PAIR_WINDOW_SECS: u64 = 30;
 
@@ -51,7 +52,7 @@ pub struct Settings {
     pub hide_getting_started: bool,
     /// Start on the library page instead of the editor.
     pub start_in_library: bool,
-    /// Look for Helrig Boxes on the network automatically.
+    /// Look for ToneStrand Boxes on the network automatically.
     pub discover_boxes: bool,
     /// Size of everything in the window (1.0 = normal).
     pub ui_scale: f32,
@@ -205,7 +206,7 @@ pub fn start_discovery(tx: Sender<BoxInfo>) -> Option<mdns_sd::ServiceDaemon> {
             while let Ok(event) = rx.recv() {
                 if let mdns_sd::ServiceEvent::ServiceResolved(info) = event {
                     let id = info.get_property_val_str("id").unwrap_or("").to_owned();
-                    let instance = info.get_fullname().split("._").next().unwrap_or("Helrig Box").to_owned();
+                    let instance = info.get_fullname().split("._").next().unwrap_or("ToneStrand Box").to_owned();
                     let addr = info
                         .get_addresses()
                         .iter()
@@ -325,13 +326,15 @@ pub fn pair_poll(host: &str, nonce: &str) -> Result<PairPoll, String> {
 /// the network search misses it (some VPN adapters swallow those questions).
 pub fn lookup_local_names(tx: Sender<BoxInfo>) {
     std::thread::spawn(move || {
-        for name in ["helrigbox.local", "tonerelay.local"] {
+        for (name, product) in
+            [("tonestrandbox.local", "ToneStrand Box"), ("helrigbox.local", "Helrig Box"), ("tonerelay.local", "ToneRelay box")]
+        {
             use std::net::ToSocketAddrs;
             let Ok(addrs) = (name, 80).to_socket_addrs() else { continue };
             for a in addrs.filter(|a| a.is_ipv4()) {
                 let host = a.ip().to_string();
                 if let Ok(st) = relay_status(&host) {
-                    let label = if st.id.is_empty() { "Helrig Box".to_owned() } else { format!("Helrig Box {}", st.id) };
+                    let label = if st.id.is_empty() { product.to_owned() } else { format!("{product} {}", st.id) };
                     let _ = tx.send(BoxInfo { name: label, host, id: st.id });
                 }
             }

@@ -221,7 +221,7 @@ pub struct App {
     restore: Option<backups::RestoreState>,
     restore_all: Option<restore_all::RestoreAllState>,
     compare: Option<compare_window::CompareState>,
-    /// What the current (or last) link was made to: a USB pedal or a Helrig Box.
+    /// What the current (or last) link was made to: a USB pedal or a ToneStrand Box.
     last_target: Option<Target>,
     /// A link that dropped and is being made again: tries so far and when the next one is due.
     reconnect: Option<connection::Reconnect>,
@@ -405,7 +405,7 @@ impl App {
                 }
             }
         }
-        app.note(LogLevel::Info, "Ready. Plug in a pedal or pick a Helrig Box to start.");
+        app.note(LogLevel::Info, "Ready. Plug in a pedal or pick a ToneStrand Box to start.");
         if let Some(n) = settings_note {
             app.note(LogLevel::Bad, n);
         }
@@ -1225,7 +1225,7 @@ impl App {
                     step(
                         ui,
                         "2",
-                        "Plug the pedal into a USB port, or switch on a Helrig Box and pair it (Pair, then press BOOT on the box).",
+                        "Plug the pedal into a USB port, or switch on a ToneStrand Box and pair it (Pair, then press BOOT on the box).",
                         seen,
                     );
                     step(ui, "3", "Click the pedal button at the top (\"not connected\"), then Connect.", None);

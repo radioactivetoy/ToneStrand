@@ -1,7 +1,7 @@
 # ToneStrand
 
 A desktop preset editor for Line 6 Helix-family pedals (HX Stomp, HX Stomp XL, HX Effects,
-Helix Floor / LT / Rack), connected over **USB** or wirelessly through a **Helrig Box**.
+Helix Floor / LT / Rack), connected over **USB** or wirelessly through a **ToneStrand Box**.
 
 Written in Rust with [egui](https://github.com/emilk/egui) / eframe. One self-contained
 program; no account, no cloud, nothing leaves your computer.
@@ -14,7 +14,7 @@ program; no account, no cloud, nothing leaves your computer.
 
 ![The ToneStrand editor connected to an HX Stomp: the pedal's presets on the left, the loaded preset's signal chain on top, the selected amp's knobs below](docs/images/editor.png)
 
-*Editing the preset loaded on an HX Stomp, connected through a Helrig Box: the pedal's preset
+*Editing the preset loaded on an HX Stomp, connected through a ToneStrand Box: the pedal's preset
 list on the left, the signal chain on top, the selected effect's knobs below, snapshots and
 the DSP meter above the chain. Every change is heard at once.*
 
@@ -81,7 +81,7 @@ The effect pictures and names come from Line 6; see "Third-party material" below
   ranges from HX Edit's resource files at start-up (`Helix.sym`, `*.models`,
   `HelixControls.json`, ...). Nothing from HX Edit is copied into this repository. If HX Edit
   is in an unusual place, set its folder in Settings.
-- A Helix-family pedal on USB, or a paired Helrig Box with the pedal plugged into it.
+- A Helix-family pedal on USB, or a paired ToneStrand Box with the pedal plugged into it.
 - To build: Rust (stable). See [docs/BUILDING.md](docs/BUILDING.md).
 
 ## Download
@@ -108,7 +108,7 @@ The release binary is `target/release/tonestrand(.exe)`.
 ## Your settings file
 
 ToneStrand keeps its settings in `%APPDATA%\ToneStrand\settings.json` (on macOS and Linux, in
-the system's config folder). When you pair a Helrig Box, the secret **pairing token** the box
+the system's config folder). When you pair a ToneStrand Box, the secret **pairing token** the box
 gives this computer is stored in that file as plain text. Anyone who has a copy can control
 that box from the same network, for example to send presets to the pedal.
 
@@ -133,7 +133,7 @@ pairings as the box's own documentation describes, then pair again.
 **Beta.** Built and checked on an HX Stomp; the other units are supported from their documented layouts
 and have not been tried on real hardware, so back up before writing to them.
 
-Used daily on an HX Stomp, over USB and through a Helrig Box (live editing, IR upload and
+Used daily on an HX Stomp, over USB and through a ToneStrand Box (live editing, IR upload and
 preset writes have been exercised with the self-test). Things not yet tried on real hardware
 are listed in [AGENTS.md](AGENTS.md#known-gaps-and-unverified-areas).
 

@@ -72,7 +72,7 @@ fn read_preset(f: &str) -> Option<devpreset::DevicePreset> {
     need(devpreset::DevicePreset::parse(&b), f)
 }
 
-/// A session to the first USB pedal, or to a paired Helrig Box at `host`.
+/// A session to the first USB pedal, or to a paired ToneStrand Box at `host`.
 fn open_session(host: Option<&str>) -> Option<session::Session> {
     let w: Box<dyn wire::Wire> = if let Some(host) = host {
         let settings = boxes::Settings::load();
@@ -91,7 +91,7 @@ fn open_session(host: Option<&str>) -> Option<session::Session> {
     } else {
         let pedals = wire::list_usb_pedals();
         let Some(p) = pedals.first() else {
-            eprintln!("no USB pedal found (name a Helrig Box address as the last argument to use one)");
+            eprintln!("no USB pedal found (name a ToneStrand Box address as the last argument to use one)");
             return None;
         };
         Box::new(need(wire::UsbWire::open(p.pid), "the pedal")?)
@@ -413,7 +413,7 @@ Read and convert (nothing is written to a pedal):
   --hlx-check <template.hxpreset> [file.hlx]  try the .hlx -> pedal conversion offline
   --fmt-check                       how a dual cab's knobs read at their edges
   --list-models                     every effect in the picker, with real-gear names
-  --find-boxes                      look for Helrig Boxes for 6 seconds
+  --find-boxes                      look for ToneStrand Boxes for 6 seconds
   --screenshot <file.png>           open the window, save a picture of it and quit
 
 Lab tools (WRITE to the pedal; use a spare preset and keep a backup):
@@ -748,7 +748,7 @@ pub fn run(args: &[String]) -> bool {
         return true;
     }
     if args.iter().any(|a| a == "--find-boxes") {
-        // Look for Helrig Boxes for 6 seconds and print what answers.
+        // Look for ToneStrand Boxes for 6 seconds and print what answers.
         let (tx, rx) = std::sync::mpsc::channel();
         let _d = boxes::start_discovery(tx);
         let until = std::time::Instant::now() + std::time::Duration::from_secs(6);

@@ -1,4 +1,4 @@
-//! A logging pass-through between another editor and a Helrig Box, to see what that editor sends the
+//! A logging pass-through between another editor and a ToneStrand Box, to see what that editor sends the
 //! pedal (for example a Command Center change). Run on this computer as
 //! `tonestrand --box-proxy <listen address:port> <box address> [folder for documents]`, then point the
 //! other editor at this computer's address instead of the box's. Everything is forwarded byte for

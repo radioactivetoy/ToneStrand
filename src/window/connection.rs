@@ -1,4 +1,4 @@
-//! Pedal and Helrig Box connections: polling the device thread, events, pairing, and the sidebar cards that pick a pedal.
+//! Pedal and ToneStrand Box connections: polling the device thread, events, pairing, and the sidebar cards that pick a pedal.
 
 use super::*;
 
@@ -80,11 +80,11 @@ impl App {
     }
 
     /// After a USB pedal dropped out: once it has left the USB list and shows up again (it
-    /// was unplugged and plugged back in), connect to it once more. Never for a Helrig Box,
+    /// was unplugged and plugged back in), connect to it once more. Never for a ToneStrand Box,
     /// and never after the person pressed Disconnect.
     /// Make a dropped link again: a few tries, further and further apart. A USB pedal that has
     /// left the USB list is waited for (that costs no tries); a link that dropped while the
-    /// pedal is still there, and a Helrig Box, are tried again after a short pause.
+    /// pedal is still there, and a ToneStrand Box, are tried again after a short pause.
     fn maybe_reconnect(&mut self, ctx: &egui::Context) {
         if !self.settings.auto_reconnect || self.user_disconnected {
             self.reconnect = None;
@@ -407,7 +407,7 @@ impl App {
                 }
             }
             ui.add_space(4.0);
-            ui.label(RichText::new("Helrig Box (Wi-Fi)").small().color(muted()));
+            ui.label(RichText::new("ToneStrand Box (Wi-Fi)").small().color(muted()));
             if self.boxes.is_empty() {
                 ui.label(RichText::new("Looking for boxes on your network...").color(muted()).italics());
             }
@@ -872,7 +872,7 @@ impl App {
         }
         if !any {
             ui.label(
-                RichText::new("No pedal found yet. Plug it in by USB, or switch on a Helrig Box with its relay mode on.")
+                RichText::new("No pedal found yet. Plug it in by USB, or switch on a ToneStrand Box with its relay mode on.")
                     .small()
                     .color(muted()),
             );

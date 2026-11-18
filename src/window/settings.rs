@@ -197,7 +197,7 @@ impl App {
                     // ---- Boxes.
                     settings_anchor(ui, "Boxes");
                     theme::card(ui, |ui| {
-                        theme::section_help(ui, "Helrig Boxes", "Boxes this computer is paired with. Forgetting one means pairing it again before you can connect.");
+                        theme::section_help(ui, "ToneStrand Boxes", "Boxes this computer is paired with. Forgetting one means pairing it again before you can connect.");
                         changed |= ui
                             .checkbox(&mut self.settings.discover_boxes, "Look for boxes on the network")
                             .on_hover_text("Takes effect the next time the app starts")
@@ -246,7 +246,7 @@ impl App {
                         changed |= ui.checkbox(&mut self.settings.start_in_library, "Start on the library page").changed();
                         ui.horizontal(|ui| {
                             changed |= ui.checkbox(&mut self.settings.auto_reconnect, "Connect again when the link drops").changed();
-                            theme::help(ui, "After the link drops (the pedal unplugged, it stopped answering, or the Helrig Box went away), ToneStrand tries again a few times, a little later each time; a USB pedal that has left the list is waited for. It does not do this after you press Disconnect.");
+                            theme::help(ui, "After the link drops (the pedal unplugged, it stopped answering, or the ToneStrand Box went away), ToneStrand tries again a few times, a little later each time; a USB pedal that has left the list is waited for. It does not do this after you press Disconnect.");
                         });
                         ui.horizontal(|ui| {
                             changed |= ui.checkbox(&mut self.settings.reopen_tabs, "Reopen last session's presets at start").changed();
@@ -327,7 +327,7 @@ impl App {
                                 ui.add(egui::Image::new(&t).fit_to_exact_size(Vec2::new(300.0, 121.0)));
                             }
                             ui.label(RichText::new(format!("ToneStrand {}", env!("CARGO_PKG_VERSION"))).color(muted()));
-                            ui.label(RichText::new("Preset editor for Helix-family pedals, over USB or a Helrig Box").small().color(muted()));
+                            ui.label(RichText::new("Preset editor for Helix-family pedals, over USB or a ToneStrand Box").small().color(muted()));
                         });
                     });
                 });

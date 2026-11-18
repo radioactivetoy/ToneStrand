@@ -665,7 +665,7 @@ impl Session {
     }
 
     // ------------------------------------------------ Command Center, live ---
-    // The requests another editor sends (captured through a Helrig Box on an HX Stomp): each changes one thing
+    // The requests another editor sends (captured through a ToneStrand Box on an HX Stomp): each changes one thing
     // on the loaded preset and the pedal fills in the rest (a new type's defaults, its footswitch name).
 
     /// Give a Command Center slot a command type (op 67, then 48 to read it back, then, for a footswitch,
