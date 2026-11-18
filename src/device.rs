@@ -358,12 +358,16 @@ fn read_live(s: &mut Session, send: &dyn Fn(Event)) -> Result<i64, String> {
 }
 
 /// Write a changed Command Center to the pedal's edit buffer. The window already shows the change, so it is
-/// only handed the pedal's document back when the pedal kept something different (a refresh after every edit
-/// raced with the next one and put an older state back on screen).
-fn write_command_center(s: &mut Session, send: &dyn Fn(Event), doc: &crate::devpreset::DevicePreset) -> Result<(), String> {
+/// only handed the pedal's document back when the slot that was edited came back different (a refresh after every
+/// edit raced with the next one and put an older state back on screen; the pedal keeps other slots' snapshot copies
+/// in its own way, so those are not compared).
+fn write_command_center(s: &mut Session, send: &dyn Fn(Event), doc: &crate::devpreset::DevicePreset, slot: usize) -> Result<(), String> {
     s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
     let blob = s.read_current().map_err(|e| e.to_string())?;
-    let same = crate::devpreset::DevicePreset::parse(&blob).is_ok_and(|back| back.command_state() == doc.command_state());
+    let key = |d: &crate::devpreset::DevicePreset| {
+        (d.command(slot).map(|(id, a)| (id, a.into_iter().take(5).collect::<Vec<i64>>())), d.command_momentary(slot))
+    };
+    let same = crate::devpreset::DevicePreset::parse(&blob).is_ok_and(|back| key(&back) == key(doc));
     if !same {
         read_live(s, send)?;
     }
@@ -446,7 +450,7 @@ pub(crate) fn change_command_center(s: &mut Session, send: &dyn Fn(Event), chang
         Some(Err(e)) if std::env::var_os("TONESTRAND_DEBUG_CC").is_some() => eprintln!("live request failed: {e}"),
         _ => {}
     }
-    write_command_center(s, send, &expected)?;
+    write_command_center(s, send, &expected, slot)?;
     Ok(false)
 }
 

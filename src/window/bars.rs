@@ -460,7 +460,7 @@ impl App {
     /// when asked, the open preset. Saved in the Downloads folder (or the library); nothing is sent anywhere.
     pub(super) fn save_report(&mut self, with_preset: bool) {
         let base = dirs::download_dir().unwrap_or_else(|| self.library_dir.clone());
-        let dir = base.join(format!("ToneStrand report {}", crate::support::stamp(std::time::SystemTime::now())));
+        let dir = crate::files::unique_path(&base, &format!("ToneStrand report {}", crate::support::stamp(std::time::SystemTime::now())));
         let mut text = format!(
             "ToneStrand {}\nComputer: {} {}\nUnit set up for: {}\nPedal: {}\n\n{}\n",
             env!("CARGO_PKG_VERSION"),

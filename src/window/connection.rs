@@ -194,7 +194,7 @@ impl App {
             Event::Busy(m) => self.busy = Some(m),
             Event::Info(m) => self.note(LogLevel::Info, m),
             Event::Error(m) => {
-                self.refresh_due = self.refresh_due.saturating_sub(1);
+                self.refresh.failed();
                 self.busy = None;
                 self.note(LogLevel::Bad, m);
             }
@@ -238,15 +238,8 @@ impl App {
             Event::Document { setlist, index, live, purpose, blob } => {
                 // Edits sent in a row each bring a copy of the loaded preset back; only the last one is current.
                 // An older copy would put the state from before the newest edit back on screen.
-                if live && purpose == Purpose::Edit && self.refresh_due > 0 {
-                    if self.refresh_due_at.is_some_and(|t| t.elapsed() > std::time::Duration::from_secs(8)) {
-                        self.refresh_due = 0;
-                    } else {
-                        self.refresh_due -= 1;
-                        if self.refresh_due > 0 {
-                            return;
-                        }
-                    }
+                if live && purpose == Purpose::Edit && !self.refresh.arrived(std::time::Instant::now()) {
+                    return;
                 }
                 self.busy = None;
                 let slot = index.max(0) as usize;
@@ -340,7 +333,7 @@ impl App {
 
     fn start_link(&mut self, target: Target, ctx: &egui::Context) {
         self.last_target = Some(target.clone());
-        self.refresh_due = 0;
+        self.refresh.reset();
         let c = ctx.clone();
         self.link = Some(device::connect(target, move || c.request_repaint()));
         self.connecting = true;

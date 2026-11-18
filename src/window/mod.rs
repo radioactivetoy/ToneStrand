@@ -26,6 +26,7 @@ mod compare_window;
 mod connection;
 mod irs;
 mod library_page;
+mod refresh;
 mod restore_all;
 mod settings;
 mod tests_page;
@@ -189,8 +190,7 @@ pub struct App {
     last_live_send: Option<Instant>,
     /// Live copies of the preset still due from the pedal (one per edit sent that gets one back), and when the
     /// last such edit was sent; only the newest copy is shown.
-    refresh_due: u32,
-    refresh_due_at: Option<Instant>,
+    refresh: refresh::RefreshGuard,
     close_ask: Option<CloseAsk>,
     /// The person chose to quit even with unsaved changes.
     quit_ok: bool,
@@ -307,8 +307,7 @@ impl App {
             unit_notice: None,
             slot_drop: None,
             last_live_send: None,
-            refresh_due: 0,
-            refresh_due_at: None,
+            refresh: refresh::RefreshGuard::default(),
             close_ask: None,
             quit_ok: false,
             last_error: None,
@@ -439,8 +438,7 @@ impl App {
                 self.last_live_send = Some(Instant::now());
             }
             if cmd.refreshes_live() {
-                self.refresh_due += 1;
-                self.refresh_due_at = Some(Instant::now());
+                self.refresh.sent(Instant::now());
             }
             let _ = l.tx.send(cmd);
         } else {
