@@ -18,6 +18,7 @@
 - **Command Center changes on the loaded preset use the pedal's own requests** (op 67/48/33 for a type, 68 for a
   value, 58 for Momentary) instead of rewriting the whole preset, then check what the pedal holds and fall back to
   the whole write if it differs or the edit is for a snapshot the pedal has not selected (which would recall it).
+  Checked on an HX Stomp.
   Lab tool: `--cc-live`.
 - `--help` separates the read-only tools from the lab tools that write to the pedal; CI also builds on macOS and
   Linux (informational).

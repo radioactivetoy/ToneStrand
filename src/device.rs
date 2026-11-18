@@ -416,11 +416,35 @@ pub(crate) fn change_command_center(s: &mut Session, send: &dyn Fn(Event), chang
         }
         _ => None,
     };
-    if matches!(live, Some(Ok(()))) {
-        let after = s.read_current().map_err(|e| e.to_string())?;
-        if DevicePreset::parse(&after).is_ok_and(|d| d.command_state() == expected.command_state()) {
-            return Ok(true);
+    let slot = match &change {
+        CcChange::Type { slot, .. } | CcChange::Values { slot, .. } | CcChange::Momentary { slot, .. } => *slot,
+    };
+    match &live {
+        Some(Ok(())) => {
+            // What the edit changed on the pedal: the slot's command and values (the pedal keeps the live values in
+            // the command itself and writes a snapshot's own copy later) and its Momentary flag. The other slots and
+            // the snapshots' stored copies are the pedal's to keep as it keeps them.
+            let after = DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?).ok();
+            // (A CC Toggle's sixth value is its running state, which the pedal sets as it likes: left out.)
+            let key = |d: &DevicePreset| {
+                (d.command(slot).map(|(id, a)| (id, a.into_iter().take(5).collect::<Vec<i64>>())), d.command_momentary(slot))
+            };
+            let same = |d: &DevicePreset| key(d) == key(&expected);
+            if after.as_ref().is_some_and(same) {
+                return Ok(true);
+            }
+            if std::env::var_os("TONESTRAND_DEBUG_CC").is_some() {
+                eprintln!(
+                    "live check: slot {slot}: pedal has {:?} / momentary {:?}; expected {:?} / momentary {:?}",
+                    after.as_ref().and_then(|d| d.command(slot)),
+                    after.as_ref().and_then(|d| d.command_momentary(slot)),
+                    expected.command(slot),
+                    expected.command_momentary(slot)
+                );
+            }
         }
+        Some(Err(e)) if std::env::var_os("TONESTRAND_DEBUG_CC").is_some() => eprintln!("live request failed: {e}"),
+        _ => {}
     }
     write_command_center(s, send, &expected)?;
     Ok(false)

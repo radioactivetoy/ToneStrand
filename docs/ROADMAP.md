@@ -31,7 +31,7 @@ keeps the older single column. Move the knob code into the same `body_section` h
 Risk: that code also normalises values and handles controller menus, so do it as its own change with the
 `hlx_add_move_remove` and compare tests running.
 
-## 3. Live Command Center edits with the pedal's own requests — built, needs one check on the Stomp
+## 3. Live Command Center edits with the pedal's own requests — done, checked on the Stomp
 
 Ops 67, 68 and 88 are captured (`docs/PROTOCOL.md`). Today every change rewrites the whole edit buffer (op 21).
 The live requests change one value, avoid overwriting a knob turned on the pedal at the same moment, and are quicker.
@@ -83,9 +83,10 @@ On the first connection, say which unit was found, which parts of the app are ch
 
 ## Status of item 3 (live Command Center requests)
 
-`device::change_command_center` sends the pedal's own requests, reads the preset back and compares the Command
-Center with what the edit should have made; any difference, or a change for a snapshot the pedal has not selected,
-falls back to writing the edit buffer. Not yet run on a pedal. Check with the Box free (close the app, or
-disconnect it): `--cc-live <box> type 6 18 5 55 66 20`, `--cc-live <box> value 1 6 5 56 66 20`,
-`--cc-live <box> momentary 6 1`, then `--commands` and `--dump-loaded`. The tool says whether the pedal's own
-requests were enough or the edit buffer had to be written.
+Checked on an HX Stomp (slot 42B, edit buffer only). `device::change_command_center` sends the pedal's own
+requests and reads the preset back; the slot's command, its values and its Momentary flag must be what the edit should
+have made, else the edit buffer is written. Findings from the check: the pedal keeps the live values in the command
+itself and writes a snapshot's own copy later; it makes a snapshot's records only for slots it touched; a CC Toggle's
+sixth value is a running state the pedal sets as it likes; a Momentary request on a Note On changes its note-off
+value. An edit for a snapshot the pedal has not selected is always written to the edit buffer (the pedal's own
+request would recall that snapshot). Lab tool: `--cc-live` (with `TONESTRAND_DEBUG_CC=1` it says why it fell back).
