@@ -510,6 +510,16 @@ impl DevicePreset {
         self.tone.at(&[key::COMMANDS, 0]).and_then(Value::as_array).map_or(0, |a| a.len())
     }
 
+    /// How many Command Center footswitches the document has (slots 6 on): the slot count less the six instants
+    /// and the two pedals; a Helix has 12, with an EXP toe switch, three pedals and the Variax two after them.
+    pub fn command_fs_count(&self) -> usize {
+        match self.command_count() {
+            0 => 0,
+            24 => 12,
+            n => n.saturating_sub(8),
+        }
+    }
+
     /// The command in a slot as (command id, its six arguments), or None when the slot is empty.
     /// The ids are the ones `.hlx` files use (14 HX Preset, 15 HX Snapshot, 18 MIDI CC ...).
     pub fn command(&self, slot: usize) -> Option<(i64, Vec<i64>)> {
@@ -645,7 +655,7 @@ impl DevicePreset {
     /// whose kind (field 11, entry 0) is 3. A switch can also carry block on/off records. With `create`, a
     /// missing record is made with that name.
     fn fs_record_mut(&mut self, slot: usize, create: Option<&str>) -> Option<&mut Value> {
-        let i = slot.checked_sub(6).filter(|i| *i < 5)?;
+        let i = slot.checked_sub(6).filter(|i| *i < self.command_fs_count())?;
         let Some(Value::Array(table, _)) = self.tone.at_mut(&[3, 8]) else { return None };
         let sw = table.get_mut(i)?;
         let is_cc = |r: &Value| r.get(11).and_then(|k| k.get(0)).and_then(Value::as_i64) == Some(3);
@@ -681,7 +691,7 @@ impl DevicePreset {
 
     /// Take a footswitch's Command Center record away (its command was removed).
     fn remove_cc_record(&mut self, slot: usize) {
-        let Some(i) = slot.checked_sub(6).filter(|i| *i < 5) else { return };
+        let Some(i) = slot.checked_sub(6).filter(|i| *i < self.command_fs_count()) else { return };
         let Some(Value::Array(table, _)) = self.tone.at_mut(&[3, 8]) else { return };
         let Some(sw) = table.get_mut(i) else { return };
         if let Value::Array(recs, _) = sw {
@@ -695,7 +705,7 @@ impl DevicePreset {
     /// Whether a Command Center footswitch is momentary (the footswitch table's flag; the other editor's
     /// "Momentary" switch, off = latching). None for a slot that isn't a footswitch or has no record.
     pub fn command_momentary(&self, slot: usize) -> Option<bool> {
-        let i = slot.checked_sub(6).filter(|i| *i < 5)?;
+        let i = slot.checked_sub(6).filter(|i| *i < self.command_fs_count())?;
         let sw = self.tone.at(&[3, 8])?.as_array()?.get(i)?.as_array()?;
         let rec = sw.iter().find(|r| r.get(11).and_then(|k| k.get(0)).and_then(Value::as_i64) == Some(3))?;
         match rec.get(12)? {
@@ -1347,23 +1357,30 @@ impl DevicePreset {
     /// this document: every slot is cleared first, then the file's commands are set in the pedal's argument
     /// order, with the wait held to the pedal's 20, the Momentary flags and the snapshots' own values.
     fn apply_hlx_commands(&mut self, doc: &serde_json::Value, notes: &mut Vec<String>) {
-        use crate::controllers::{hlx_arg_keys, stomp_device_slots, stomp_slot_of_hlx_key};
+        use crate::controllers::{hlx_arg_keys, unit_slot_of_hlx_key, unit_slots};
         let Some(tone) = doc.pointer("/data/tone").and_then(serde_json::Value::as_object) else { return };
         let in_file = tone.keys().any(|k| k.starts_with("command"));
-        if self.command_count() != 13 {
+        let slots = unit_slots();
+        if self.command_count() != slots.len() {
             if in_file {
-                notes.push("This pedal's Command Center isn't carried over from a .hlx yet (only the HX Stomp's is).".into());
+                notes.push(format!(
+                    "This pedal's Command Center has {} slots, not the {} expected for its unit; it isn't carried over from the .hlx.",
+                    self.command_count(),
+                    slots.len()
+                ));
             }
             return;
         }
-        let slots = stomp_device_slots();
+        if in_file && !crate::controllers::layout_verified(crate::snapshots::family_of_device(crate::nam::unit())) {
+            notes.push("This unit's Command Center layout comes from the documentation and hasn't been checked on a pedal.".into());
+        }
         for slot in 0..slots.len() {
             self.set_command(slot, 0, &[]);
         }
         let number = |v: Option<&serde_json::Value>| v.and_then(serde_json::Value::as_i64);
         let clamp = |key: &str, v: i64| if key == "@waittime" { v.clamp(0, 20) } else { v };
         for (k, cmd) in tone.iter().filter(|(k, _)| k.starts_with("command")) {
-            let Some(slot) = stomp_slot_of_hlx_key(k) else {
+            let Some(slot) = unit_slot_of_hlx_key(k) else {
                 notes.push(format!("{k} has no place on this pedal; left out."));
                 continue;
             };
@@ -1399,7 +1416,7 @@ impl DevicePreset {
                 continue;
             };
             for (k, cmd) in own {
-                let Some(slot) = stomp_slot_of_hlx_key(k) else { continue };
+                let Some(slot) = unit_slot_of_hlx_key(k) else { continue };
                 let Some((id, base)) = self.command(slot) else { continue };
                 if id == 14 {
                     continue;

@@ -122,7 +122,7 @@ fn commands_tool(rest: &[String]) {
         return;
     };
     let Some(p) = load_source(src, rest.get(1).map(String::as_str)) else { return };
-    for l in crate::cmdtool::describe(&p, &crate::cmdtool::stomp_slots()) {
+    for l in crate::cmdtool::describe(&p, &crate::cmdtool::unit_slots()) {
         println!("{l}");
     }
 }
@@ -136,7 +136,7 @@ fn cc_compare_tool(rest: &[String]) {
     let Some(text) = need(std::fs::read_to_string(hlx_path), hlx_path) else { return };
     let Some(json) = need(hlx::parse_text(&text), hlx_path) else { return };
     let Some(p) = load_source(src, rest.get(2).map(String::as_str)) else { return };
-    let slots = crate::cmdtool::stomp_slots();
+    let slots = crate::cmdtool::unit_slots();
     let dev = crate::cmdtool::device_commands(&p);
     let hlx_cmds = crate::cmdtool::hlx_commands(&json);
     println!("pedal: {} command(s) set in {} slots; .hlx: {} command(s)", dev.len(), p.command_count(), hlx_cmds.len());
@@ -177,7 +177,7 @@ fn cc_raw_tool(rest: &[String]) {
     }
     let Some(back) = need(s.read_current(), "reading it back").and_then(|b| need(devpreset::DevicePreset::parse(&b), "it")) else { return };
     println!("written to the pedal's edit buffer (not saved). The loaded preset now has:");
-    for l in crate::cmdtool::describe(&back, &crate::cmdtool::stomp_slots()) {
+    for l in crate::cmdtool::describe(&back, &crate::cmdtool::unit_slots()) {
         println!("{l}");
     }
 }
@@ -204,7 +204,7 @@ fn cc_snap_tool(rest: &[String]) {
     }
     let Some(back) = need(s.read_current(), "reading it back").and_then(|b| need(devpreset::DevicePreset::parse(&b), "it")) else { return };
     println!("written to the pedal's edit buffer (not saved). The loaded preset now has:");
-    for l in crate::cmdtool::describe(&back, &crate::cmdtool::stomp_slots()) {
+    for l in crate::cmdtool::describe(&back, &crate::cmdtool::unit_slots()) {
         println!("{l}");
     }
 }

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### New
+- **Command Center layouts for the other units** (HX Stomp XL, HX Effects, Helix Floor / LT / Rack): the grid, the
+  editor and the `.hlx` conversion follow a per-unit slot table, arranged like the unit's panel. These layouts come
+  from the documentation and are marked "not checked on a pedal" in the editor and in the conversion notes until
+  someone runs them on a unit (see docs/ROADMAP.md for how).
+- docs/ROADMAP.md: what is left and in what order.
+
 ## 1.0.0-beta.3 - 2026-11-18
 
 ### New

@@ -992,7 +992,12 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
 
 /// The HX Stomp's Command Center slots in the order of the pedal document, as the pedal numbers them
 /// (confirmed from another editor's live traffic): Instant 1 to 6, FS 1 to 5, EXP 1 and EXP 2.
-pub fn stomp_device_slots() -> Vec<CmdSlot> {
+/// A unit's Command Center slots in the order of the pedal document. Confirmed on an HX Stomp from another
+/// editor's live traffic (Instant 1 to 6, FS 1 to 5, EXP 1 and 2, slots 0 to 12). The other units follow the same
+/// rule from the documentation (6 instants, then the footswitches, then the pedals) and are not checked on a unit:
+/// HX Stomp XL 16 slots (FS 1-8), HX Effects 14 (FS 1-6), Helix 24 (FS 1-12, an EXP toe switch, EXP 1-3, then
+/// the Variax volume and tone).
+pub fn device_slots(fam: snapshots::Family) -> Vec<CmdSlot> {
     let mut v: Vec<CmdSlot> = (1..=6)
         .map(|i| CmdSlot {
             key: format!("commandInst{i}"),
@@ -1001,19 +1006,49 @@ pub fn stomp_device_slots() -> Vec<CmdSlot> {
             kind: SlotKind::Instant,
         })
         .collect();
-    v.extend((1..=5).map(|n| CmdSlot {
+    let helix = fam.name.starts_with("Helix");
+    let switches = if helix { 12 } else { fam.cc_switches };
+    v.extend((1..=switches).map(|n| CmdSlot {
         key: format!("commandFS{n}"),
         short: format!("FS {n}"),
         title: format!("FS {n}"),
         kind: SlotKind::Switch,
     }));
-    v.extend((1..=2).map(|n| CmdSlot {
+    if helix {
+        v.push(CmdSlot { key: "commandExpSwitch".into(), short: "EXP Toe".into(), title: "EXP Toe".into(), kind: SlotKind::Switch });
+    }
+    let pedals = if helix { 3 } else { 2 };
+    v.extend((1..=pedals).map(|n| CmdSlot {
         key: format!("commandExpPedal{n}"),
         short: format!("EXP {n}"),
         title: format!("EXP {n}"),
         kind: SlotKind::Pedal,
     }));
+    if helix {
+        v.push(CmdSlot {
+            key: "commandVariaxVol".into(),
+            short: "Variax Vol".into(),
+            title: "Variax Volume".into(),
+            kind: SlotKind::Pedal,
+        });
+        v.push(CmdSlot {
+            key: "commandVariaxTone".into(),
+            short: "Variax Tone".into(),
+            title: "Variax Tone".into(),
+            kind: SlotKind::Pedal,
+        });
+    }
     v
+}
+
+/// The slots of the unit the app is set up for.
+pub fn unit_slots() -> Vec<CmdSlot> {
+    device_slots(snapshots::family_of_device(crate::nam::unit()))
+}
+
+/// Whether a unit's Command Center layout has been checked on a pedal (the HX Stomp only).
+pub fn layout_verified(fam: snapshots::Family) -> bool {
+    fam.cc_switches == 5 && !fam.name.starts_with("Helix")
 }
 
 /// Command types whose arguments have not been seen on a pedal: the switch versions of Bank/Program, MMC,
@@ -1053,8 +1088,8 @@ pub fn hlx_arg_keys(kind: SlotKind, id: i64) -> Vec<&'static str> {
 }
 
 /// The HX Stomp's slot number for a `.hlx` key such as `commandFS2`.
-pub fn stomp_slot_of_hlx_key(key: &str) -> Option<usize> {
-    stomp_device_slots().iter().position(|s| s.key == key)
+pub fn unit_slot_of_hlx_key(key: &str) -> Option<usize> {
+    unit_slots().iter().position(|s| s.key == key)
 }
 
 /// The Command Center of a pedal document: what each trigger does, and a place to change it. On the
@@ -1070,7 +1105,7 @@ pub fn device_command_center(
     let fam = snapshots::family_of_device(crate::nam::unit());
     let device = crate::nam::unit();
     let count = preset.command_count();
-    let slots = stomp_device_slots();
+    let slots = unit_slots();
     {
         ui.horizontal(|ui| {
             theme::help(
@@ -1082,9 +1117,19 @@ pub fn device_command_center(
             ui.label(RichText::new("This preset has no Command Center.").color(muted()));
             return;
         }
-        if count != slots.len() || fam.cc_switches != 5 {
+        if count != slots.len() {
             ui.label(RichText::new("The Command Center of this unit isn't read here yet.").color(muted()));
             return;
+        }
+        if !layout_verified(fam) {
+            ui.label(
+                RichText::new(
+                    "This unit's Command Center layout comes from the documentation and has not been checked on a pedal. Changes are written as for an HX Stomp; check them on the unit and tell us what differs.",
+                )
+                .small()
+                .color(orange()),
+            );
+            ui.add_space(4.0);
         }
         // The values shown and edited are the selected snapshot's: the preset's own snapshot selector decides.
         let names = preset.snapshot_names();
@@ -1104,14 +1149,21 @@ pub fn device_command_center(
         });
         ui.add_space(6.0);
 
-        // Trigger grid in the pedal's own arrangement: the top row carries the instant commands and the
-        // two upper switches, the bottom row the lower switches and the expression pedals.
-        let rows: [&[usize]; 2] = [&[0, 1, 2, 3, 4, 5, 9, 10], &[6, 7, 8, 11, 12]];
+        // Trigger grid arranged like the unit's panel (the same rows as a .hlx preset's Command Center tab);
+        // a slot the rows don't place goes on a last row.
+        let mut rows: Vec<Vec<usize>> = slots_for_family(fam)
+            .iter()
+            .map(|row| row.iter().filter_map(|s| slots.iter().position(|d| d.key == s.key)).collect::<Vec<usize>>())
+            .collect();
+        let left: Vec<usize> = (0..slots.len()).filter(|i| !rows.iter().flatten().any(|j| j == i)).collect();
+        if !left.is_empty() {
+            rows.push(left);
+        }
         let sel_id = egui::Id::new("dev-cc-selected");
         let mut sel: usize = ui.data(|d| d.get_temp(sel_id)).unwrap_or(0usize).min(slots.len() - 1);
-        for row in rows {
+        for row in &rows {
             ui.horizontal_wrapped(|ui| {
-                for &i in row {
+                for &i in row.iter() {
                     let slot = &slots[i];
                     let in_use = preset.command(i).is_some_and(|(id, _)| id != 0);
                     let is_sel = i == sel;
@@ -1315,7 +1367,7 @@ mod tests {
     /// The pedal's slot order, confirmed from live traffic: Instant 1-6, FS 1-5, EXP 1-2.
     #[test]
     fn the_stomps_slots_are_in_the_pedals_order() {
-        let s = stomp_device_slots();
+        let s = unit_slots();
         assert_eq!(s.len(), 13);
         assert_eq!(s[0].title, "Instant 1");
         assert_eq!(s[5].title, "Instant 6");
@@ -1326,6 +1378,31 @@ mod tests {
         assert!(s[11..].iter().all(|x| x.kind == SlotKind::Pedal));
     }
 
+    /// Every unit's slot list has the document's slot count, no repeated key, the instants first, and its grid
+    /// rows place each slot at most once.
+    #[test]
+    fn every_units_command_center_slots_match_its_document() {
+        for (device, count) in [(2162694, 13), (2162699, 16), (2162693, 14), (2162689, 24), (2162690, 24), (2162692, 24)] {
+            let fam = snapshots::family_of_device(device);
+            let slots = device_slots(fam);
+            assert_eq!(slots.len(), count, "{} ({device})", fam.name);
+            let mut keys: Vec<&str> = slots.iter().map(|s| s.key.as_str()).collect();
+            keys.sort_unstable();
+            keys.dedup();
+            assert_eq!(keys.len(), count, "{}: repeated slot key", fam.name);
+            assert!(slots[..6].iter().all(|s| s.kind == SlotKind::Instant));
+            let rows = slots_for_family(fam);
+            let placed: Vec<&str> = rows.iter().flatten().map(|s| s.key.as_str()).collect();
+            let mut unique = placed.clone();
+            unique.sort_unstable();
+            unique.dedup();
+            assert_eq!(placed.len(), unique.len(), "{}: a slot is on two rows", fam.name);
+            assert!(placed.iter().all(|k| slots.iter().any(|s| s.key == *k)), "{}: a row slot is not in the document", fam.name);
+        }
+        assert!(layout_verified(snapshots::family_of_device(2162694)));
+        assert!(!layout_verified(snapshots::family_of_device(2162699)));
+        assert!(!layout_verified(snapshots::family_of_device(2162689)));
+    }
     /// Argument counts of the types checked on a pedal: field i is argument i + 1, in the pedal's order.
     #[test]
     fn confirmed_command_types_have_the_pedals_argument_layout() {
@@ -1358,7 +1435,7 @@ mod tests {
     /// Whatever type a slot is given, the defaults fit its fields and every type offered is known.
     #[test]
     fn defaults_fit_every_offered_type() {
-        let slots = stomp_device_slots();
+        let slots = unit_slots();
         for slot in &slots {
             for spec in specs_for(slot.kind, 2162694, 3).iter().filter(|s| s.id != 7 && s.id != 8) {
                 assert!(device_defaults(spec.id).len() <= 6, "type {}", spec.id);
@@ -1375,7 +1452,7 @@ mod tests {
         use crate::devpreset::DevicePreset;
         let Ok(path) = std::env::var("HX_COMMANDS_FIXTURE") else { return };
         let mut d = DevicePreset::parse(&std::fs::read(path).unwrap()).unwrap();
-        for (i, slot) in stomp_device_slots().iter().enumerate() {
+        for (i, slot) in unit_slots().iter().enumerate() {
             for spec in specs_for(slot.kind, 2162694, 3).iter().filter(|s| s.id != 7 && s.id != 8) {
                 let args = device_defaults(spec.id);
                 assert!(d.set_command(i, spec.id, &args));
