@@ -664,6 +664,44 @@ impl Session {
         Ok(())
     }
 
+    // ------------------------------------------------ Command Center, live ---
+    // The requests another editor sends (captured through a Helrig Box on an HX Stomp): each changes one thing
+    // on the loaded preset and the pedal fills in the rest (a new type's defaults, its footswitch name).
+
+    /// Give a Command Center slot a command type (op 67, then 48 to read it back, then, for a footswitch,
+    /// 33 with its number from 1). Type 0 clears the slot.
+    pub fn set_command_type(&mut self, slot: usize, id: i64, footswitch: Option<usize>) -> Result<()> {
+        self.request(op::SET_COMMAND_TYPE, Value::map(vec![(24, Value::int(slot as i64)), (77, Value::int(id))]))?;
+        if id != 0 {
+            self.request(op::COMMAND_INFO, Value::map(vec![(24, Value::int(slot as i64))]))?;
+            if let Some(fs) = footswitch {
+                self.request(op::FOOTSWITCH_INDEX, Value::map(vec![(102, Value::int(fs as i64))]))?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Set one value of a slot's command in the pedal's current snapshot (op 68); `position` counts the
+    /// command's arguments from 1.
+    pub fn set_command_value(&mut self, slot: usize, id: i64, position: usize, value: i64) -> Result<()> {
+        self.request(
+            op::SET_COMMAND_VALUE,
+            Value::map(vec![
+                (24, Value::int(slot as i64)),
+                (77, Value::int(id)),
+                (28, Value::int(position as i64)),
+                (81, Value::int(value)),
+            ]),
+        )?;
+        Ok(())
+    }
+
+    /// Make a Command Center footswitch momentary or latching (op 58; `footswitch` counts from 0).
+    pub fn set_momentary(&mut self, footswitch: usize, momentary: bool) -> Result<()> {
+        self.request(op::SET_MOMENTARY, Value::map(vec![(102, Value::int(footswitch as i64)), (65, Value::Bool(momentary))]))?;
+        Ok(())
+    }
+
     // ------------------------------------------- controllers and footswitches ---
     // Live, on the loaded preset; requests
     // (assignControllerRequest, controllerCcRequest, controllerMin/Max, (un)assignFootswitchRequest).

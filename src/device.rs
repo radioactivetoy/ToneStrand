@@ -370,6 +370,62 @@ fn write_command_center(s: &mut Session, send: &dyn Fn(Event), doc: &crate::devp
     Ok(())
 }
 
+/// A Command Center edit to reach the pedal.
+pub(crate) enum CcChange {
+    /// A slot's new command type, with the values the window gave it.
+    Type { slot: usize, id: i64, args: Vec<i64> },
+    /// A command's values in one snapshot.
+    Values { snapshot: usize, slot: usize, args: Vec<i64> },
+    /// A footswitch's Momentary switch.
+    Momentary { slot: usize, momentary: bool },
+}
+
+/// Make a Command Center edit on the loaded preset. The pedal's own requests are tried first (they change one
+/// thing and leave a knob turned on the pedal alone); the pedal's document is then read back, and if it isn't
+/// what the edit should have made (a change for a snapshot the pedal hasn't selected, which would recall that
+/// snapshot, or anything the pedal did differently) the whole edit buffer is written instead.
+pub(crate) fn change_command_center(s: &mut Session, send: &dyn Fn(Event), change: CcChange) -> Result<bool, String> {
+    use crate::devpreset::DevicePreset;
+    let before = DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;
+    let mut expected = before.clone();
+    let made = match &change {
+        CcChange::Type { slot, id, args } => expected.set_command(*slot, *id, args),
+        CcChange::Values { snapshot, slot, args } => expected.set_command_values(*snapshot, *slot, args),
+        CcChange::Momentary { slot, momentary } => expected.set_command_momentary(*slot, *momentary),
+    };
+    if !made {
+        return Err("this preset has no such Command Center slot".into());
+    }
+    let switches = before.command_fs_count();
+    let is_switch = |slot: usize| slot >= 6 && slot < 6 + switches;
+    let live: Option<Result<(), String>> = match &change {
+        CcChange::Type { slot, id, .. } => {
+            Some(s.set_command_type(*slot, *id, is_switch(*slot).then_some(*slot - 5)).map_err(|e| e.to_string()))
+        }
+        CcChange::Values { snapshot, slot, args } if *snapshot == before.current_snapshot() => before.command(*slot).map(|(id, base)| {
+            let now = before.snapshot_command_args(*snapshot, *slot).filter(|_| id != 14).unwrap_or(base);
+            for (i, v) in args.iter().take(6).enumerate() {
+                if now.get(i) != Some(v) {
+                    s.set_command_value(*slot, id, i + 1, *v).map_err(|e| e.to_string())?;
+                }
+            }
+            Ok(())
+        }),
+        CcChange::Momentary { slot, momentary } if is_switch(*slot) => {
+            Some(s.set_momentary(*slot - 6, *momentary).map_err(|e| e.to_string()))
+        }
+        _ => None,
+    };
+    if matches!(live, Some(Ok(()))) {
+        let after = s.read_current().map_err(|e| e.to_string())?;
+        if DevicePreset::parse(&after).is_ok_and(|d| d.command_state() == expected.command_state()) {
+            return Ok(true);
+        }
+    }
+    write_command_center(s, send, &expected)?;
+    Ok(false)
+}
+
 fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
     if let Err(e) = refresh(s, send) {
         send(Event::Error(format!("Could not read the preset list: {e}")));
@@ -589,28 +645,15 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     send(Event::Done("Changed on the pedal (Save on pedal keeps it)".into()));
                 }
                 Cmd::SetCommandValues { snapshot, slot, args } => {
-                    let mut doc = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;
-                    if !doc.set_command_values(snapshot, slot, &args) {
-                        return Err("this preset has no such Command Center slot".into());
-                    }
-                    write_command_center(s, send, &doc)?;
+                    change_command_center(s, send, CcChange::Values { snapshot, slot, args }).map(|_| ())?;
                     send(Event::Done("Command Center changed on the pedal (Save on pedal keeps it)".into()));
                 }
                 Cmd::SetMomentary { slot, momentary } => {
-                    let mut doc = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;
-                    if !doc.set_command_momentary(slot, momentary) {
-                        return Err("this preset has no such footswitch".into());
-                    }
-                    write_command_center(s, send, &doc)?;
+                    change_command_center(s, send, CcChange::Momentary { slot, momentary }).map(|_| ())?;
                     send(Event::Done("Footswitch changed on the pedal (Save on pedal keeps it)".into()));
                 }
                 Cmd::SetCommand { slot, id, args } => {
-                    // Start from the pedal's own document right now, so a knob turned on the pedal isn't overwritten.
-                    let mut doc = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;
-                    if !doc.set_command(slot, id, &args) {
-                        return Err("this preset has no such Command Center slot".into());
-                    }
-                    write_command_center(s, send, &doc)?;
+                    change_command_center(s, send, CcChange::Type { slot, id, args }).map(|_| ())?;
                     send(Event::Done("Command Center changed on the pedal (Save on pedal keeps it)".into()));
                 }
                 Cmd::CopySnapshot { from, to, keep_name } => {

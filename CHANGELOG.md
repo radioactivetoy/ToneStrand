@@ -8,6 +8,19 @@
   from the documentation and are marked "not checked on a pedal" in the editor and in the conversion notes until
   someone runs them on a unit (see docs/ROADMAP.md for how).
 - docs/ROADMAP.md: what is left and in what order.
+- **Library tags and wider search:** give a preset tags from its right-click menu (kept in a small file in the
+  library folder, by file name, so they follow a preset between folders); click a tag to show those presets;
+  search also looks in snapshot names and tags (`#tag` is exact).
+- **First connection to a unit** shows what has been tried on it (only the HX Stomp so far) and how to report a problem.
+- **Problem report** (Activity menu): a folder in Downloads with the log, version, unit and what is checked on it,
+  and, if asked, the open preset. Nothing is sent anywhere.
+- **The `.hlx` editor's amp and cab panel** is two same-size sections with a photo each, like the pedal editor.
+- **Command Center changes on the loaded preset use the pedal's own requests** (op 67/48/33 for a type, 68 for a
+  value, 58 for Momentary) instead of rewriting the whole preset, then check what the pedal holds and fall back to
+  the whole write if it differs or the edit is for a snapshot the pedal has not selected (which would recall it).
+  Lab tool: `--cc-live`.
+- `--help` separates the read-only tools from the lab tools that write to the pedal; CI also builds on macOS and
+  Linux (informational).
 
 ## 1.0.0-beta.3 - 2026-11-18
 

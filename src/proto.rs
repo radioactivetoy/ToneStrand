@@ -194,6 +194,12 @@ pub mod op {
     pub const ASSIGN_FOOTSWITCH: i64 = 56;
     pub const UNASSIGN_FOOTSWITCH: i64 = 57;
     pub const FOOTSWITCH_INDEX: i64 = 33;
+    // Command Center, live (captured from another editor): set a slot's command type, read it back, set one
+    // value (argument numbers from 1), and a footswitch's Momentary switch.
+    pub const SET_COMMAND_TYPE: i64 = 67;
+    pub const COMMAND_INFO: i64 = 48;
+    pub const SET_COMMAND_VALUE: i64 = 68;
+    pub const SET_MOMENTARY: i64 = 58;
     pub const IMPORT_IR: i64 = 9;
     pub const RENAME_IR: i64 = 10;
     pub const IR_AUDIO: i64 = 11;

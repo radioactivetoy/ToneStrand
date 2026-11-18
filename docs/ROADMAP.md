@@ -24,14 +24,14 @@ someone running it on that hardware; everything else can be built and tested fro
 **Done when:** a command set in the editor on a Stomp XL, HX Effects and Helix reads back the same from the unit
 after "Save on pedal", and a `.hlx` from that unit converts without a note.
 
-## 2. The `.hlx` editor's amp and cab panel (no unit)
+## 2. The `.hlx` editor's amp and cab panel (no unit) — done
 
 The pedal editor draws an amp with a cab as two sections (photo, divider, knobs; a line between). The `.hlx` editor
 keeps the older single column. Move the knob code into the same `body_section` helper (`editors/mod.rs`).
 Risk: that code also normalises values and handles controller menus, so do it as its own change with the
 `hlx_add_move_remove` and compare tests running.
 
-## 3. Live Command Center edits with the pedal's own requests (needs the Stomp, one session)
+## 3. Live Command Center edits with the pedal's own requests — built, needs one check on the Stomp
 
 Ops 67, 68 and 88 are captured (`docs/PROTOCOL.md`). Today every change rewrites the whole edit buffer (op 21).
 The live requests change one value, avoid overwriting a knob turned on the pedal at the same moment, and are quicker.
@@ -40,7 +40,7 @@ The live requests change one value, avoid overwriting a knob turned on the pedal
 snapshot with 88 first when it is not the pedal's current one), keep op 21 as the fallback; verify with
 `--dump-loaded` after a rapid series of edits; compare timing.
 
-## 4. Preset library search and tags (no unit)
+## 4. Preset library search and tags — done (tags, search in snapshot names)
 
 Find a preset by effect, amp, cab, tempo or a tag across the library and the backups. The data is already parsed
 (`library.rs`, `compare.rs` summaries).
@@ -48,7 +48,7 @@ Find a preset by effect, amp, cab, tempo or a tag across the library and the bac
 **Steps:** an index built when the library is scanned (name, blocks, snapshot names, tags in a sidecar file), a
 search box on the Library page, tag editing, "open" and "send to pedal" from the results.
 
-## 5. Problem report bundle (no unit)
+## 5. Problem report bundle — done
 
 A button in the Activity panel that saves the log, the app and unit information and, on request, the loaded preset
 into one `.zip` the person can attach to an issue.
@@ -56,12 +56,12 @@ into one `.zip` the person can attach to an issue.
 **Steps:** collect the log lines already kept for the Activity panel, the version and unit, the catalog status and
 (optional, with a tick box) the live document; write to the Downloads folder; show the path. No network.
 
-## 6. First-run check (no unit)
+## 6. First-run check — done
 
 On the first connection, say which unit was found, which parts of the app are checked on that unit and which are not
 (this file, section 1, is the source), and how to report a problem (item 5).
 
-## 7. Housekeeping
+## 7. Housekeeping — help grouped, portable CI job added; the rest open
 
 - Move the write-to-pedal test tools (`--cc-raw`, `--cc-snap`, `--send-hlx`, `--put-slot`) behind one
   `--lab` prefix, or mark them clearly in `--help`.
@@ -80,3 +80,12 @@ On the first connection, say which unit was found, which parts of the app are ch
 4. Stop the proxy, wait five seconds, and run `tonestrand --dump-loaded <box address> <folder>\after.hxpreset`
    and `tonestrand --commands <folder>\after.hxpreset`.
 5. Send the folder (`box-proxy.log`, `after.hxpreset`) and the notes from step 3.
+
+## Status of item 3 (live Command Center requests)
+
+`device::change_command_center` sends the pedal's own requests, reads the preset back and compares the Command
+Center with what the edit should have made; any difference, or a change for a snapshot the pedal has not selected,
+falls back to writing the edit buffer. Not yet run on a pedal. Check with the Box free (close the app, or
+disconnect it): `--cc-live <box> type 6 18 5 55 66 20`, `--cc-live <box> value 1 6 5 56 66 20`,
+`--cc-live <box> momentary 6 1`, then `--commands` and `--dump-loaded`. The tool says whether the pedal's own
+requests were enough or the edit buffer had to be written.

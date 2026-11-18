@@ -4,7 +4,8 @@
 use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnames, session, wire};
 
 /// The command-line tools (everything else opens the window).
-pub const CLI_FLAGS: [&str; 21] = [
+pub const CLI_FLAGS: [&str; 22] = [
+    "--cc-live",
     "--put-slot",
     "--cc-snap",
     "--send-hlx",
@@ -230,6 +231,42 @@ fn put_slot_tool(rest: &[String]) {
     println!("wrote {file} to {label}; read back {}", if back.as_deref() == Some(sent.as_slice()) { "the same" } else { "DIFFERENT" });
 }
 
+/// `--cc-live <box address> type <slot> <id> [args]`, `value <snapshot 1-based> <slot> <arg1..>` or
+/// `momentary <slot> <0|1>`: a Command Center edit on the loaded preset the way the app makes it (the pedal's own
+/// requests, then a check, falling back to writing the edit buffer). Says which way it went. Edit buffer only.
+fn cc_live_tool(rest: &[String]) {
+    let (Some(host), Some(kind)) = (rest.first(), rest.get(1)) else {
+        eprintln!("usage: --cc-live <box address> type <slot> <id> [args] | value <snapshot> <slot> <args> | momentary <slot> <0|1>");
+        return;
+    };
+    let nums: Option<Vec<i64>> = rest[2..].iter().map(|a| need(a.parse::<i64>(), a)).collect();
+    let Some(n) = nums else { return };
+    let change = match (kind.as_str(), n.as_slice()) {
+        ("type", [slot, id, args @ ..]) => crate::device::CcChange::Type { slot: *slot as usize, id: *id, args: args.to_vec() },
+        ("value", [snap, slot, args @ ..]) => {
+            crate::device::CcChange::Values { snapshot: (*snap as usize).saturating_sub(1), slot: *slot as usize, args: args.to_vec() }
+        }
+        ("momentary", [slot, m]) => crate::device::CcChange::Momentary { slot: *slot as usize, momentary: *m != 0 },
+        _ => {
+            eprintln!("not understood; see the usage");
+            return;
+        }
+    };
+    let Some(mut s) = open_session(Some(host)) else { return };
+    match crate::device::change_command_center(&mut s, &|_| {}, change) {
+        Ok(true) => println!("done with the pedal's own requests"),
+        Ok(false) => println!("done by writing the edit buffer (the pedal's own requests were not enough)"),
+        Err(e) => {
+            eprintln!("failed: {e}");
+            return;
+        }
+    }
+    let Some(back) = need(s.read_current(), "reading it back").and_then(|b| need(devpreset::DevicePreset::parse(&b), "it")) else { return };
+    for l in crate::cmdtool::describe(&back, &crate::cmdtool::unit_slots()) {
+        println!("{l}");
+    }
+}
+
 /// `--dump-loaded <box address> <file.hxpreset>`: save the loaded preset's edit buffer (what the pedal
 /// holds right now, unsaved changes included) to a file. Reads only.
 fn dump_loaded_tool(rest: &[String]) {
@@ -345,6 +382,7 @@ Read and convert (nothing is written to a pedal):
 
 Lab tools (WRITE to the pedal; use a spare preset and keep a backup):
   --cc-raw <box address> <slot 0-12> <id> [arg1 .. arg6]  one Command Center slot of the loaded preset (edit buffer only)
+  --cc-live <box address> type <slot> <id> [args] | value <snapshot> <slot> <args> | momentary <slot> <0|1>  an edit the way the app makes it (the pedal's own requests; edit buffer only)
   --cc-snap <box address> <snapshot 1-based> <slot 0-12> [arg1 .. arg6]  one command's values in one snapshot (edit buffer only)
   --cc-reload <box address>         reload the loaded preset from flash, dropping edit-buffer changes
   --send-hlx <box address> <slot like 42B> <file.hlx> <backup folder>  a .hlx to a slot, after saving the slot's document
@@ -380,6 +418,10 @@ pub fn run(args: &[String]) -> bool {
     }
     if let Some(i) = args.iter().position(|a| a == "--put-slot") {
         put_slot_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--cc-live") {
+        cc_live_tool(&args[i + 1..]);
         return true;
     }
     if let Some(i) = args.iter().position(|a| a == "--dump-loaded") {
