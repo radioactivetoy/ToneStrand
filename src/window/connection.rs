@@ -400,6 +400,22 @@ impl App {
             let locked = self.link.is_some();
             // Connected: one line, the rest is in the DEVICE box above.
             if locked {
+                // Where the link goes: the cable, or the box and which network it is on (its own, in direct mode, has this fixed address).
+                match &self.last_target {
+                    Some(crate::device::Target::Box { host, label, .. }) => {
+                        ui.label(RichText::new(format!("{label}  ·  {host}")).small().color(muted()));
+                        let own = host == "192.168.4.1";
+                        ui.label(
+                            RichText::new(if own { "Direct: the box's own network, no router" } else { "Through your Wi-Fi" })
+                                .small()
+                                .color(if own { good() } else { muted() }),
+                        );
+                    }
+                    Some(crate::device::Target::Usb { .. }) => {
+                        ui.label(RichText::new("USB cable").small().color(muted()));
+                    }
+                    None => {}
+                }
                 ui.horizontal(|ui| {
                     if ui.button("Disconnect").clicked() {
                         self.disconnect();
