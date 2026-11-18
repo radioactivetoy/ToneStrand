@@ -1,5 +1,4 @@
-//! Effect icons, cut from the sheet the person added (assets/block Images/Blocks_stadium.png, and a larger copy,
-//! effect-blocks-highres.jpg, used when everything is drawn at 2 points to a pixel or more):
+//! Effect icons, cut from the sheet the person added (assets/block Images/Blocks_stadium.png):
 //! - the line icon heading each column names a category (Distortion, Delay, Reverb...);
 //! - the rounded tiles under it name its kinds (Fuzz, Boost, Overdrive...; Analog, Tape...).
 //!
@@ -12,7 +11,6 @@ use std::sync::{Mutex, OnceLock};
 use eframe::egui::{self, Color32, ColorImage};
 
 const SHEET: &[u8] = include_bytes!("../assets/block Images/Blocks_stadium.png");
-const SHEET_HIGH: &[u8] = include_bytes!("../assets/block Images/effect-blocks-highres.jpg");
 
 /// Top of each tile row (tiles are about 55 px square).
 const ROWS: [usize; 7] = [139, 228, 316, 404, 491, 579, 667];
@@ -250,57 +248,9 @@ fn row_for(column: &str, category: &str, symbol: &str, name: &str) -> usize {
     }
 }
 
-/// A sheet in use and how much larger it is than the original (1524 px wide, which all the positions below are for).
-struct Sheet {
-    img: &'static ColorImage,
-    k: f32,
-    high: bool,
-}
-
-impl Sheet {
-    /// A position or size of the original sheet, in this one.
-    fn px(&self, v: usize) -> usize {
-        (v as f32 * self.k).round() as usize
-    }
-
-    /// A tile, line icon or any rectangle given in the original's pixels.
-    fn cut(&self, x: usize, y: usize, w: usize, h: usize) -> ColorImage {
-        crop(self.img, self.px(x), self.px(y), self.px(w), self.px(h))
-    }
-}
-
-/// The original sheet, and a 1.83 times larger copy (a JPEG made by upscaling it). The larger one is used when
-/// everything is drawn big (2 points to a pixel or more), where the original turns soft; at smaller sizes it
-/// averages the thin lines to a dimmer picture and gains nothing. `TONESTRAND_ICONS=high|normal` forces one.
-fn sheet(ctx: &egui::Context) -> Option<Sheet> {
-    static NORMAL: OnceLock<Option<ColorImage>> = OnceLock::new();
-    static HIGH: OnceLock<Option<ColorImage>> = OnceLock::new();
-    let forced = std::env::var("TONESTRAND_ICONS").ok();
-    let want_high = match forced.as_deref() {
-        Some("high") => true,
-        Some("normal") => false,
-        _ => ctx.pixels_per_point() >= 1.75,
-    };
-    let normal = || NORMAL.get_or_init(|| crate::modelinfo::decode(SHEET)).as_ref();
-    if want_high {
-        if let Some(img) = HIGH.get_or_init(|| decode_jpeg(SHEET_HIGH)).as_ref() {
-            return Some(Sheet { img, k: img.size[0] as f32 / 1524.0, high: true });
-        }
-    }
-    normal().map(|img| Sheet { img, k: img.size[0] as f32 / 1524.0, high: false })
-}
-
-fn decode_jpeg(bytes: &[u8]) -> Option<ColorImage> {
-    let mut d = jpeg_decoder::Decoder::new(bytes);
-    let data = d.decode().ok()?;
-    let info = d.info()?;
-    let (w, h) = (info.width as usize, info.height as usize);
-    let rgb: Vec<u8> = match info.pixel_format {
-        jpeg_decoder::PixelFormat::RGB24 => data,
-        jpeg_decoder::PixelFormat::L8 => data.iter().flat_map(|&g| [g, g, g]).collect(),
-        _ => return None,
-    };
-    (rgb.len() == w * h * 3).then(|| ColorImage::from_rgb([w, h], &rgb))
+fn sheet() -> Option<&'static ColorImage> {
+    static SHEET_IMG: OnceLock<Option<ColorImage>> = OnceLock::new();
+    SHEET_IMG.get_or_init(|| crate::modelinfo::decode(SHEET)).as_ref()
 }
 
 fn crop(img: &ColorImage, x0: usize, y0: usize, w: usize, h: usize) -> ColorImage {
@@ -337,7 +287,7 @@ fn tile_icon(mut img: ColorImage) -> ColorImage {
     let [w, h] = img.size;
     let dark = |c: Color32| {
         let [r, g, b, _] = c.to_srgba_unmultiplied();
-        r.max(g).max(b) < 22
+        r.max(g).max(b) < 14
     };
     let mut seen = vec![false; w * h];
     let mut stack: Vec<usize> = Vec::new();
@@ -443,16 +393,14 @@ fn soften_edge(img: &mut ColorImage) {
 fn texture(ctx: &egui::Context, key: String, make: impl FnOnce() -> Option<ColorImage>) -> Option<egui::TextureHandle> {
     static CACHE: OnceLock<Mutex<HashMap<String, Option<egui::TextureHandle>>>> = OnceLock::new();
     let mut c = CACHE.get_or_init(|| Mutex::new(HashMap::new())).lock().ok()?;
-    let options = egui::TextureOptions { mipmap_mode: Some(egui::TextureFilter::Linear), ..egui::TextureOptions::LINEAR };
-    c.entry(key.clone()).or_insert_with(|| make().map(|img| ctx.load_texture(key, img, options))).clone()
+    c.entry(key.clone()).or_insert_with(|| make().map(|img| ctx.load_texture(key, img, egui::TextureOptions::LINEAR))).clone()
 }
 
 /// The line icon heading a category's column.
 pub fn for_category(ctx: &egui::Context, category: &str) -> Option<egui::TextureHandle> {
     let col = column_for(category)?;
     let centre = COLUMNS[col].1.centre;
-    let s = sheet(ctx)?;
-    texture(ctx, format!("fx-head-{col}-{}", s.high as u8), || Some(line_icon(s.cut(centre - HEAD / 2, HEAD_TOP, HEAD, HEAD))))
+    texture(ctx, format!("fx-head-{col}"), || Some(line_icon(crop(sheet()?, centre - HEAD / 2, HEAD_TOP, HEAD, HEAD))))
 }
 
 /// The tile for a model: its category's column, the row of its kind (the first when unsure).
@@ -462,16 +410,14 @@ pub fn for_model(ctx: &egui::Context, category: &str, symbol: &str, name: &str) 
     let (key, c) = &COLUMNS[col];
     let Some(left) = c.left else { return for_category(ctx, category) };
     let row = row_for(key, category, symbol, name).min(c.kinds.len().saturating_sub(1)).min(ROWS.len() - 1);
-    let s = sheet(ctx)?;
-    texture(ctx, format!("fx-tile-{col}-{row}-{}", s.high as u8), || Some(tile_icon(s.cut(left - 1, ROWS[row] - 2, TILE, TILE))))
+    texture(ctx, format!("fx-tile-{col}-{row}"), || Some(tile_icon(crop(sheet()?, left - 1, ROWS[row] - 2, TILE, TILE))))
 }
 
 /// A tile picked by column and row (for things that aren't models: an IR, a NAM capture).
 fn tile_at(ctx: &egui::Context, key: &str, row: usize) -> Option<egui::TextureHandle> {
     let col = COLUMNS.iter().position(|(k, _)| *k == key)?;
     let left = COLUMNS[col].1.left?;
-    let s = sheet(ctx)?;
-    texture(ctx, format!("fx-tile-{col}-{row}-{}", s.high as u8), || Some(tile_icon(s.cut(left - 1, ROWS[row] - 2, TILE, TILE))))
+    texture(ctx, format!("fx-tile-{col}-{row}"), || Some(tile_icon(crop(sheet()?, left - 1, ROWS[row] - 2, TILE, TILE))))
 }
 
 /// The "1 Cab IR" tile, for impulse responses.
@@ -564,15 +510,12 @@ mod tests {
 
     #[test]
     fn sheet_cuts_into_icons() {
-        // Both sheets cut the same way: a tile keeps its border and its inside, the black around it goes.
-        for (img, expected) in [(crate::modelinfo::decode(SHEET).unwrap(), [1524, 839]), (decode_jpeg(SHEET_HIGH).unwrap(), [2794, 1536])] {
-            assert_eq!(img.size, expected);
-            let sheet = Sheet { img: Box::leak(Box::new(img)), k: expected[0] as f32 / 1524.0, high: expected[0] > 2000 };
-            let t = tile_icon(sheet.cut(671, ROWS[0] - 2, TILE, TILE));
-            let n = sheet.px(TILE);
-            assert_eq!(t.pixels[0].a(), 0, "corner outside the tile is transparent");
-            assert!(t.pixels[(n / 2) * n + n / 2].a() > 200, "middle of the tile stays");
-        }
+        let img = sheet().expect("sheet decodes");
+        assert_eq!(img.size, [1524, 839]);
+        // A tile keeps its border and its inside; the black around it goes.
+        let t = tile_icon(crop(img, 671, ROWS[0] - 2, TILE, TILE));
+        assert_eq!(t.pixels[0].a(), 0, "corner outside the tile is transparent");
+        assert!(t.pixels[(TILE / 2) * TILE + TILE / 2].a() > 200, "middle of the tile stays");
         assert_eq!(column_for("Delay").map(|i| COLUMNS[i].0), Some("delay"));
         assert_eq!(column_for("Volume/Pan").map(|i| COLUMNS[i].0), Some("volume"));
         assert_eq!(row_for("distortion", "Distortion", "HD2_DistScream808", "Scream 808"), 2);
