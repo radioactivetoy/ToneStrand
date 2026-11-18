@@ -603,10 +603,6 @@ impl Chain<'_> {
                 }
                 r.context_menu(|ui| {
                     if let Cell::Block { on, .. } = &cell {
-                        if ui.button("Edit knobs").clicked() {
-                            hits.push(Hit::Click(lane, col));
-                            ui.close_menu();
-                        }
                         if ui.button(if *on { "Switch off" } else { "Switch on" }).clicked() {
                             hits.push(Hit::Toggle(lane, col));
                             ui.close_menu();
