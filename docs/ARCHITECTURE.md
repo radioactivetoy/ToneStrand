@@ -44,8 +44,8 @@ thread. Everything else is plain data structures edited in place every frame.
 | `session.rs` | One conversation with the pedal over any `Wire`: handshake, services, chunked sends, acks, request/reply matching, high-level operations (presets, slots, live edits, IRs, controllers). |
 | `proto.rs` | Frame and channel header encoding, opcode and key constants, slot labels. |
 | `msgpack.rs` | MessagePack codec that remembers each value's original format byte so documents re-encode identically. |
-| `wire.rs` | `Wire` trait; `UsbWire` (Line 6 vendor 0x0e41, bulk 0x01/0x81) and `BoxWire` (Helrig Box `ws://<box>/raw`). |
-| `boxes.rs` | Helrig Box discovery (mDNS), pairing, relay mode, settings file (`Settings`). |
+| `wire.rs` | `Wire` trait; `UsbWire` (Line 6 vendor 0x0e41, bulk 0x01/0x81) and `BoxWire` (ToneStrand Box `ws://<box>/raw`). |
+| `boxes.rs` | ToneStrand Box discovery (mDNS plus a repeated `.local` lookup that follows a box to a new address), pairing, relay status (incl. direct mode), relay mode, settings file (`Settings`). |
 | `backup.rs` | Reading HX Edit `.hxb` backups and `.hls` setlists. |
 | `irs.rs` | WAV ↔ pedal IR (2,048 float32 samples at 48 kHz); NAM capture detection. |
 | `nam.rs` | NAM A2 Lite support: block knob mapping and the `.nam` → IR converter. |
@@ -53,7 +53,7 @@ thread. Everything else is plain data structures edited in place every frame.
 | `library.rs`, `folders.rs`, `tonelib.rs` | Preset library and IR/NAM library as real folders on disk; the library also keeps tags (`.tonestrand-tags.json`, by file name) and searches names, effects, snapshot names and tags. |
 | `support.rs` | What has been tried on which unit (only the HX Stomp so far): shown the first time a unit connects and put in problem reports; the report folder's date stamp. |
 | `cmdtool.rs` | The Command Center command-line tools' logic (`--commands`, `--cc-compare`). |
-| `boxproxy.rs` | `--box-proxy`: a logging pass-through to a Helrig Box, to see what another editor sends the pedal. |
+| `boxproxy.rs` | `--box-proxy`: a logging pass-through to a ToneStrand Box, to see what another editor sends the pedal. |
 | `fakepedal.rs` | Tests only: a fake pedal behind `Wire` for testing `Session` without hardware. |
 | `selftest.rs` | Hidden Tests page: backs up, exercises every operation on one preset slot and one IR slot, restores, verifies; stops immediately if the link drops. |
 | `theme.rs` | Palette, accent colour (picked in Settings), cards, pills, help (?) icons, logos. |

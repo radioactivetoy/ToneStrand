@@ -71,7 +71,7 @@ On the first connection, say which unit was found, which parts of the app are ch
 
 ## What a tester does for item 1 (about 30 minutes per unit)
 
-1. Install this app and a Helrig Box on the unit (or connect by USB if the other editor is not used).
+1. Install this app and a ToneStrand Box on the unit (or connect by USB if the other editor is not used).
 2. Start the proxy: `tonestrand --box-proxy 127.0.0.1:80 <box address> <folder>`, point the other editor at
    `127.0.0.1`, and wait for it to show Connected.
 3. In the other editor, on a spare preset, set: Instant 1 = MIDI CC with distinct values; the first footswitch = CC

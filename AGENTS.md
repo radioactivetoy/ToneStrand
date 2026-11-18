@@ -30,7 +30,7 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
    - Wait 750 ms after flash writes (`session::SETTLE_FLASH`); don't stack writes.
    - If a transfer fails half way, stop sending (the pedal may be mid-transfer); the
      self-test does this via `Run::lost`.
-   - Through a Helrig Box, pace chunks more gently (`Wire::slow`).
+   - Through a ToneStrand Box, pace chunks more gently (`Wire::slow`).
    - Never send NAM captures to a pedal without the NAM A2 Lite firmware.
 2. **Documents must round-trip byte for byte.** Don't re-encode values with a different
    MessagePack format; extend `msgpack.rs` rather than bypassing it. Run `--ctl-check` /
@@ -61,7 +61,7 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 - A screenshot (`--screenshot`) of the page you changed; use the `TONESTRAND_*` variables in
   `docs/BUILDING.md` to open a given page or file.
 - Anything that talks to the pedal: run the hidden self-test (Ctrl+Shift+T) on a spare slot,
-  over USB and, if relevant, through a Helrig Box. Say plainly what wasn't tried on hardware.
+  over USB and, if relevant, through a ToneStrand Box. Say plainly what wasn't tried on hardware.
 
 ## Where to change what
 

@@ -13,7 +13,7 @@
   there is no HX Edit for Linux. (The Windows and macOS builds need nothing more than the above.)
 
 No other system libraries: USB uses the pure-Rust `nusb` crate (no libusb), the WebSocket to
-the Helrig Box uses `tungstenite`, and box discovery uses `mdns-sd`.
+the ToneStrand Box link uses `tungstenite`, and box discovery uses `mdns-sd`.
 
 So far it has only been built and used on **Windows 11**; CI builds macOS but nobody has run it. The code has macOS/Linux branches
 (file manager, link opening, window level) but those builds haven't been tried; expect small
@@ -100,8 +100,8 @@ Handy when working on formats or the protocol; none of them writes to the pedal.
 
 | Command | What it does |
 |---|---|
-| `--probe [host]` | Connect (USB, or a paired Helrig Box at `host`), list setlists/presets, disconnect |
-| `--find-boxes` | Look for Helrig Boxes on the network and print their status |
+| `--probe [host]` | Connect (USB, or a paired ToneStrand Box at `host`), list setlists/presets, disconnect |
+| `--find-boxes` | Look for boxes on the network (mDNS and the `.local` names) and print their status |
 | `--list-models` | Print the catalog read from HX Edit (category, variant, name) |
 | `--read-backup <file>` | List the presets inside an `.hxb` or `.hls` |
 | `--dump-doc <file>` | Print a pedal document's structure (`.hxpreset`) |

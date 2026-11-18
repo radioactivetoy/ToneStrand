@@ -1,7 +1,7 @@
 # Protocol
 
 How ToneStrand talks to a Helix-family pedal. The same byte stream goes over USB directly or
-through a Helrig Box, which relays USB bulk transfers over a WebSocket.
+through a ToneStrand Box, which relays USB bulk transfers over a WebSocket.
 
 Values marked *(estimated)* work in practice or follow the general pattern, but haven't been
 confirmed in every case.
@@ -19,17 +19,18 @@ confirmed in every case.
 
 Implemented in `wire.rs` (`UsbWire`, pure-Rust `nusb`).
 
-### Helrig Box
+### ToneStrand Box (and the Helrig Box)
 
-The box is a DIY build: guide at https://box.helrig.com/, repository
-https://github.com/maveric1977/helrig-box, built on the open-source ToneRelay Wi-Fi relay by
-Mark Peskett (https://github.com/mpeskett88/ToneRelay). This section follows their relay
-protocol; credit for the box and the protocol is theirs.
+The box is a DIY build: firmware, browser flasher and guides at https://github.com/radioactivetoy/tonestrand-box.
+It is a fork of the [Helrig Box](https://github.com/maveric1977/helrig-box) (maveric1977), and its firmware is the
+open-source ToneRelay Wi-Fi relay by Mark Peskett and maveric1977 (https://github.com/maveric1977/ToneRelay). This
+section follows their relay protocol (`docs/raw-relay-protocol.md` in the box repository); credit for the protocol
+is theirs. ToneStrand talks to a ToneStrand Box, a Helrig Box or a plain ToneRelay build the same way.
 
 | Rule | Value |
 |---|---|
-| Discovery | mDNS service types `_helrigbox._tcp.local.` and `_tonerelay._tcp.local.`; fallback names `helrigbox.local`, `tonerelay.local` |
-| Status | `GET http://<box>/api/relay` → JSON (box id, pedal attached, relay mode, client connected) |
+| Discovery | mDNS service types `_tonestrandbox._tcp.local.`, `_helrigbox._tcp.local.` and `_tonerelay._tcp.local.`; fallback names `tonestrandbox.local`, `helrigbox.local`, `tonerelay.local`, looked up again every few seconds while a box does not answer (a box that moved to another network is followed to its new address, matched by its id) |
+| Status | `GET http://<box>/api/relay` → JSON (box id, pedal attached, relay mode, client connected, `direct`: the box is in direct mode, on its own network at `192.168.4.1`) |
 | Pairing | `POST /api/pair` → nonce, 30 s window; the person presses BOOT on the box; poll `GET /api/pair?nonce=<n>` until it returns `token` (32 hex characters) |
 | Relay mode | `POST /api/relay {"on": true}` with the token |
 | Relay link | WebSocket `ws://<box>/raw` (port 80), header `Authorization: Bearer <token>` on the upgrade |
@@ -37,6 +38,9 @@ protocol; credit for the box and the protocol is theirs.
 | Frames | one binary WebSocket frame = one USB bulk transfer (OUT or IN), at most 4,096 bytes |
 | Errors | text frames `{"t":"error","code":...}` (e.g. `usb_error` = the box lost USB contact with the pedal, `relay_unavailable`) |
 | Liveness | the client must send something every 5 s (the box drops it after 6 s); ToneStrand sends `{"t":"ping"}` after 3 s of quiet |
+
+Direct mode (the box's own network, `192.168.4.1`, entered by holding BOOT for 2 to 4 seconds) uses the same protocol on that address.
+The box's Wi-Fi setup commands (`/api/cmd`) are not part of what ToneStrand uses and are not protected by the pairing token.
 
 Implemented in `wire.rs` (`BoxWire`) and `boxes.rs`. Large transfers through the box are paced
 more gently than over USB (see 3.4).
@@ -106,7 +110,7 @@ Inside a channel the payloads form a byte stream of messages:
 
 - 256 stream bytes per frame.
 - Between chunks keep reading and acknowledging for 80 ms over USB, 240 ms through a
-  Helrig Box.
+  ToneStrand Box.
 - Before a write through the box, wait 400 ms after BEGIN.
 - After any flash write, rename, clear or save, wait 750 ms before the next request.
 - A transfer that fails half way leaves the pedal mid-transfer; send nothing more and ask the
