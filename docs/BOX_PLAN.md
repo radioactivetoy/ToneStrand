@@ -88,3 +88,13 @@ ToneStrand
 2. A product name for the box (or "ToneStrand Box" to start).
 3. OK to install ESP-IDF and LLVM here (a few GB), or to do builds in GitHub Actions only.
 4. The board connected, and its COM port, for phases 2 onward.
+
+## Status (2026-11-18)
+
+- Phase 0 done: forks `radioactivetoy/tonestrand-box` (branch `tonestrand/own-box`) and `radioactivetoy/ToneRelay` (branch
+  `tonestrand/c6-and-ble-fixes`). Names are ToneStrand Box / `tonestrandbox.local` / `_tonestrandbox`; the setup page has no
+  Helrig logo. Still to clean: comments and docs that say Helrig, the README, the web flasher.
+- Phase 1 done: built in WSL2 Ubuntu (ESP-IDF 5.5.3, nightly-2026-07-01), cold build 60 s. Working copy:
+  `~/box/tonestrand-box` in WSL. Image copied to `C:\Users\nesto\Downloads\tonestrand-box-fw` (ELF + partitions.csv).
+- Phases 2 and 3 (C6 image embedded, Bluetooth controller started): in the build, **not yet flashed or tested** on the board.
+  The earlier C6 image was reused; the script that builds it when missing is untested.
