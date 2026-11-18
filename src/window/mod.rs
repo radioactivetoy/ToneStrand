@@ -386,6 +386,12 @@ impl App {
                 // For checks: open a preset file at start (TONESTRAND_OPEN).
                 if let Some(p) = std::env::var_os("TONESTRAND_OPEN") {
                     app.open_file(&PathBuf::from(p));
+                    // TONESTRAND_SELECT=n picks the n-th place of the chain (0 is the input) for a picture.
+                    if let Some(n) = std::env::var("TONESTRAND_SELECT").ok().and_then(|v| v.parse::<usize>().ok()) {
+                        if let Some(d) = app.docs.last_mut() {
+                            d.selected = Some(n);
+                        }
+                    }
                 }
             }
             Ok("library") => app.view = View::Library,
@@ -1833,6 +1839,16 @@ fn dsp_warning(cat: &Catalog, json: &serde_json::Value) -> Option<String> {
 }
 
 impl eframe::App for App {
+    /// A picture is taken without the computer's mouse pointer: it would show tooltips and highlights.
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        if self.screenshot.is_some() {
+            raw_input.events.retain(|e| {
+                !matches!(e, egui::Event::PointerMoved(_) | egui::Event::PointerButton { .. } | egui::Event::MouseWheel { .. })
+            });
+            raw_input.events.push(egui::Event::PointerGone);
+        }
+    }
+
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Fill the monitor on start (asking at window creation isn't always honoured on Windows),
         // unless the window was left smaller last time: then it comes back as it was.

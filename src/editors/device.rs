@@ -599,7 +599,9 @@ pub fn device_controllers(
             }
         };
         let tab_id = egui::Id::new("dev-ctl-tab");
-        let mut tab: usize = ui.data(|d| d.get_temp(tab_id)).unwrap_or(0);
+        let mut tab: usize = ui
+            .data(|d| d.get_temp(tab_id))
+            .unwrap_or_else(|| std::env::var("TONESTRAND_CTL_TAB").ok().and_then(|v| v.parse().ok()).unwrap_or(0));
         let count = |t: usize| list.iter().filter(|c| tab_of(c.controller) == t).count() + if t == 0 { fs_blocks.len() } else { 0 };
         let mut labels = vec![
             format!("Footswitches ({})", count(0)),

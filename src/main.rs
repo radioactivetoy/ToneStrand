@@ -45,10 +45,15 @@ fn main() -> eframe::Result<()> {
     }
     let screenshot = args.iter().position(|a| a == "--screenshot").and_then(|i| args.get(i + 1)).map(std::path::PathBuf::from);
 
+    // TONESTRAND_SIZE=WxH sets the window size (points) for a picture that needs more room.
+    let size = std::env::var("TONESTRAND_SIZE")
+        .ok()
+        .and_then(|v| v.split_once('x').and_then(|(w, h)| Some([w.parse::<f32>().ok()?, h.parse::<f32>().ok()?])))
+        .unwrap_or([1320.0, 820.0]);
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("ToneStrand")
         .with_app_id("tonestrand")
-        .with_inner_size([1320.0, 820.0])
+        .with_inner_size(size)
         .with_min_inner_size([960.0, 600.0]);
     // Back where it was left (kept sane: a window never starts tiny or far off screen).
     if screenshot.is_none() {

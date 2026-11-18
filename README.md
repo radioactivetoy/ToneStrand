@@ -23,6 +23,21 @@ the DSP meter above the chain. Every change is heard at once.*
 *The pedal's User IRs: which of the 128 slots are in use, with download, rename, remove and
 "Send IRs or NAM captures" (the slot is backed up first).*
 
+![The Command Center tab of the Controllers card: a grid of the pedal's triggers (six instant commands, five footswitches, two expression pedals) with the selected trigger's command and values below](docs/images/command-center.png)
+
+*The Command Center of an HX Stomp preset: what each instant command, footswitch and expression pedal does,
+with the command's own fields, a Momentary switch where the command has one, and values kept per snapshot.*
+
+![The input block's panel: a jack picture, the source, the guitar input impedance and pad, and the noise gate](docs/images/input-panel.png)
+
+*The input and output blocks have the same layout as an effect: a picture on the left, the settings on the right.
+The guitar input impedance and pad are settings of the preset and sit here.*
+
+![The library page: preset cards with their effects and tags, folders on the left, a row of tag filters on top](docs/images/library.png)
+
+*The library: presets kept on this computer, in folders you make, searchable by name, effect, snapshot name or
+tag (right-click a preset to tag it).*
+
 The effect pictures and names come from Line 6; see "Third-party material" below.
 
 ## What it does

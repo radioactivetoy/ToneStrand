@@ -89,6 +89,9 @@ page or file.
 | `TONESTRAND_TONES` | Use this IR/NAM library folder |
 | `TONESTRAND_REAL_NAMES` | `1`: show real gear names |
 | `TONESTRAND_NAM` | `1`: turn the NAM A2 Lite support on |
+| `TONESTRAND_SIZE` | `1400x1100`: the window size (points) for a picture |
+| `TONESTRAND_SELECT` | With `TONESTRAND_OPEN`: the place in the chain to select (0 is the input) |
+| `TONESTRAND_CTL_TAB` | The Controllers card's tab to start on (0 Footswitches ... last = Command Center) |
 
 ## Read-only command-line tools
 

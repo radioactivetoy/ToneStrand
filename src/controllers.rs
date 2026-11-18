@@ -1107,12 +1107,6 @@ pub fn device_command_center(
     let count = preset.command_count();
     let slots = unit_slots();
     {
-        ui.horizontal(|ui| {
-            theme::help(
-                ui,
-                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed. The names are the Command Center's own: FS 1 to FS 5, whatever is printed on the pedal.\nOn the loaded preset a change goes to the pedal at once, and Save on pedal keeps it.\nThe wait is 0 to 20 (the pedal's own limit). Each snapshot keeps its own copy of a command's values.",
-            );
-        });
         if count == 0 {
             ui.label(RichText::new("This preset has no Command Center.").color(muted()));
             return;
@@ -1145,6 +1139,10 @@ pub fn device_command_center(
                 RichText::new("Values are per snapshot: change the snapshot with the snapshot bar. HX Preset is the same in all.")
                     .small()
                     .color(muted()),
+            );
+            theme::help(
+                ui,
+                "What the footswitches, expression pedals and instant commands do when this preset loads or they are pressed. The names are the Command Center's own: FS 1 to FS 5, whatever is printed on the pedal.\nOn the loaded preset a change goes to the pedal at once, and Save on pedal keeps it.\nThe wait is 0 to 20 (the pedal's own limit). Each snapshot keeps its own copy of a command's values.",
             );
         });
         ui.add_space(6.0);
