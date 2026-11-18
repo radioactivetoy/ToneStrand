@@ -37,6 +37,7 @@ thread. Everything else is plain data structures edited in place every frame.
 | `snapshots.rs` | `.hlx` snapshots (select, add, copy/paste, delete) and controller assignments; unit `Family` table (snapshot counts, footswitches, paths, FX loops, slot limits). |
 | `hlx.rs` | `.hlx` JSON helpers: blocks, paths, split/merge, moving/placing models, blank presets per unit. |
 | `units.rs` | Converting a `.hlx` to another unit with a report of everything that doesn't fit. |
+| `devpreset_to_hlx.rs` | `DevicePreset::to_hlx`: a pedal document as a `.hlx` (the reverse of `from_hlx`), with a round-trip test over real presets; `guess_device` finds the unit a document came from. |
 | `devpreset.rs` | `DevicePreset`: the pedal's own document (parse/encode byte-for-byte), slots, values, snapshots, controllers, footswitches, split/merge attach, Command Center (commands, Momentary, per-snapshot values, footswitch records), `.hlx` → pedal conversion (including Command Center). |
 | `catalog.rs` | Effect catalog read from HX Edit's installed files: model numbers ↔ symbols, names, categories, colours, parameters with display formatting, DSP loads, picker groups. |
 | `device.rs` | The pedal thread: `Cmd` (UI → thread) and `Event` (thread → UI); heartbeat, recovery after failures, IR kind sorting; `slot_op` copies, moves and swaps preset slots (backup first, read-back check, tested in `fakepedal.rs`); `change_command_center` (the pedal's own Command Center requests, read back and checked, falling back to writing the edit buffer). |

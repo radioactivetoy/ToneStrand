@@ -118,6 +118,7 @@ Handy when working on formats or the protocol; none of them writes to the pedal.
 | `--attach-check <files>` | Move split/merge positions in memory and read them back |
 | `--dsp-report <files>` | Per-path DSP load of pedal documents |
 | `--hlx-check <files>` | Convert `.hlx` files to pedal documents and report |
+| `--to-hlx <file.hxpreset> <out.hlx> [device]` | A pedal preset as a `.hlx`, optionally made for another unit (reads and writes files only) |
 | `--fmt-check` | Print value formatting for every catalog parameter |
 | `--find-blocks <files>` | Find which documents use given models |
 | `--nam2ir <out> <files>` | Convert NAM captures to User IR `.wav` files (writes files, not the pedal) |

@@ -1392,6 +1392,8 @@ impl App {
         let mut save = None;
         let mut confirm = None;
         let mut to_library = false;
+        let mut convert: Option<Option<i64>> = None; // Some(None) an .hlx copy, Some(Some(unit)) one made for that unit
+        let unit_now = self.unit;
         let mut history: Option<bool> = None; // Some(true) undo, Some(false) redo
         let cat = self.catalog.clone();
         let doc = &mut self.docs[i];
@@ -1463,6 +1465,31 @@ impl App {
                     *save = Some(true);
                 }
             }
+        };
+        // A pedal preset can become a .hlx (and from there be made for another unit).
+        let convert_menu = |ui: &mut egui::Ui, doc: &Doc, convert: &mut Option<Option<i64>>| {
+            if !matches!(doc.kind, DocKind::Device { .. }) {
+                return;
+            }
+            ui.menu_button("Make .hlx", |ui| {
+                if ui
+                    .button("A .hlx copy of this preset")
+                    .on_hover_text("A new tab with this preset as a .hlx file, for the unit it came from")
+                    .clicked()
+                {
+                    *convert = Some(None);
+                    ui.close_menu();
+                }
+                let name = crate::units::unit_name(unit_now);
+                if ui
+                    .button(format!("A .hlx made for the {name}"))
+                    .on_hover_text("A new tab with this preset fitted to the unit set at the top, with a list of what had to change")
+                    .clicked()
+                {
+                    *convert = Some(Some(unit_now));
+                    ui.close_menu();
+                }
+            });
         };
         let undo_buttons = |ui: &mut egui::Ui, doc: &Doc, studio: bool, history: &mut Option<bool>| {
             let live_doc = doc.is_live();
@@ -1601,6 +1628,7 @@ impl App {
                     ui.ctx().request_repaint_after(Duration::from_millis(200));
                 }
                 undo_buttons(ui, doc, true, &mut history);
+                convert_menu(ui, doc, &mut convert);
                 if live {
                     // The pedal is where a live preset is kept ("Save on pedal"); the file and
                     // library copies are quieter.
@@ -1623,11 +1651,15 @@ impl App {
                 {
                     to_library = true;
                 }
+                convert_menu(ui, doc, &mut convert);
                 pedal_row(ui, doc, &mut cmds, &mut confirm);
             }
         }
         if save.is_none() && mode != 2 && ui.input_mut(|inp| inp.consume_key(egui::Modifiers::COMMAND, egui::Key::S)) {
             save = Some(false);
+        }
+        if let Some(target) = convert {
+            self.convert_device_doc(i, target);
         }
         if to_library {
             self.save_to_library(i);

@@ -14,7 +14,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
             if have != fam.paths && have > 0 {
                 ui.label(
                     RichText::new(format!(
-                        "This pedal preset has {have} path{}; the unit is set to {}, which has {}. A pedal preset can't change unit here: it keeps its own layout. For {}'s paths, start a new preset (New preset) or open a preset made for it.",
+                        "This pedal preset has {have} path{}; the unit is set to {}, which has {}. A pedal preset can't change unit here: it keeps its own layout. To fit it to {}, use "Make .hlx" in the top bar (a new tab with the preset made for that unit, with a list of what changed), or start a new preset for it.",
                         if have == 1 { "" } else { "s" },
                         fam.name,
                         fam.paths,

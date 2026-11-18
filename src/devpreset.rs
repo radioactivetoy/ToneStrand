@@ -1733,6 +1733,9 @@ fn read_slot(raw: &Value, path: i64, position: usize) -> SlotView {
     SlotView { global: 0, path, position, kind, model, paired, enabled, values }
 }
 
+#[path = "devpreset_to_hlx.rs"]
+mod to_hlx;
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4,7 +4,8 @@
 use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnames, session, wire};
 
 /// The command-line tools (everything else opens the window).
-pub const CLI_FLAGS: [&str; 22] = [
+pub const CLI_FLAGS: [&str; 23] = [
+    "--to-hlx",
     "--cc-live",
     "--put-slot",
     "--cc-snap",
@@ -267,6 +268,40 @@ fn cc_live_tool(rest: &[String]) {
     }
 }
 
+/// `--to-hlx <file.hxpreset> <out.hlx> [device number of the unit to make it for]`: a pedal preset as a `.hlx`,
+/// optionally made for another unit, with the list of what was left out or changed. Writes only the `.hlx`.
+fn to_hlx_tool(rest: &[String]) {
+    let (Some(src), Some(out)) = (rest.first(), rest.get(1)) else {
+        eprintln!("usage: --to-hlx <file.hxpreset> <out.hlx> [device number, e.g. 2162689 for a Helix Floor]");
+        return;
+    };
+    let Some(cat) = tool_catalog() else { return };
+    let Some(preset) = read_preset(src) else { return };
+    let from = preset.guess_device();
+    let name = std::path::Path::new(src).file_stem().and_then(|s| s.to_str()).unwrap_or("Preset").to_owned();
+    let Some((mut json, mut lines)) = need(preset.to_hlx(&cat, from, &name), "converting") else { return };
+    if let Some(unit) = rest.get(2).and_then(|u| u.parse::<i64>().ok()).filter(|u| *u != from) {
+        match crate::units::convert(&mut json, unit, Some(&cat)) {
+            Ok(changes) => lines.extend(changes),
+            Err(why) => {
+                eprintln!("doesn't fit that unit:");
+                for w in why {
+                    eprintln!("  - {w}");
+                }
+                return;
+            }
+        }
+    }
+    let Some(text) = need(serde_json::to_string_pretty(&json), "writing") else { return };
+    if need(std::fs::write(out, text), out).is_none() {
+        return;
+    }
+    println!("wrote {out} (made from a {} preset)", crate::units::unit_name(from));
+    for l in lines {
+        println!("  - {l}");
+    }
+}
+
 /// `--dump-loaded <box address> <file.hxpreset>`: save the loaded preset's edit buffer (what the pedal
 /// holds right now, unsaved changes included) to a file. Reads only.
 fn dump_loaded_tool(rest: &[String]) {
@@ -370,6 +405,7 @@ Read and convert (nothing is written to a pedal):
   --dsp-report <file.hxpreset>...   DSP estimate per path, block by block
   --ctl-check <file.hxpreset>...    controllers must round-trip unchanged
   --dump-doc <file.hxpreset>        print a pedal preset document's structure
+  --to-hlx <file.hxpreset> <out.hlx> [device number]  a pedal preset as a .hlx, optionally made for another unit (writes the .hlx only)
   --commands <file.hxpreset|slot like 42B> [box address]  print a preset's Command Center as the pedal stores it
   --cc-compare <file.hxpreset|slot> <file.hlx> [box address]  line an HX Edit export up with the pedal's Command Center
   --dump-loaded <box address> <file.hxpreset>  save the loaded preset (edit buffer, unsaved changes included) to a file
@@ -422,6 +458,10 @@ pub fn run(args: &[String]) -> bool {
     }
     if let Some(i) = args.iter().position(|a| a == "--cc-live") {
         cc_live_tool(&args[i + 1..]);
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--to-hlx") {
+        to_hlx_tool(&args[i + 1..]);
         return true;
     }
     if let Some(i) = args.iter().position(|a| a == "--dump-loaded") {

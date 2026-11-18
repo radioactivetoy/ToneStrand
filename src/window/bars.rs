@@ -37,6 +37,56 @@ impl App {
         }
     }
 
+    /// "Make .hlx": the open pedal preset as a `.hlx` in a new tab, for the unit it came from (`None`) or made for
+    /// another unit (`Some`), with a list of what was left out or changed.
+    pub(super) fn convert_device_doc(&mut self, i: usize, target: Option<i64>) {
+        let Some(cat) = self.catalog.clone() else {
+            self.note(LogLevel::Bad, "The effect list needs HX Edit's files to make a .hlx.");
+            return;
+        };
+        let Some(doc) = self.docs.get(i) else { return };
+        let DocKind::Device { preset, .. } = &doc.kind else { return };
+        let name = if doc.name.trim().is_empty() { doc.title.clone() } else { doc.name.clone() };
+        let from = preset.guess_device();
+        let (mut json, mut lines) = match preset.to_hlx(&cat, from, &name) {
+            Ok(r) => r,
+            Err(e) => {
+                self.note(LogLevel::Bad, format!("Could not make a .hlx: {e}"));
+                return;
+            }
+        };
+        let mut title = format!("{name} (.hlx)");
+        if let Some(unit) = target.filter(|u| *u != from) {
+            match crate::units::convert(&mut json, unit, Some(&cat)) {
+                Ok(changes) => lines.extend(changes),
+                Err(why) => {
+                    let mut report = vec![format!("\"{name}\" doesn't fit the {}:", crate::units::unit_name(unit))];
+                    report.extend(why.into_iter().map(|w| format!("   • {w}")));
+                    self.unit_report = Some((format!("Can't make \"{name}\" for the {}", crate::units::unit_name(unit)), report, true));
+                    return;
+                }
+            }
+            title = format!("{name} ({})", crate::units::unit_name(unit));
+        }
+        self.docs.push(Doc {
+            title,
+            name: String::new(),
+            path: None,
+            kind: DocKind::Hlx { json },
+            dirty: true,
+            selected: None,
+            example: false,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            last_edit: None,
+        });
+        self.active = self.docs.len() - 1;
+        let shown: Vec<String> = lines.into_iter().filter(|l| !l.trim().is_empty()).map(|l| format!("   • {l}")).collect();
+        if !shown.is_empty() {
+            self.unit_report = Some(("Made from the pedal preset".into(), shown, false));
+        }
+    }
+
     /// A new, empty preset for the current unit, in a new tab.
     pub(super) fn new_preset(&mut self) {
         let json = hlx::blank_for("New Preset", self.unit);

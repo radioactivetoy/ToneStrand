@@ -30,6 +30,15 @@
   order Tab visits the panels in follows how the window is built (top bar, status bar, left panel, then the editor),
   and the chain diagram's own arrow-key moves need a click on a block first.
 - Problem reports never overwrite an earlier one.
+- **Make .hlx: a pedal preset as a `.hlx`, and from there for another unit.** The new "Make .hlx" menu in the top bar
+  of a pedal preset opens a `.hlx` copy in a new tab, or one made for the unit set at the top (a Stomp preset for a
+  Helix Floor gets its Path 2 to fill, with a list of what had to change). Carried: blocks with their knob values and
+  cabs, the split and merge, input and output, names, tempo, each snapshot's block on/offs, footswitch assignments,
+  knob controllers with their snapshot values (also on a cab, the input and output), the Command Center with its
+  per-snapshot values, and the guitar input settings. A controller on a block's on/off, a global setting or a split
+  is reported and left out, as are models with no `.hlx` name. All 126 real Stomp presets tried make the trip pedal
+  preset → `.hlx` → pedal preset with the same blocks, values, snapshots, footswitches, controllers and commands, and
+  fit a Stomp XL and a Helix Floor. Command line: `--to-hlx`.
 
 ### Fixed
 - Several edits sent to the pedal in a row could still show an older copy of the preset for a moment; the choice of which copy to

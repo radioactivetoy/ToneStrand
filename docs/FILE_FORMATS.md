@@ -83,6 +83,10 @@ e.g. snapshot 1 presses snapshot 2 on FS 4 and snapshot 3 on FS 5): the entry na
 line up with the command's arguments (arg2 = press), and the flag was false in all of them (its meaning is not
 known). Written to a slot, the pedal keeps them as sent.
 
+### Pedal document → `.hlx`
+
+`DevicePreset::to_hlx` (`src/devpreset_to_hlx.rs`) is the reverse of the conversion below: blocks, values, cabs, split/merge, input and output, names, tempo, snapshot on/offs, footswitches, knob controllers with snapshot values, the Command Center, guitar settings. Checked by a test that takes every real preset there and back.
+
 ### `.hlx` → pedal document
 
 `DevicePreset::from_hlx` starts from a document read from the same pedal (so the firmware

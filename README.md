@@ -46,7 +46,7 @@ The effect pictures and names come from Line 6; see "Third-party material" below
   split/merge and snapshot change is heard at once; "Save on pedal" keeps it.
 - **Offline editing** of `.hlx` files (the JSON format Helix editors export) and of the pedal's
   own documents (`.hxpreset`), with undo/redo, and sending them to any slot (the slot is backed
-  up first).
+  up first). A pedal preset can be made into a `.hlx` ("Make .hlx"), also fitted to another unit (a Stomp preset for a Helix gets its second path to fill).
 - **Signal chain** drawn as a diagram: drag to move, click the line between effects to split
   there or add an effect / FX loop / send / return, right-click menus, keyboard shortcuts
   (Space on/off, Enter change, Delete remove, arrows to select); Ctrl+O / N / W, Ctrl+Tab for
