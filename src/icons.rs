@@ -319,7 +319,75 @@ fn tile_icon(mut img: ColorImage) -> ColorImage {
             stack.push(i + w);
         }
     }
+    soften_edge(&mut img);
     img
+}
+
+/// The sheet's tiles were drawn on black, so the pixels along a tile's outer edge are the tile's border colour
+/// mixed with that black. Left as they are they show as a dark band around the tile on a coloured block. Turn
+/// them into the border colour with a matching transparency (the mix undone), two pixels deep.
+fn soften_edge(img: &mut ColorImage) {
+    let [w, h] = img.size;
+    let at = |x: usize, y: usize| y * w + x;
+    let clear: Vec<bool> = img.pixels.iter().map(|p| p.a() == 0).collect();
+    // How far each opaque pixel is from the transparent outside (1 = touching it), up to 2.
+    let mut ring = vec![0u8; w * h];
+    for depth in 1..=2u8 {
+        for y in 0..h {
+            for x in 0..w {
+                let i = at(x, y);
+                if clear[i] || ring[i] != 0 {
+                    continue;
+                }
+                let touches = |dx: i32, dy: i32| {
+                    let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                    nx >= 0
+                        && ny >= 0
+                        && (nx as usize) < w
+                        && (ny as usize) < h
+                        && (clear[at(nx as usize, ny as usize)] || (depth == 2 && ring[at(nx as usize, ny as usize)] == 1))
+                };
+                if [(-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)].iter().any(|(dx, dy)| touches(*dx, *dy)) {
+                    ring[i] = depth;
+                }
+            }
+        }
+    }
+    let bright = |p: Color32| {
+        let [r, g, b, _] = p.to_srgba_unmultiplied();
+        r.max(g).max(b) as f32
+    };
+    let src = img.pixels.clone();
+    for y in 0..h {
+        for x in 0..w {
+            let i = at(x, y);
+            if ring[i] == 0 {
+                continue;
+            }
+            // The border colour: the brightest pixel a few steps in that is not itself on the edge.
+            let mut reference = 0.0f32;
+            for dy in -3i32..=3 {
+                for dx in -3i32..=3 {
+                    let (nx, ny) = (x as i32 + dx, y as i32 + dy);
+                    if nx < 0 || ny < 0 || nx as usize >= w || ny as usize >= h {
+                        continue;
+                    }
+                    let j = at(nx as usize, ny as usize);
+                    if !clear[j] && ring[j] == 0 {
+                        reference = reference.max(bright(src[j]));
+                    }
+                }
+            }
+            let own = bright(src[i]);
+            if reference < 40.0 || own >= reference {
+                continue;
+            }
+            let a = (own / reference).clamp(0.0, 1.0);
+            let [r, g, b, _] = src[i].to_srgba_unmultiplied();
+            let up = |c: u8| (c as f32 / a.max(0.05)).min(255.0) as u8;
+            img.pixels[i] = Color32::from_rgba_unmultiplied(up(r), up(g), up(b), (a * 255.0) as u8);
+        }
+    }
 }
 
 fn texture(ctx: &egui::Context, key: String, make: impl FnOnce() -> Option<ColorImage>) -> Option<egui::TextureHandle> {
