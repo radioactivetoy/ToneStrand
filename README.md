@@ -55,11 +55,13 @@ The effect pictures and names come from Line 6; see "Third-party material" below
   replaces is backed up first and the write is read back).
 - **Snapshots**: recall, rename, copy (on the live preset too, with the pedal's own copy and paste), duplicate, delete; per-snapshot knob values.
 - **Controllers**: footswitches, expression pedals, snapshots and MIDI CC, on files and live on the pedal.
-- **Command Center**: all of it in `.hlx` files; on the pedal (HX Stomp), a trigger grid with an editor per trigger,
-  in a file or live on the loaded preset.
+- **Command Center**: all of it in `.hlx` files; on the pedal (HX Stomp), a trigger grid with an editor for every
+  command type, a Momentary switch where the command has one, values per snapshot, in a file or live on the loaded
+  preset (the pedal's own requests, checked by reading back). A `.hlx` sent to the pedal carries its Command Center.
+  The other units' layouts come from the documentation and are marked as not checked.
 - **Compare two presets** (files, open tabs or a slot's preset) and **restore** a backed-up preset or a
   whole-pedal backup, after a list of what it holds.
-- **Preset library** on disk (real folders), import of HX Edit backups (`.hxb`) and setlists
+- **Preset library** on disk (real folders) with tags and search (names, effects, snapshot names, tags), import of HX Edit backups (`.hxb`) and setlists
   (`.hls`), conversion between units with a report of what doesn't fit.
 - **User IRs**: list, upload (any `.wav`, resampled to the pedal's format), download, rename,
   remove; IRs and NAM captures are told apart.
@@ -67,6 +69,9 @@ The effect pictures and names come from Line 6; see "Third-party material" below
   knobs and capture picker, and a converter from `.nam` captures to the `.wav` the block loads.
 - Effect photos and descriptions, real-gear names (optional), effect-type icons, DSP estimate
   per path, a dark or light look (or follow the computer), and a choice of accent colour in Settings.
+- **Problem report** (Activity menu): a folder in Downloads with the log, version, unit and what has been checked on it,
+  and optionally the open preset; nothing is sent anywhere. The first time a unit connects, a notice says what has
+  been tried on it (only the HX Stomp so far).
 - A hidden **self-test** page (Ctrl+Shift+T) that exercises every pedal operation on one slot
   and one IR slot, with backups and automatic restore.
 

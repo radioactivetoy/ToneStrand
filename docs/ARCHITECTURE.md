@@ -30,16 +30,16 @@ thread. Everything else is plain data structures edited in place every frame.
 |---|---|
 | `main.rs` | Entry point: window options, `--screenshot`; hands command-line tools to `cli.rs`. |
 | `cli.rs` | The command-line tools (`--help` lists them; see BUILDING.md). |
-| `window/` | `App` (`mod.rs`: tabs, the layout, dialogs, saving/loading, undo/redo) and one file per part: `bars.rs` (top bars, status bar, left panel), `connection.rs` (device thread events, pairing, pedal cards), `library_page.rs`, `irs.rs`, `settings.rs`, `tests_page.rs`. Pages (Editor, Library, IRs, Settings, hidden Tests), dialogs, the Studio layout, connection handling, saving/loading, undo/redo. |
-| `editors/` | The editor for both document kinds (`mod.rs`: shared widgets and the effect picker; `device.rs`: pedal documents and their controllers card; `hlx_file.rs`: `.hlx`; `studio.rs`: Studio top-bar strips): chain per path, block panel (photo, knobs, cab, footswitch), value widgets (knobs, typed values, IR/NAM slot pickers), effect picker window, controllers card for pedal documents, Studio top-bar strips (snapshot chips, BPM, path meters). |
+| `window/` | `App` (`mod.rs`: tabs, the layout, dialogs, saving/loading, undo/redo) and one file per part: `bars.rs` (top bars, status bar with the Activity menu and problem reports, left panel, the first-connection notice), `connection.rs` (device thread events, pairing, pedal cards), `refresh.rs` (`RefreshGuard`: of several edits sent in a row only the newest copy of the live preset from the pedal is shown), `library_page.rs`, `irs.rs`, `settings.rs`, `tests_page.rs`. Pages (Editor, Library, IRs, Settings, hidden Tests), dialogs, the Studio layout, connection handling, saving/loading, undo/redo. |
+| `editors/` | The editor for both document kinds (`mod.rs`: shared widgets and the effect picker; `device.rs`: pedal documents and their controllers card; `hlx_file.rs`: `.hlx`; `studio.rs`: Studio top-bar strips): chain per path, block panel (every block panel body is `BODY_H` tall: a photo tile, a divider and the knobs; an amp with a cab is two such sections with a line between; inputs and outputs have a jack picture and their own header tile), value widgets (knobs, typed values, IR/NAM slot pickers), effect picker window, controllers card for pedal documents, Studio top-bar strips (snapshot chips, BPM, path meters). |
 | `chain.rs` | The diagram: `Chain { main, lower, split, merge, selected, ... }` → `show()` returns `Vec<Hit>` (click, drop, toggle, gap menu actions...). Draws effect boxes, loop markers for sends/returns, IN/OUT terminals, split/merge dots, keyboard shortcuts. |
-| `controllers.rs` | Controllers panel for `.hlx` (footswitches, expression, snapshots, MIDI, Command Center). |
+| `controllers.rs` | Controllers panel for `.hlx` (footswitches, expression, snapshots, MIDI, Command Center), and the Command Center grid and editor for pedal documents (`device_slots` per unit, `device_command_center`, `hlx_arg_keys`). |
 | `snapshots.rs` | `.hlx` snapshots (select, add, copy/paste, delete) and controller assignments; unit `Family` table (snapshot counts, footswitches, paths, FX loops, slot limits). |
 | `hlx.rs` | `.hlx` JSON helpers: blocks, paths, split/merge, moving/placing models, blank presets per unit. |
 | `units.rs` | Converting a `.hlx` to another unit with a report of everything that doesn't fit. |
-| `devpreset.rs` | `DevicePreset`: the pedal's own document (parse/encode byte-for-byte), slots, values, snapshots, controllers, footswitches, split/merge attach, `.hlx` → pedal conversion. |
+| `devpreset.rs` | `DevicePreset`: the pedal's own document (parse/encode byte-for-byte), slots, values, snapshots, controllers, footswitches, split/merge attach, Command Center (commands, Momentary, per-snapshot values, footswitch records), `.hlx` → pedal conversion (including Command Center). |
 | `catalog.rs` | Effect catalog read from HX Edit's installed files: model numbers ↔ symbols, names, categories, colours, parameters with display formatting, DSP loads, picker groups. |
-| `device.rs` | The pedal thread: `Cmd` (UI → thread) and `Event` (thread → UI); heartbeat, recovery after failures, IR kind sorting; `slot_op` copies, moves and swaps preset slots (backup first, read-back check, tested in `fakepedal.rs`). |
+| `device.rs` | The pedal thread: `Cmd` (UI → thread) and `Event` (thread → UI); heartbeat, recovery after failures, IR kind sorting; `slot_op` copies, moves and swaps preset slots (backup first, read-back check, tested in `fakepedal.rs`); `change_command_center` (the pedal's own Command Center requests, read back and checked, falling back to writing the edit buffer). |
 | `session.rs` | One conversation with the pedal over any `Wire`: handshake, services, chunked sends, acks, request/reply matching, high-level operations (presets, slots, live edits, IRs, controllers). |
 | `proto.rs` | Frame and channel header encoding, opcode and key constants, slot labels. |
 | `msgpack.rs` | MessagePack codec that remembers each value's original format byte so documents re-encode identically. |
@@ -49,12 +49,15 @@ thread. Everything else is plain data structures edited in place every frame.
 | `irs.rs` | WAV ↔ pedal IR (2,048 float32 samples at 48 kHz); NAM capture detection. |
 | `nam.rs` | NAM A2 Lite support: block knob mapping and the `.nam` → IR converter. |
 | `files.rs` | Safe writes: `write_atomic` (temp file + rename) and `unique_path` / `copy_into` (never replace an existing file). |
-| `library.rs`, `folders.rs`, `tonelib.rs` | Preset library and IR/NAM library as real folders on disk. |
+| `library.rs`, `folders.rs`, `tonelib.rs` | Preset library and IR/NAM library as real folders on disk; the library also keeps tags (`.tonestrand-tags.json`, by file name) and searches names, effects, snapshot names and tags. |
+| `support.rs` | What has been tried on which unit (only the HX Stomp so far): shown the first time a unit connects and put in problem reports; the report folder's date stamp. |
+| `cmdtool.rs` | The Command Center command-line tools' logic (`--commands`, `--cc-compare`). |
+| `boxproxy.rs` | `--box-proxy`: a logging pass-through to a Helrig Box, to see what another editor sends the pedal. |
 | `fakepedal.rs` | Tests only: a fake pedal behind `Wire` for testing `Session` without hardware. |
 | `selftest.rs` | Hidden Tests page: backs up, exercises every operation on one preset slot and one IR slot, restores, verifies; stops immediately if the link drops. |
 | `theme.rs` | Palette, accent colour (picked in Settings), cards, pills, help (?) icons, logos. |
-| `icons.rs` | Effect-type icons cut from `assets/block Images/Blocks_stadium.png` (category line icons and per-kind tiles). `kind_label` names an amp carrying its cab "Amp+Cab" (a cab carrying a second cab "Dual Cab"); `paint_model` draws Amp+Cab as the amp tile with a small cab tile on its corner. |
-| `modelinfo.rs` | Effect photos and descriptions (`assets/models`, Line 6 material from its firmware release notes; see README). For an amp + cab or dual cab, `side()` shows the cab's photo under the amp's. |
+| `icons.rs` | Effect-type icons cut from `assets/block Images/Blocks_stadium.png` (category line icons and per-kind tiles; the dark edge of each tile is un-mixed so it does not show as a band on a coloured block). `kind_label` names an amp carrying its cab "Amp+Cab" (a cab carrying a second cab "Dual Cab"); `paint_model` draws Amp+Cab as the amp tile with a small cab tile on its corner. |
+| `modelinfo.rs` | Effect photos and descriptions (`assets/models`, Line 6 material from its firmware release notes; see README). For an amp + cab or dual cab, `photo_tile()` draws one photo at a fixed size (the amp's, and the cab's in its own section); `about()` gives the description for the help pop-up. |
 | `realnames.rs` | Optional real-gear names for effects. |
 
 ## Data model
@@ -81,8 +84,8 @@ thread. Everything else is plain data structures edited in place every frame.
 3. On a live pedal document each change also pushes a `Cmd` (`SetParam`, `SetEnabled`,
    `MoveBlock`, `MoveSplit`/`MoveJoin`, `AssignController`, ...). The window sends them to the
    device thread after the frame.
-4. The device thread runs commands one by one; after structural changes it re-reads the live
-   preset and sends `Event::Document`, which replaces the live tab's document.
+4. The device thread runs commands one by one (Command Center edits use the pedal's own requests and are checked by reading back); after structural changes it re-reads the live
+   preset and sends `Event::Document`, which replaces the live tab's document. When several such edits are sent in a row, `window/refresh.rs` shows only the newest copy.
 5. The effect picker (`editors::picker_window`) is a separate window; its pick comes back to
    `App::apply_pick`, which places the model in the document (and sends `SetModel` live).
 
