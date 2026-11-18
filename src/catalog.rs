@@ -815,11 +815,12 @@ impl Catalog {
         let info = sym.and_then(|s| self.info_for_symbol(&s.symbol));
         let mut pid = sym.and_then(|s| s.params.get(index)).cloned();
         if pid.is_none() {
-            // A single cab keeps its Mic after the parameters `Helix.sym` lists (HX Edit's `@mic`, a choice of 16 mics),
-            // so the value just past that list is the Mic, not an unnamed setting.
+            // The pedal keeps one more value after the parameters `Helix.sym` lists: a single cab's Mic (HX Edit's `@mic`, a
+            // choice of 16 mics) and a delay's Trails (`@trails`, checked on a Simple Delay by switching Trails on and reading
+            // the preset back: the seventh value went from false to true). Name it instead of leaving "Setting N".
             if let (Some(s), Some(i)) = (sym, info) {
-                if index == s.params.len() && i.params.iter().any(|p| p.id == "@mic") {
-                    pid = Some("@mic".to_owned());
+                if index == s.params.len() {
+                    pid = ["@mic", "@trails"].into_iter().find(|id| i.params.iter().any(|p| p.id == *id)).map(str::to_owned);
                 }
             }
         }
@@ -1181,5 +1182,21 @@ mod mic_tests {
         let m = meta.expect("the Mic has a description");
         assert_eq!((m.min, m.max), (0.0, 15.0));
         assert_eq!(cat.param(n, 6).0, "Setting 7", "nothing after the Mic is named");
+    }
+}
+
+#[cfg(test)]
+mod trails_tests {
+    use super::*;
+
+    /// A mono Simple Delay keeps its Trails as a seventh value, after the six `Helix.sym` lists.
+    #[test]
+    fn a_delays_seventh_value_is_trails() {
+        let Some(cat) = find_dir(None).and_then(|p| Catalog::load(&p).ok()) else { return }; // needs HX Edit's files
+        let Some(n) = cat.number_of_symbol("HD2_DelaySimpleDelayMono") else { return };
+        assert_eq!(cat.param(n, 5).0, "Tempo Sync");
+        let (name, meta) = cat.param(n, 6);
+        assert_eq!(name, "Trails");
+        assert_eq!(meta.map(|m| m.value_type), Some(2), "an on/off switch");
     }
 }
