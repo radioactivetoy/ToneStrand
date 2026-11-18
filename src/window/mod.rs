@@ -617,6 +617,9 @@ impl App {
                 // The close cross sits at the right end; it is its own target.
                 let x_rect = egui::Rect::from_center_size(egui::pos2(rect.right() - 5.0 - 8.0, rect.center().y), Vec2::splat(16.0));
                 let x_resp = ui.interact(x_rect, resp.id.with("close"), egui::Sense::click());
+                crate::theme::focus_ring(ui, &resp, 7);
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &d.title));
+                x_resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, format!("Close {}", d.title)));
                 let hot = resp.hovered() || x_resp.hovered();
                 let p = ui.painter();
                 let fill = if active {
@@ -735,7 +738,7 @@ impl App {
             .resizable(false)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
-                let sections: [(&str, &[(&str, &str)]); 3] = [
+                let sections: [(&str, &[(&str, &str)]); 4] = [
                     (
                         "Presets",
                         &[
@@ -755,6 +758,15 @@ impl App {
                             ("Space", "Switch the block on or off"),
                             ("Enter", "Change the effect"),
                             ("Delete", "Remove the block"),
+                        ],
+                    ),
+                    (
+                        "Only the keyboard",
+                        &[
+                            ("Tab / Shift+Tab", "Move to the next / previous control; a ring shows where you are"),
+                            ("Enter or Space", "Press the control that has the ring (a block, a button, a trigger)"),
+                            ("Knobs: arrows", "Change the value (Shift = fine); Page Up / Down big steps"),
+                            ("Knobs: Home / End", "Lowest / highest value; Delete or Backspace for the default"),
                         ],
                     ),
                     ("Anywhere", &[("F1", "This list"), ("Ctrl+Shift+T", "The hidden Tests page")]),
@@ -1844,10 +1856,27 @@ impl eframe::App for App {
                 !matches!(e, egui::Event::PointerMoved(_) | egui::Event::PointerButton { .. } | egui::Event::MouseWheel { .. })
             });
             raw_input.events.push(egui::Event::PointerGone);
+            raw_input.focused = true;
+            // TONESTRAND_TABS=n presses Tab n times (for a picture of where the keyboard focus goes).
+            if let Some(n) = std::env::var("TONESTRAND_TABS").ok().and_then(|v| v.parse::<u64>().ok()) {
+                let frame = _ctx.cumulative_pass_nr();
+                if frame >= 20 && frame < 20 + 2 * n && frame.is_multiple_of(2) {
+                    for pressed in [true, false] {
+                        raw_input.events.push(egui::Event::Key {
+                            key: egui::Key::Tab,
+                            physical_key: None,
+                            pressed,
+                            repeat: false,
+                            modifiers: egui::Modifiers::NONE,
+                        });
+                    }
+                }
+            }
         }
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        theme::track_keyboard_nav(ctx);
         // Fill the monitor on start (asking at window creation isn't always honoured on Windows),
         // unless the window was left smaller last time: then it comes back as it was.
         let fill = self.settings.window.is_none() || self.settings.window_maximized;

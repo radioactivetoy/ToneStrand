@@ -464,6 +464,14 @@ impl Library {
                 });
             });
         let resp = r.response.interact(egui::Sense::click_and_drag());
+        crate::theme::focus_ring(ui, &resp, 10);
+        resp.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                true,
+                format!("{}, {}", e.name, if e.pedal_file { "pedal preset" } else { "hlx preset" }),
+            )
+        });
         resp.dnd_set_drag_payload(vec![e.path.clone()]);
         if resp.double_clicked() {
             actions.push(Action::Open(e.path.clone()));
@@ -491,6 +499,14 @@ impl Library {
             }
         });
         let resp = r.response.interact(egui::Sense::click_and_drag());
+        crate::theme::focus_ring(ui, &resp, 10);
+        resp.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::WidgetType::Button,
+                true,
+                format!("{}, {}", e.name, if e.pedal_file { "pedal preset" } else { "hlx preset" }),
+            )
+        });
         resp.dnd_set_drag_payload(vec![e.path.clone()]);
         if resp.double_clicked() {
             actions.push(Action::Open(e.path.clone()));

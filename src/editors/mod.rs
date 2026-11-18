@@ -452,6 +452,10 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                 let cost = dsp_percent(cat, m.number) + paired.map(|p| dsp_percent(cat, p)).unwrap_or(0.0);
                                 let fits = cost <= st.free + 0.01;
                                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), egui::Sense::click());
+                                crate::theme::focus_ring(ui, &resp, 6);
+                                resp.widget_info(|| {
+                                    egui::WidgetInfo::labeled(egui::WidgetType::Button, true, crate::realnames::show(&m.name))
+                                });
                                 let p = ui.painter();
                                 if resp.hovered() && fits {
                                     p.rect_filled(rect, CornerRadius::same(6), card_hi());
@@ -557,7 +561,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
 
 /// A round knob: drag up/down or left/right (hold Shift for fine steps), scroll
 /// over it, or double-click to return to the default. Returns (changed, send now).
-fn knob(ui: &mut egui::Ui, value: &mut f64, lo: f64, hi: f64, default: Option<f64>) -> (bool, bool) {
+fn knob(ui: &mut egui::Ui, label: &str, value: &mut f64, lo: f64, hi: f64, default: Option<f64>) -> (bool, bool) {
     let size = 46.0;
     let (rect, resp) = ui.allocate_exact_size(Vec2::splat(size), egui::Sense::click_and_drag());
     let span = (hi - lo).max(1e-9);
@@ -585,6 +589,54 @@ fn knob(ui: &mut egui::Ui, value: &mut f64, lo: f64, hi: f64, default: Option<f6
             *value = d;
             commit = true;
         }
+    }
+    // From the keyboard: arrows change it (Shift for fine steps), Page Up and Down in big steps, Home and End go to
+    // the ends, Delete or Backspace to the default. The arrows stay with the knob while it has the focus.
+    if resp.has_focus() {
+        ui.memory_mut(|m| {
+            m.set_focus_lock_filter(resp.id, egui::EventFilter { horizontal_arrows: true, vertical_arrows: true, ..Default::default() })
+        });
+        let step = |ui: &egui::Ui| if ui.input(|i| i.modifiers.shift) { span / 500.0 } else { span / 50.0 };
+        let press = |ui: &mut egui::Ui, key: egui::Key| {
+            ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key) || i.consume_key(egui::Modifiers::SHIFT, key))
+        };
+        let s = step(ui);
+        let mut moved = false;
+        for key in [egui::Key::ArrowUp, egui::Key::ArrowRight] {
+            if press(ui, key) {
+                *value += s;
+                moved = true;
+            }
+        }
+        for key in [egui::Key::ArrowDown, egui::Key::ArrowLeft] {
+            if press(ui, key) {
+                *value -= s;
+                moved = true;
+            }
+        }
+        if press(ui, egui::Key::PageUp) {
+            *value += span / 10.0;
+            moved = true;
+        }
+        if press(ui, egui::Key::PageDown) {
+            *value -= span / 10.0;
+            moved = true;
+        }
+        if press(ui, egui::Key::Home) {
+            *value = lo;
+            moved = true;
+        }
+        if press(ui, egui::Key::End) {
+            *value = hi;
+            moved = true;
+        }
+        if let Some(d) = default {
+            if press(ui, egui::Key::Delete) || press(ui, egui::Key::Backspace) {
+                *value = d;
+                moved = true;
+            }
+        }
+        commit |= moved;
     }
     *value = value.clamp(lo, hi);
 
@@ -616,7 +668,10 @@ fn knob(ui: &mut egui::Ui, value: &mut f64, lo: f64, hi: f64, default: Option<f6
         [c + Vec2::new(a.cos(), a.sin()) * (r - 15.0), c + Vec2::new(a.cos(), a.sin()) * (r - 6.0)],
         Stroke::new(2.5_f32, ink()),
     );
-    resp.on_hover_text("Drag up/down or left/right (Shift = fine), scroll, or double-click for the default");
+    crate::theme::focus_ring(ui, &resp, 24);
+    let shown = *value;
+    resp.widget_info(|| egui::WidgetInfo::slider(true, shown, label));
+    resp.on_hover_text("Drag up/down or left/right (Shift = fine), scroll, or double-click for the default. With the keyboard: arrows (Shift = fine), Page Up/Down, Home/End, Delete for the default");
     ((*value - before).abs() > span * 1e-6, commit)
 }
 
@@ -885,7 +940,8 @@ fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<V
                 _ => (0.0, 10.0_f64.max(f.abs())),
             };
             let default = meta.map(|m| m.default);
-            let (mut changed, mut commit) = knob(ui, &mut f, lo, hi, default);
+            let label = meta.map(|m| m.name.as_str()).unwrap_or("Value");
+            let (mut changed, mut commit) = knob(ui, label, &mut f, lo, hi, default);
             // Click the number to type a value.
             let edit_id = ui.id().with("num-edit");
             let editing: Option<(String, bool)> = ui.data(|d| d.get_temp(edit_id));

@@ -22,6 +22,19 @@
   Lab tool: `--cc-live`.
 - `--help` separates the read-only tools from the lab tools that write to the pedal; CI also builds on macOS and
   Linux (informational).
+- **Keyboard and screen-reader support, first step:** Tab and Shift+Tab move through the controls, with a ring on the
+  ones drawn by hand (chain blocks, the IN and OUT ends, Command Center triggers, picker rows, library cards, preset
+  rows, tabs, knobs) once you use the keyboard; Enter or Space presses the focused one. **Knobs can be set from the
+  keyboard**: arrows (Shift = fine), Page Up and Down, Home and End, Delete for the default. Those controls now also
+  tell a screen reader what they are (block name and state, knob name and value). F1 lists these keys. Not done: the
+  order Tab visits the panels in follows how the window is built (top bar, status bar, left panel, then the editor),
+  and the chain diagram's own arrow-key moves need a click on a block first.
+- Problem reports never overwrite an earlier one.
+
+### Fixed
+- Several edits sent to the pedal in a row could still show an older copy of the preset for a moment; the choice of which copy to
+  show is now one small tested piece, and a Command Center write that falls back to the whole preset no longer
+  triggers a refresh for differences the pedal keeps by its own rules.
 
 ## 1.0.0-beta.3 - 2026-11-18
 

@@ -701,6 +701,14 @@ impl App {
                         let is_current = current_idx == Some(i as i64);
                         let is_chosen = self.chosen == Some(i);
                         let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), row_h), egui::Sense::click_and_drag());
+                        crate::theme::focus_ring(ui, &resp, 5);
+                        resp.widget_info(|| {
+                            egui::WidgetInfo::labeled(
+                                egui::WidgetType::Button,
+                                true,
+                                format!("{} {name}{}", slot_label(i), if is_current { ", loaded" } else { "" }),
+                            )
+                        });
                         let fill = if is_chosen {
                             accent().linear_multiply(0.22)
                         } else if resp.hovered() {

@@ -823,6 +823,14 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                 let active_cmd = read_slot_cmd(json, &slot.key, cur_snap);
                 let is_sel = slot.key == selected_key;
                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(66.0, 52.0), egui::Sense::click());
+                crate::theme::focus_ring(ui, &resp, 8);
+                resp.widget_info(|| {
+                    egui::WidgetInfo::labeled(
+                        egui::WidgetType::Button,
+                        true,
+                        format!("{}{}", slot.title, if active_cmd.is_some() { ", has a command" } else { ", empty" }),
+                    )
+                });
                 let p = ui.painter();
                 let fill = if is_sel {
                     card_hi()
@@ -1166,6 +1174,14 @@ pub fn device_command_center(
                     let in_use = preset.command(i).is_some_and(|(id, _)| id != 0);
                     let is_sel = i == sel;
                     let (rect, resp) = ui.allocate_exact_size(Vec2::new(66.0, 52.0), egui::Sense::click());
+                    crate::theme::focus_ring(ui, &resp, 8);
+                    resp.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::WidgetType::Button,
+                            true,
+                            format!("{}{}", slot.title, if in_use { ", has a command" } else { ", empty" }),
+                        )
+                    });
                     let p = ui.painter();
                     let fill = if is_sel {
                         card_hi()

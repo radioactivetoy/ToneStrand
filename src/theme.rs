@@ -393,6 +393,44 @@ pub fn wants_light(setting: &str, ctx: &egui::Context) -> bool {
     }
 }
 
+/// Whether the person is moving around with the keyboard (set by Tab or an arrow key, cleared by a mouse click):
+/// a focus ring is drawn only then, so clicking does not leave rings behind.
+pub fn track_keyboard_nav(ctx: &egui::Context) {
+    use egui::Key;
+    let (keys, click) = ctx.input(|i| {
+        (
+            [Key::Tab, Key::ArrowUp, Key::ArrowDown, Key::ArrowLeft, Key::ArrowRight, Key::Home, Key::End]
+                .iter()
+                .any(|k| i.key_pressed(*k)),
+            i.pointer.any_pressed(),
+        )
+    });
+    let id = egui::Id::new("keyboard-nav");
+    if click {
+        ctx.data_mut(|d| d.insert_temp(id, false));
+    } else if keys {
+        ctx.data_mut(|d| d.insert_temp(id, true));
+    }
+}
+
+/// Whether the last thing the person did was press a navigation key.
+pub fn keyboard_nav(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(egui::Id::new("keyboard-nav"))).unwrap_or(false)
+}
+
+/// A ring around a widget that is drawn by hand, when it has the keyboard focus and the person is using the
+/// keyboard. Widgets egui draws itself show their own focus.
+pub fn focus_ring(ui: &egui::Ui, resp: &egui::Response, radius: u8) {
+    if resp.has_focus() && keyboard_nav(ui.ctx()) {
+        ui.painter().rect_stroke(
+            resp.rect.expand(2.0),
+            CornerRadius::same(radius),
+            Stroke::new(2.0_f32, accent()),
+            egui::StrokeKind::Outside,
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

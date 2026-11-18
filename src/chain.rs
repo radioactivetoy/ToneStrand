@@ -441,11 +441,15 @@ impl Chain<'_> {
         // Input and output.
         let r = ui.interact(in_rect, ui.id().with((self.id, "in")), egui::Sense::click());
         io_box(ui, in_rect, "IN", self.selected == Selected::Input, r.hovered());
+        crate::theme::focus_ring(ui, &r, 20);
+        r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Input of this path"));
         if r.clicked() {
             hits.push(Hit::Input);
         }
         let r = ui.interact(out_rect, ui.id().with((self.id, "out")), egui::Sense::click());
         io_box(ui, out_rect, "OUT", self.selected == Selected::Output, r.hovered());
+        crate::theme::focus_ring(ui, &r, 20);
+        r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Output of this path"));
         if r.clicked() {
             hits.push(Hit::Output);
         }
@@ -460,13 +464,14 @@ impl Chain<'_> {
                 let pid = ui.id().with((self.id, "gap", c));
                 let r = ui.interact(rect, pid.with("hit"), egui::Sense::click());
                 let open = ui.memory(|m| m.is_popup_open(pid));
-                if r.hovered() || open {
+                if r.hovered() || r.has_focus() || open {
                     p.circle_filled(rect.center(), 8.0, accent_fill());
                     p.text(rect.center(), egui::Align2::CENTER_CENTER, "+", egui::FontId::proportional(13.0), on_accent());
                 }
                 if r.clicked() {
                     ui.memory_mut(|m| m.toggle_popup(pid));
                 }
+                r.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Add or split here"));
                 let r = r.on_hover_text("Click to split here, add an effect or a send/return");
                 egui::popup_below_widget(ui, pid, &r, egui::PopupCloseBehavior::CloseOnClickOutside, |ui| {
                     ui.set_min_width(230.0);
@@ -546,6 +551,14 @@ impl Chain<'_> {
                 let sense = if is_block { egui::Sense::click_and_drag() } else { egui::Sense::click() };
                 let r = ui.interact(rect, ui.id().with((self.id, lane, col)), sense);
                 draw_block(ui, rect, &cell, self.selected == Selected::Cell(lane, col), r.hovered(), self.can_add);
+                crate::theme::focus_ring(ui, &r, 12);
+                r.widget_info(|| {
+                    let text = match &cell {
+                        Cell::Block { title, subtitle, on, .. } => format!("{title}, {subtitle}, {}", if *on { "on" } else { "off" }),
+                        Cell::Empty => "Empty place, press Enter to add an effect".to_owned(),
+                    };
+                    egui::WidgetInfo::labeled(egui::WidgetType::Button, true, text)
+                });
                 if is_block {
                     r.dnd_set_drag_payload(DragCell(lane, col));
                 }
@@ -567,6 +580,8 @@ impl Chain<'_> {
                 if let Cell::Block { on, .. } = &cell {
                     let light = Rect::from_center_size(rect.right_top() + Vec2::new(-12.0, 18.0), Vec2::splat(18.0));
                     let lr = ui.interact(light, ui.id().with((self.id, lane, col, "light")), egui::Sense::click());
+                    crate::theme::focus_ring(ui, &lr, 9);
+                    lr.widget_info(|| egui::WidgetInfo::selected(egui::WidgetType::Checkbox, true, *on, "Block on"));
                     if lr.hovered() {
                         ui.painter().circle_stroke(light.center(), 7.0, Stroke::new(1.5_f32, ink()));
                     }
