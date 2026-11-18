@@ -181,6 +181,8 @@ pub struct App {
     errors_unseen: usize,
     /// The keyboard shortcuts window is open (F1).
     show_shortcuts: bool,
+    /// A unit connected for the first time: shows what has been checked on it.
+    unit_notice: Option<i64>,
     /// A preset dropped on another slot, waiting for "copy, swap or move" (from, to).
     slot_drop: Option<(usize, usize)>,
     /// When a live change was last sent to the pedal (shows "sent" for a moment).
@@ -302,6 +304,7 @@ impl App {
             window_seen: None,
             errors_unseen: 0,
             show_shortcuts: false,
+            unit_notice: None,
             slot_drop: None,
             last_live_send: None,
             refresh_due: 0,
@@ -1888,6 +1891,7 @@ impl eframe::App for App {
         self.close_dialog(ctx);
         self.slot_drop_dialog(ctx);
         self.shortcuts_window(ctx);
+        self.unit_notice_window(ctx);
         if let Some(cat) = self.catalog.clone() {
             if let Some((st, model, cab)) = editors::picker_window(ctx, &mut self.picker, &cat) {
                 self.apply_pick(&cat, st, model, cab);

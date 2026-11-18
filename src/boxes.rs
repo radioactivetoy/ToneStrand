@@ -82,6 +82,8 @@ pub struct Settings {
     pub last_tabs: Vec<String>,
     /// Connect again by itself when the USB pedal comes back after being unplugged.
     pub auto_reconnect: bool,
+    /// Units whose "what is checked" notice has been shown (their device numbers).
+    pub units_seen: Vec<i64>,
 }
 
 impl Default for Settings {
@@ -114,6 +116,7 @@ impl Default for Settings {
             reopen_tabs: false,
             last_tabs: Vec::new(),
             auto_reconnect: true,
+            units_seen: Vec::new(),
         }
     }
 }

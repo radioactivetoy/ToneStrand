@@ -307,6 +307,7 @@ impl App {
     pub(super) fn status_bar(&mut self, ctx: &egui::Context) {
         let mut copied = false;
         let mut save = false;
+        let mut report: Option<bool> = None;
         let mut seen = false;
         let mut help = false;
         let unseen = self.errors_unseen;
@@ -342,6 +343,24 @@ impl App {
                                     save = true;
                                     ui.close_menu();
                                 }
+                                if ui
+                                    .small_button("Problem report")
+                                    .on_hover_text(
+                                        "Save a folder with the log, the version, the unit and what is checked on it (in Downloads)",
+                                    )
+                                    .clicked()
+                                {
+                                    report = Some(false);
+                                    ui.close_menu();
+                                }
+                                if ui
+                                    .small_button("Report with preset")
+                                    .on_hover_text("The same, with the open preset as a file in the folder")
+                                    .clicked()
+                                {
+                                    report = Some(true);
+                                    ui.close_menu();
+                                }
                             });
                             egui::ScrollArea::vertical().max_height(320.0).stick_to_bottom(true).show(ui, |ui| {
                                 for (lvl, msg) in &self.log {
@@ -365,6 +384,9 @@ impl App {
         if copied {
             self.note(LogLevel::Good, "Log copied");
         }
+        if let Some(with_preset) = report {
+            self.save_report(with_preset);
+        }
         if save {
             self.save_log();
         }
@@ -379,6 +401,105 @@ impl App {
             out.push('\n');
         }
         out
+    }
+
+    /// The first time a unit is connected: what has been tried on it and how to report a problem.
+    pub(super) fn unit_notice_window(&mut self, ctx: &egui::Context) {
+        let Some(device) = self.unit_notice else { return };
+        let mut open = true;
+        let mut report = false;
+        egui::Window::new(format!("Connected to {}", crate::units::unit_name(device)))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.set_max_width(460.0);
+                if crate::support::checked_unit(device) {
+                    ui.label("This unit has been tried on a real pedal. Everything below was checked on it:");
+                } else {
+                    ui.label(
+                        RichText::new("This unit has not been tried on a real pedal yet.").color(orange()).strong(),
+                    );
+                    ui.label(
+                        "Everything for it is built from the documented layouts and from the HX Stomp's behaviour. It should work, but check what you write to the pedal, and keep a backup.",
+                    );
+                }
+                ui.add_space(6.0);
+                for a in crate::support::areas(device) {
+                    let (mark, colour) = match a.level {
+                        crate::support::Level::Checked => ("✔", good()),
+                        crate::support::Level::Documented => ("○", muted()),
+                    };
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new(mark).color(colour));
+                        ui.label(a.name);
+                    });
+                }
+                ui.add_space(8.0);
+                ui.label(
+                    RichText::new("If something differs on your unit, save a problem report (Activity menu, bottom right) and send it with what you did.")
+                        .small()
+                        .color(muted()),
+                );
+                ui.horizontal(|ui| {
+                    if ui.button("Save a problem report...").clicked() {
+                        report = true;
+                    }
+                });
+            });
+        if report {
+            self.save_report(false);
+        }
+        if !open {
+            self.unit_notice = None;
+        }
+    }
+
+    /// A folder with a report for a problem: the log, the version, the unit and what has been checked on it, and,
+    /// when asked, the open preset. Saved in the Downloads folder (or the library); nothing is sent anywhere.
+    pub(super) fn save_report(&mut self, with_preset: bool) {
+        let base = dirs::download_dir().unwrap_or_else(|| self.library_dir.clone());
+        let dir = base.join(format!("ToneStrand report {}", crate::support::stamp(std::time::SystemTime::now())));
+        let mut text = format!(
+            "ToneStrand {}\nComputer: {} {}\nUnit set up for: {}\nPedal: {}\n\n{}\n",
+            env!("CARGO_PKG_VERSION"),
+            std::env::consts::OS,
+            std::env::consts::ARCH,
+            crate::units::unit_name(self.unit),
+            self.connected.as_deref().unwrap_or("not connected"),
+            crate::support::summary(self.unit),
+        );
+        text.push_str("Activity log:\n");
+        for (_, msg) in &self.log {
+            text.push_str(msg);
+            text.push('\n');
+        }
+        let result = (|| -> Result<Vec<String>, String> {
+            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            let mut files = vec!["report.txt".to_owned()];
+            crate::files::write_atomic(&dir.join("report.txt"), text.as_bytes()).map_err(|e| e.to_string())?;
+            if with_preset {
+                if let Some(d) = self.docs.get(self.active) {
+                    match &d.kind {
+                        DocKind::Device { preset, .. } => {
+                            crate::files::write_atomic(&dir.join("preset.hxpreset"), &preset.encode()).map_err(|e| e.to_string())?;
+                            files.push("preset.hxpreset".into());
+                        }
+                        DocKind::Hlx { json } => {
+                            let s = serde_json::to_string_pretty(json).map_err(|e| e.to_string())?;
+                            crate::files::write_atomic(&dir.join("preset.hlx"), s.as_bytes()).map_err(|e| e.to_string())?;
+                            files.push("preset.hlx".into());
+                        }
+                    }
+                }
+            }
+            Ok(files)
+        })();
+        match result {
+            Ok(files) => self.note(LogLevel::Good, format!("Saved a problem report ({}) in {}", files.join(", "), dir.display())),
+            Err(e) => self.note(LogLevel::Bad, format!("Could not save the report: {e}")),
+        }
     }
 
     /// "Save..." in the Activity list: the log as a text file.

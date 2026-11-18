@@ -322,10 +322,11 @@ fn box_proxy_tool(rest: &[String]) {
 }
 
 const HELP: &str = "\
-ToneStrand command-line tools (all read-only unless noted):
+ToneStrand command-line tools. The first group only reads; the second WRITES to the pedal and is for testing.
 
+Read and convert (nothing is written to a pedal):
   --probe [box address]            connect to the first USB pedal (or a paired box), list presets and IRs
-  --nam2ir <out folder> <file.nam>...  convert NAM captures to User IR .wav files (writes files)
+  --nam2ir <out folder> <file.nam>...  convert NAM captures to User IR .wav files (writes files on this computer)
   --read-backup <file.hxb|.hls>...  list what an HX Edit backup or setlist holds
   --find-blocks <text> <file.hxb>...  print blocks whose model contains <text>
   --attach-check <file.hxpreset>...  move each split/merge in memory and read it back
@@ -334,18 +335,20 @@ ToneStrand command-line tools (all read-only unless noted):
   --dump-doc <file.hxpreset>        print a pedal preset document's structure
   --commands <file.hxpreset|slot like 42B> [box address]  print a preset's Command Center as the pedal stores it
   --cc-compare <file.hxpreset|slot> <file.hlx> [box address]  line an HX Edit export up with the pedal's Command Center
-  --cc-raw <box address> <slot 0-12> <id> [arg1 .. arg6]  WRITES one Command Center slot of the loaded preset (edit buffer only)
-  --cc-reload <box address>         reload the loaded preset from flash, dropping edit-buffer changes
   --dump-loaded <box address> <file.hxpreset>  save the loaded preset (edit buffer, unsaved changes included) to a file
-  --put-slot <box address> <slot like 42B> <file.hxpreset> <name>  WRITES a saved pedal document to a slot (undo a test)
-  --cc-snap <box address> <snapshot 1-based> <slot 0-12> [arg1 .. arg6]  WRITES one command's values in one snapshot (edit buffer only)
-  --send-hlx <box address> <slot like 42B> <file.hlx> <backup folder>  WRITES a .hlx to a slot after saving the slot's document
   --box-proxy <listen address:port> <box address> [folder for documents]  log what another editor sends the pedal through the box
   --hlx-check <template.hxpreset> [file.hlx]  try the .hlx -> pedal conversion offline
   --fmt-check                       how a dual cab's knobs read at their edges
   --list-models                     every effect in the picker, with real-gear names
   --find-boxes                      look for Helrig Boxes for 6 seconds
   --screenshot <file.png>           open the window, save a picture of it and quit
+
+Lab tools (WRITE to the pedal; use a spare preset and keep a backup):
+  --cc-raw <box address> <slot 0-12> <id> [arg1 .. arg6]  one Command Center slot of the loaded preset (edit buffer only)
+  --cc-snap <box address> <snapshot 1-based> <slot 0-12> [arg1 .. arg6]  one command's values in one snapshot (edit buffer only)
+  --cc-reload <box address>         reload the loaded preset from flash, dropping edit-buffer changes
+  --send-hlx <box address> <slot like 42B> <file.hlx> <backup folder>  a .hlx to a slot, after saving the slot's document
+  --put-slot <box address> <slot like 42B> <file.hxpreset> <name>  a saved pedal document to a slot (undo a test)
 ";
 
 /// Run the tool named in `args`, if any. Returns true when one ran (the program then exits).

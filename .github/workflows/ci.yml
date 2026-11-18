@@ -22,3 +22,25 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Tests
         run: cargo test
+
+  # The app has only been run on Windows. This only checks that it builds (and its tests pass) on macOS and Linux,
+  # so a change that breaks them is seen early. It runs when a pull request is opened or main changes.
+  portable:
+    # Informational until it has been seen to pass: a failure here does not fail the run.
+    continue-on-error: true
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Linux libraries for the window
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libwayland-dev libgl1-mesa-dev libudev-dev libssl-dev pkg-config
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --all-targets
+      - name: Tests
+        run: cargo test

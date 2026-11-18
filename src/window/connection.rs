@@ -131,6 +131,11 @@ impl App {
                     }
                 }
                 self.connected = Some(name);
+                if !self.settings.units_seen.contains(&self.unit) && self.screenshot.is_none() {
+                    self.settings.units_seen.push(self.unit);
+                    self.settings.save();
+                    self.unit_notice = Some(self.unit);
+                }
             }
             Event::Failed(why) => {
                 self.connecting = false;

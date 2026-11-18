@@ -29,6 +29,7 @@ mod routes;
 mod selftest;
 mod session;
 mod snapshots;
+mod support;
 mod theme;
 mod tonelib;
 mod units;
