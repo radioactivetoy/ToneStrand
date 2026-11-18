@@ -812,8 +812,17 @@ impl Catalog {
     /// Name and description of parameter `index` of model `number`, in the pedal's order.
     pub fn param(&self, number: i64, index: usize) -> (String, Option<Param>) {
         let sym = self.sym.get(usize::try_from(number).unwrap_or(usize::MAX));
-        let pid = sym.and_then(|s| s.params.get(index)).cloned();
         let info = sym.and_then(|s| self.info_for_symbol(&s.symbol));
+        let mut pid = sym.and_then(|s| s.params.get(index)).cloned();
+        if pid.is_none() {
+            // A single cab keeps its Mic after the parameters `Helix.sym` lists (HX Edit's `@mic`, a choice of 16 mics),
+            // so the value just past that list is the Mic, not an unnamed setting.
+            if let (Some(s), Some(i)) = (sym, info) {
+                if index == s.params.len() && i.params.iter().any(|p| p.id == "@mic") {
+                    pid = Some("@mic".to_owned());
+                }
+            }
+        }
         let meta = match (&pid, info) {
             (Some(pid), Some(info)) => info.params.iter().find(|p| &p.id == pid).cloned(),
             _ => None,
@@ -1154,5 +1163,23 @@ impl Catalog {
             (true, true, true) => 32,
             _ => 16,
         }
+    }
+}
+
+#[cfg(test)]
+mod mic_tests {
+    use super::*;
+
+    /// A single cab's value after the five that `Helix.sym` lists is its Mic (a choice of 16), not an unnamed "Setting 6".
+    #[test]
+    fn a_single_cabs_sixth_value_is_the_mic() {
+        let Some(cat) = find_dir(None).and_then(|p| Catalog::load(&p).ok()) else { return }; // needs HX Edit's files
+        let Some(n) = cat.number_of_symbol("HD2_Cab1x12FieldCoil") else { return };
+        assert_eq!(cat.param(n, 4).0, "Level");
+        let (name, meta) = cat.param(n, 5);
+        assert_eq!(name, "Mic");
+        let m = meta.expect("the Mic has a description");
+        assert_eq!((m.min, m.max), (0.0, 15.0));
+        assert_eq!(cat.param(n, 6).0, "Setting 7", "nothing after the Mic is named");
     }
 }
