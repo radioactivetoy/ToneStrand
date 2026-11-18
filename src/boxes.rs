@@ -326,17 +326,31 @@ pub fn pair_poll(host: &str, nonce: &str) -> Result<PairPoll, String> {
 /// the network search misses it (some VPN adapters swallow those questions).
 pub fn lookup_local_names(tx: Sender<BoxInfo>) {
     std::thread::spawn(move || {
-        for (name, product) in
-            [("tonestrandbox.local", "ToneStrand Box"), ("helrigbox.local", "Helrig Box"), ("tonerelay.local", "ToneRelay box")]
-        {
-            use std::net::ToSocketAddrs;
-            let Ok(addrs) = (name, 80).to_socket_addrs() else { continue };
-            for a in addrs.filter(|a| a.is_ipv4()) {
-                let host = a.ip().to_string();
-                if let Ok(st) = relay_status(&host) {
-                    let label = if st.id.is_empty() { product.to_owned() } else { format!("{product} {}", st.id) };
-                    let _ = tx.send(BoxInfo { name: label, host, id: st.id });
+        // A box that has just joined the network, or a name lookup that is slow the first time, can miss the
+        // first try, so ask again every few seconds for about a minute, until one answers.
+        for attempt in 0..15 {
+            if attempt > 0 {
+                std::thread::sleep(Duration::from_secs(4));
+            }
+            let mut found = false;
+            for (name, product) in
+                [("tonestrandbox.local", "ToneStrand Box"), ("helrigbox.local", "Helrig Box"), ("tonerelay.local", "ToneRelay box")]
+            {
+                use std::net::ToSocketAddrs;
+                let Ok(addrs) = (name, 80).to_socket_addrs() else { continue };
+                for a in addrs.filter(|a| a.is_ipv4()) {
+                    let host = a.ip().to_string();
+                    if let Ok(st) = relay_status(&host) {
+                        let label = if st.id.is_empty() { product.to_owned() } else { format!("{product} {}", st.id) };
+                        found = true;
+                        if tx.send(BoxInfo { name: label, host, id: st.id }).is_err() {
+                            return;
+                        }
+                    }
                 }
+            }
+            if found {
+                return;
             }
         }
     });

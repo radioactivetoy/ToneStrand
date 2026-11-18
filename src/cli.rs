@@ -750,7 +750,8 @@ pub fn run(args: &[String]) -> bool {
     if args.iter().any(|a| a == "--find-boxes") {
         // Look for ToneStrand Boxes for 6 seconds and print what answers.
         let (tx, rx) = std::sync::mpsc::channel();
-        let _d = boxes::start_discovery(tx);
+        let _d = boxes::start_discovery(tx.clone());
+        boxes::lookup_local_names(tx);
         let until = std::time::Instant::now() + std::time::Duration::from_secs(6);
         while let Ok(b) = rx.recv_timeout(until.saturating_duration_since(std::time::Instant::now())) {
             let status = boxes::relay_status(&b.host)
