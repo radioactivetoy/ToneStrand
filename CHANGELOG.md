@@ -1,12 +1,22 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-beta.5 - 2026-11-18
 
 ### New
-- **The box is the ToneStrand Box.** It is now called ToneStrand Box in the app; ToneStrand finds it by `_tonestrandbox` or
-  `tonestrandbox.local` (Helrig Box and ToneRelay builds are still found), and keeps asking for about a minute when the
-  first lookup misses. The box details show **Direct mode** when the box is on its own network (hold BOOT 2 to 4 s).
-  Firmware, flasher and guides: https://github.com/radioactivetoy/tonestrand-box
+- **The box is the ToneStrand Box.** The Wi-Fi box has its own firmware, flasher and guides now:
+  https://github.com/radioactivetoy/tonestrand-box (a fork of the Helrig Box; the repository says so openly). The app calls
+  it ToneStrand Box and finds it by `_tonestrandbox` or `tonestrandbox.local` (Helrig Box and ToneRelay builds are still
+  found).
+- **Direct mode.** Hold BOOT on the box for 2 to 4 seconds and it raises its own Wi-Fi network (set a password for it on its
+  setup page first); join it from the computer and edit with no router. The box details say **Direct mode** when it is on.
+- **The Connect menu says where the link goes** when you are connected: the cable, or the box with its address and whether it
+  is on your Wi-Fi or on its own network.
+- **A box that moves is found again.** If a box does not answer (it changed network, or went into direct mode), ToneStrand
+  looks for it by name every few seconds and follows it to the new address; Check again does the same at once.
+
+### Changed
+- Command Center grid: the expression pedal's slots (toe switch and pedals) line up and sit in one group.
+- The block menu no longer has "Edit knobs" (selecting a block already shows its knobs); a right-click selects the block.
 
 ## 1.0.0-beta.4 - 2026-11-18
 

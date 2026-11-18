@@ -1,5 +1,5 @@
 ; Inno Setup script for the Windows installer. Built by .github/workflows/release.yml:
-;   ISCC /DAppVersion=1.0.0-beta.4 installer\tonestrand.iss     (output: installer\Output\)
+;   ISCC /DAppVersion=1.0.0-beta.5 installer\tonestrand.iss     (output: installer\Output\)
 ; It installs for the current user only (no administrator rights) and adds an uninstaller.
 
 #ifndef AppVersion

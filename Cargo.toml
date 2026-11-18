@@ -1,6 +1,6 @@
 [package]
 name = "tonestrand"
-version = "1.0.0-beta.4"
+version = "1.0.0-beta.5"
 edition = "2021"
 description = "ToneStrand: preset editor for Helix-family pedals, over USB or through a Helrig Box"
 license = "GPL-3.0-or-later"
