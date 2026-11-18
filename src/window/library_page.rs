@@ -182,6 +182,11 @@ impl App {
                     self.scan_library();
                 }
                 library::Action::Rescan => self.scan_library(),
+                library::Action::SetTags(p, tags) => {
+                    if let Err(e) = self.lib.set_tags(&p, tags) {
+                        self.note(LogLevel::Bad, format!("Could not save the tags: {e}"));
+                    }
+                }
                 library::Action::Import => {
                     if let Some(files) =
                         rfd::FileDialog::new().add_filter("Presets, backups and setlists", &["hlx", "hxpreset", "hxb", "hls"]).pick_files()

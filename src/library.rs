@@ -21,6 +21,10 @@ pub struct Entry {
     pub pedal_file: bool,
     pub blocks: Vec<(String, Color32)>,
     pub modified: Option<SystemTime>,
+    /// The preset's snapshot names, searched too.
+    pub snapshots: Vec<String>,
+    /// Tags the person gave it (kept in a small file in the library folder, by file name).
+    pub tags: Vec<String>,
 }
 
 #[derive(Default)]
@@ -47,6 +51,8 @@ pub enum Action {
     Import,
     /// Folders changed on disk: look again.
     Rescan,
+    /// Give a preset these tags.
+    SetTags(PathBuf, Vec<String>),
 }
 
 fn is_preset(p: &Path) -> bool {
@@ -54,10 +60,13 @@ fn is_preset(p: &Path) -> bool {
 }
 
 /// The effects in a preset file, with their colours, for the cards and the search.
-fn blocks_of(path: &Path, pedal_file: bool, cat: Option<&Catalog>) -> (Option<String>, Vec<(String, Color32)>) {
+/// What a preset file shows in the library: its name (for a .hlx), its effects and its snapshot names.
+type Scanned = (Option<String>, Vec<(String, Color32)>, Vec<String>);
+
+fn blocks_of(path: &Path, pedal_file: bool, cat: Option<&Catalog>) -> Scanned {
     if pedal_file {
         let Ok(doc) = std::fs::read(path).map_err(|e| e.to_string()).and_then(|b| DevicePreset::parse(&b)) else {
-            return (None, Vec::new());
+            return (None, Vec::new(), Vec::new());
         };
         let blocks = doc
             .slots()
@@ -69,10 +78,10 @@ fn blocks_of(path: &Path, pedal_file: bool, cat: Option<&Catalog>) -> (Option<St
                 None => (format!("Model {m}"), theme::number_colour(m)),
             })
             .collect();
-        (None, blocks)
+        (None, blocks, doc.snapshot_names())
     } else {
         let Some(json) = std::fs::read_to_string(path).ok().and_then(|t| crate::hlx::parse_text(&t).ok()) else {
-            return (None, Vec::new());
+            return (None, Vec::new(), Vec::new());
         };
         let blocks = hlx::blocks(&json)
             .into_iter()
@@ -84,13 +93,64 @@ fn blocks_of(path: &Path, pedal_file: bool, cat: Option<&Catalog>) -> (Option<St
                 None => (hlx::pretty_model(&b.model), family_colour(hlx::family(&b.model))),
             })
             .collect();
-        (Some(hlx::name(&json)), blocks)
+        let snaps = crate::snapshots::list(&json).into_iter().map(|(_, n)| n).collect();
+        (Some(hlx::name(&json)), blocks, snaps)
     }
+}
+
+/// The key a preset's tags are kept under: its file name, so they follow it when it moves to another folder.
+fn tag_key(p: &Path) -> String {
+    p.file_name().and_then(|n| n.to_str()).unwrap_or("").to_lowercase()
+}
+
+/// A tag as typed, tidied: no leading `#`, no surrounding spaces, at most 24 characters.
+fn clean_tag(t: &str) -> String {
+    t.trim().trim_start_matches('#').trim().chars().take(24).collect()
 }
 
 impl Library {
     pub fn new(root: PathBuf) -> Library {
         Library { root, grid: true, ..Default::default() }
+    }
+
+    fn tags_path(&self) -> PathBuf {
+        self.root.join(".tonestrand-tags.json")
+    }
+
+    /// The tags kept in the library folder, by file name.
+    fn load_tags(&self) -> std::collections::BTreeMap<String, Vec<String>> {
+        std::fs::read_to_string(self.tags_path()).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+    }
+
+    /// Every tag in use, sorted.
+    pub fn all_tags(&self) -> Vec<String> {
+        let mut v: Vec<String> = self.entries.iter().flat_map(|e| e.tags.iter().cloned()).collect();
+        v.sort_by_key(|t| t.to_lowercase());
+        v.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+        v
+    }
+
+    /// Give a preset these tags (an empty list takes them all away), keeping them in the library folder.
+    pub fn set_tags(&mut self, path: &Path, tags: Vec<String>) -> Result<(), String> {
+        let mut clean: Vec<String> = Vec::new();
+        for t in tags.iter().map(|t| clean_tag(t)).filter(|t| !t.is_empty()) {
+            if !clean.iter().any(|c| c.eq_ignore_ascii_case(&t)) {
+                clean.push(t);
+            }
+        }
+        let key = tag_key(path);
+        let mut map = self.load_tags();
+        if clean.is_empty() {
+            map.remove(&key);
+        } else {
+            map.insert(key.clone(), clean.clone());
+        }
+        let text = serde_json::to_string_pretty(&map).map_err(|e| e.to_string())?;
+        crate::files::write_atomic(&self.tags_path(), text.as_bytes()).map_err(|e| e.to_string())?;
+        for e in self.entries.iter_mut().filter(|e| tag_key(&e.path) == key) {
+            e.tags = clean.clone();
+        }
+        Ok(())
     }
 
     pub fn folder(&self) -> PathBuf {
@@ -102,6 +162,7 @@ impl Library {
 
     pub fn scan(&mut self, cat: Option<&Catalog>) {
         let mut entries = Vec::new();
+        let tag_map = self.load_tags();
         let setlists = crate::folders::scan(&self.root, &self.skip, 4);
         let visit = |dir: &Path, setlist: &str, entries: &mut Vec<Entry>| {
             let Ok(rd) = std::fs::read_dir(dir) else { return };
@@ -111,13 +172,16 @@ impl Library {
                     continue;
                 }
                 let pedal_file = p.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("hxpreset"));
-                let (name, blocks) = blocks_of(&p, pedal_file, cat);
+                let (name, blocks, snapshots) = blocks_of(&p, pedal_file, cat);
+                let tags = tag_map.get(&tag_key(&p)).cloned().unwrap_or_default();
                 let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("Preset").to_owned();
                 entries.push(Entry {
                     name: name.unwrap_or(stem),
                     setlist: setlist.to_owned(),
                     pedal_file,
                     blocks,
+                    snapshots,
+                    tags,
                     modified: e.metadata().ok().and_then(|m| m.modified().ok()),
                     path: p,
                 });
@@ -146,10 +210,16 @@ impl Library {
             }
         }
         let q = self.search.trim().to_lowercase();
+        // "#tag" shows the presets with exactly that tag.
+        if let Some(tag) = q.strip_prefix('#') {
+            return e.tags.iter().any(|t| t.to_lowercase() == tag);
+        }
         q.is_empty()
             || e.name.to_lowercase().contains(&q)
             || e.setlist.to_lowercase().contains(&q)
             || e.blocks.iter().any(|(b, _)| b.to_lowercase().contains(&q))
+            || e.tags.iter().any(|t| t.to_lowercase().contains(&q))
+            || e.snapshots.iter().any(|s| s.to_lowercase().contains(&q))
     }
 
     /// The whole library page.
@@ -165,7 +235,7 @@ impl Library {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             let w = ui.available_width() - 580.0;
-            theme::search_box(ui, &mut self.search, "Search names, folders or effects...", w.max(200.0));
+            theme::search_box(ui, &mut self.search, "Search names, folders, effects, snapshots or #tags...", w.max(200.0));
             ui.label(RichText::new("Sort").small().color(muted()));
             if let Some(s) = theme::segmented(ui, &["Name", "Newest"], self.sort) {
                 self.sort = s;
@@ -181,6 +251,21 @@ impl Library {
                 self.grid = false;
             }
         });
+        // The tags in use: one click shows the presets with that tag.
+        let tags = self.all_tags();
+        if !tags.is_empty() {
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(RichText::new("Tags").small().color(muted()));
+                for t in &tags {
+                    let query = format!("#{t}");
+                    let on = self.search.trim().eq_ignore_ascii_case(&query);
+                    if ui.selectable_label(on, t).clicked() {
+                        self.search = if on { String::new() } else { query };
+                    }
+                }
+            });
+        }
         ui.add_space(10.0);
         ui.horizontal_top(|ui| {
             // Folders (a setlist is a folder: the HX Stomp has no setlists of its own).
@@ -299,6 +384,31 @@ impl Library {
                 }
             }
         });
+        ui.menu_button("Tags", |ui| {
+            // Tags in use (tick one to give it to this preset or take it away), and a box for a new one.
+            for t in self.all_tags() {
+                let mut on = e.tags.iter().any(|x| x.eq_ignore_ascii_case(&t));
+                if ui.checkbox(&mut on, &t).changed() {
+                    let mut next: Vec<String> = e.tags.iter().filter(|x| !x.eq_ignore_ascii_case(&t)).cloned().collect();
+                    if on {
+                        next.push(t.clone());
+                    }
+                    actions.push(Action::SetTags(e.path.clone(), next));
+                    ui.close_menu();
+                }
+            }
+            let id = ui.id().with(("new-tag", &e.path));
+            let mut text: String = ui.data_mut(|d| d.get_temp(id).unwrap_or_default());
+            let resp = ui.add(egui::TextEdit::singleline(&mut text).hint_text("New tag, then Enter").desired_width(150.0));
+            if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && !clean_tag(&text).is_empty() {
+                let mut next = e.tags.clone();
+                next.push(text.clone());
+                actions.push(Action::SetTags(e.path.clone(), next));
+                text.clear();
+                ui.close_menu();
+            }
+            ui.data_mut(|d| d.insert_temp(id, text));
+        });
         ui.separator();
         if ui.button(RichText::new("Delete...").color(bad())).clicked() {
             actions.push(Action::Delete(e.path.clone()));
@@ -314,7 +424,7 @@ impl Library {
             .inner_margin(egui::Margin::same(12))
             .show(ui, |ui| {
                 ui.set_width(250.0);
-                ui.set_height(118.0);
+                ui.set_height(134.0);
                 // Stack the card's contents, whatever layout the grid around it uses.
                 ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
                     ui.horizontal(|ui| {
@@ -347,6 +457,10 @@ impl Library {
                     });
                     let names: Vec<&str> = e.blocks.iter().take(4).map(|b| b.0.as_str()).collect();
                     ui.add(egui::Label::new(RichText::new(names.join(" · ")).small().color(muted())).wrap());
+                    if !e.tags.is_empty() {
+                        let tags: Vec<String> = e.tags.iter().take(5).map(|t| format!("#{t}")).collect();
+                        ui.add(egui::Label::new(RichText::new(tags.join("  ")).small().color(accent())).truncate());
+                    }
                 });
             });
         let resp = r.response.interact(egui::Sense::click_and_drag());
@@ -371,6 +485,10 @@ impl Library {
             }
             let names: Vec<&str> = e.blocks.iter().take(6).map(|b| b.0.as_str()).collect();
             ui.label(RichText::new(names.join(" · ")).small().color(muted()));
+            if !e.tags.is_empty() {
+                let tags: Vec<String> = e.tags.iter().take(5).map(|t| format!("#{t}")).collect();
+                ui.label(RichText::new(tags.join("  ")).small().color(accent()));
+            }
         });
         let resp = r.response.interact(egui::Sense::click_and_drag());
         resp.dnd_set_drag_payload(vec![e.path.clone()]);
@@ -379,5 +497,52 @@ impl Library {
         }
         resp.context_menu(|ui| self.menu(ui, e, can_send, actions));
         ui.separator();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entry(path: &Path, name: &str, snapshots: &[&str]) -> Entry {
+        Entry {
+            path: path.to_path_buf(),
+            name: name.into(),
+            setlist: String::new(),
+            pedal_file: false,
+            blocks: vec![("Scream 808".into(), Color32::WHITE)],
+            modified: None,
+            snapshots: snapshots.iter().map(|s| s.to_string()).collect(),
+            tags: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn tags_are_kept_in_the_library_folder_and_found_by_search() {
+        let dir = std::env::temp_dir().join(format!("tonestrand-tags-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let (a, b) = (dir.join("Blues.hlx"), dir.join("Lead.hlx"));
+        let mut lib = Library::new(dir.clone());
+        lib.entries = vec![entry(&a, "Blues", &["Clean", "Crunch"]), entry(&b, "Lead", &["Solo"])];
+        lib.set_tags(&a, vec!["#Gig".into(), " gig ".into(), "".into(), "Church".into()]).unwrap();
+        assert_eq!(lib.entries[0].tags, vec!["Gig", "Church"], "tidied and without repeats");
+        assert_eq!(lib.all_tags(), vec!["Church", "Gig"]);
+        // Found by tag, by #tag and by snapshot name; "#" is exact.
+        lib.search = "#gig".into();
+        assert!(lib.matches(&lib.entries[0]) && !lib.matches(&lib.entries[1]));
+        lib.search = "#gi".into();
+        assert!(!lib.matches(&lib.entries[0]));
+        lib.search = "church".into();
+        assert!(lib.matches(&lib.entries[0]));
+        lib.search = "solo".into();
+        assert!(!lib.matches(&lib.entries[0]) && lib.matches(&lib.entries[1]));
+        // They survive a new scan of the folder, and follow the file when it moves.
+        assert_eq!(lib.load_tags().get("blues.hlx").map(Vec::len), Some(2));
+        std::fs::create_dir_all(dir.join("Gigs")).unwrap();
+        assert_eq!(tag_key(&dir.join("Gigs").join("Blues.hlx")), tag_key(&a));
+        lib.set_tags(&a, Vec::new()).unwrap();
+        assert!(lib.load_tags().is_empty() && lib.entries[0].tags.is_empty());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
