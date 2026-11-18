@@ -102,13 +102,6 @@ pub fn based_on(symbol: &str) -> Option<String> {
     info(symbol).and_then(|i| i.based_on.clone())
 }
 
-/// Whether there is a photo or a description to show beside the knobs (for an amp + cab,
-/// the cab's photo counts too).
-pub fn has_side(ui: &egui::Ui, symbol: &str, cab: Option<&str>) -> bool {
-    info(symbol).is_some_and(|i| i.description.is_some() || photo(ui.ctx(), symbol).is_some())
-        || cab.is_some_and(|c| photo(ui.ctx(), c).is_some())
-}
-
 /// A framed photo of a model at a fixed size, the same for every model and for an amp's and a cab's. Shows an
 /// empty frame when the model has no photo.
 pub fn photo_tile(ui: &mut egui::Ui, symbol: Option<&str>, width: f32, height: f32) {
@@ -134,45 +127,6 @@ pub fn about(symbol: &str) -> Option<String> {
         text.push_str(n);
     }
     Some(text)
-}
-
-/// A narrow column beside the knobs: the photo (with the cab's photo under it for an amp + cab
-/// or a dual cab), a few lines about the model, and more on demand.
-pub fn side(ui: &mut egui::Ui, symbol: &str, width: f32, cab: Option<&str>) {
-    let framed = |ui: &mut egui::Ui, t: &egui::TextureHandle, h: f32| {
-        egui::Frame::new()
-            .fill(egui::Color32::from_rgb(0x10, 0x11, 0x14))
-            .corner_radius(egui::CornerRadius::same(8))
-            .inner_margin(egui::Margin::same(6))
-            .show(ui, |ui| {
-                ui.set_width(width - 12.0);
-                ui.vertical_centered(|ui| image(ui, t, Vec2::new(width - 24.0, h)));
-            });
-        ui.add_space(6.0);
-    };
-    let cab_photo = cab.and_then(|c| photo(ui.ctx(), c));
-    if let Some(t) = photo(ui.ctx(), symbol) {
-        framed(ui, &t, if cab_photo.is_some() { 90.0 } else { 110.0 });
-    }
-    if let Some(t) = &cab_photo {
-        framed(ui, t, 80.0);
-    }
-    let Some(i) = info(symbol) else { return };
-    if let Some(d) = i.description.as_deref().and_then(|d| d.split("\n\n").next()) {
-        let short: String = if d.chars().count() > 150 { d.chars().take(150).collect::<String>() + "…" } else { d.to_owned() };
-        ui.add(egui::Label::new(RichText::new(short).small().color(muted())).wrap());
-        egui::CollapsingHeader::new(RichText::new("More").small()).id_salt(("about", symbol)).default_open(false).show(ui, |ui| {
-            if let Some(d) = &i.description {
-                ui.label(RichText::new(d).small());
-            }
-            if let Some(n) = &i.notable_users {
-                ui.add_space(4.0);
-                ui.label(RichText::new("Notable players").small().strong().color(muted()));
-                ui.label(RichText::new(n).small());
-            }
-            ui.label(RichText::new("Source: Line 6 release notes").small().color(muted()));
-        });
-    }
 }
 
 /// A tooltip for the effect picker: photo, based-on line and the first lines of the description.

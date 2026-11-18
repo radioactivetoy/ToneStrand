@@ -614,6 +614,9 @@ pub fn hlx_editor(
         ui.horizontal(|ui| {
             let kind = crate::icons::kind_label(&cname, hlx::block(json, &b).and_then(|o| o.get("@cab")).is_some());
             block_header_icon(ui, col, &kind, &b.model, &name, &based_line(&name, crate::modelinfo::based_on(&b.model)));
+            if let Some(about) = crate::modelinfo::about(&b.model) {
+                theme::help(ui, &about);
+            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if let Some(obj) = hlx::block_mut(json, &b) {
                     let mut on = obj.get("@enabled").and_then(|v| v.as_bool()).unwrap_or(true);
@@ -656,18 +659,28 @@ pub fn hlx_editor(
             .and_then(|k| json.pointer(&format!("/data/tone/{}/{k}/@model", b.dsp)))
             .and_then(|m| m.as_str())
             .map(str::to_owned);
-        let side = crate::modelinfo::has_side(ui, &b.model, cab_sym.as_deref()) && ui.available_width() > 700.0;
+        let has_photo = |s: &str| crate::modelinfo::photo(ui.ctx(), s).is_some();
+        let side = (has_photo(&b.model) || cab_sym.as_deref().is_some_and(has_photo)) && ui.available_width() > 700.0;
         let full = ui.available_width();
+        let paired = cab_sym.is_some();
         let body_h = super::BODY_H;
+        let total_h = if paired { 2.0 * body_h + 13.0 } else { body_h };
+        let x0 = ui.cursor().left();
+        let mut line_y: Option<f32> = None;
         ui.horizontal_top(|ui| {
-            ui.set_min_height(body_h);
+            ui.set_min_height(total_h);
             if side {
                 ui.vertical(|ui| {
                     ui.set_width(SIDE_W);
-                    crate::modelinfo::side(ui, &b.model, SIDE_W, cab_sym.as_deref());
+                    ui.spacing_mut().item_spacing.y = 0.0;
+                    crate::modelinfo::photo_tile(ui, Some(&b.model), SIDE_W, body_h);
+                    if paired {
+                        ui.add_space(13.0);
+                        crate::modelinfo::photo_tile(ui, cab_sym.as_deref(), SIDE_W, body_h);
+                    }
                 });
                 ui.add_space(10.0);
-                let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, body_h), egui::Sense::hover());
+                let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, total_h), egui::Sense::hover());
                 ui.painter().rect_filled(r, CornerRadius::ZERO, line());
                 ui.add_space(10.0);
             }
@@ -675,6 +688,7 @@ pub fn hlx_editor(
             ui.vertical(|ui| {
                 ui.set_max_width(rest);
                 ui.set_min_width(rest.min(200.0));
+                let col_top = ui.cursor().top();
                 // Footswitch for this block's on/off.
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Footswitch").color(muted()));
@@ -822,8 +836,13 @@ pub fn hlx_editor(
                         let cab_keys: Vec<String> =
                             hlx::block(json, &cab_block).map(|o| ordered_keys(o, cab_info.as_ref())).unwrap_or_default();
                         if !cab_keys.is_empty() {
-                            ui.add_space(10.0);
-                            ui.separator();
+                            let used = ui.cursor().top() - col_top;
+                            if used < body_h {
+                                ui.add_space(body_h - used);
+                            }
+                            ui.add_space(6.0);
+                            line_y = Some(ui.cursor().top());
+                            ui.add_space(7.0);
                             let dual = b.model.starts_with("HD2_Cab");
                             let mut pick = None;
                             ui.horizontal(|ui| {
@@ -891,6 +910,9 @@ pub fn hlx_editor(
                 }
             });
         });
+        if let Some(y) = line_y {
+            ui.painter().hline(x0..=x0 + full, y, Stroke::new(1.0_f32, line()));
+        }
     });
     if switched {
         snapshots::block_switched(json);
