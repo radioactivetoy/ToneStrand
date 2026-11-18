@@ -511,6 +511,9 @@ impl App {
                         Some(p) => RichText::new(format!("Pedal attached: {p}")).color(good()),
                         None => RichText::new("No pedal attached to the box").color(orange()),
                     });
+                    if st.direct {
+                        ui.label(RichText::new("Direct mode: the box is on its own Wi-Fi network (until it restarts)").color(good()));
+                    }
                     ui.label(RichText::new(if st.relay_only { "Relay mode: on" } else { "Relay mode: off" }).color(if st.relay_only {
                         good()
                     } else {

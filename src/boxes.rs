@@ -25,6 +25,8 @@ pub struct RelayStatus {
     pub client: bool,
     pub pedal: Option<String>,
     pub id: String,
+    /// The box is in direct mode (BOOT held 2 to 4 s): its own network is up and it is not on a router.
+    pub direct: bool,
 }
 
 /// Fields missing from an older file take their value from `Default` (the struct-level
@@ -267,6 +269,7 @@ pub fn relay_status(host: &str) -> Result<RelayStatus, String> {
         client: v.get("client").and_then(|x| x.as_bool()).unwrap_or(false),
         pedal,
         id: v.get("id").and_then(|x| x.as_str()).unwrap_or("").to_owned(),
+        direct: v.get("direct").and_then(|x| x.as_bool()).unwrap_or(false),
     })
 }
 
