@@ -1,7 +1,7 @@
 # ToneStrand
 
 A desktop preset editor for Line 6 Helix-family pedals (HX Stomp, HX Stomp XL, HX Effects,
-Helix Floor / LT / Rack), connected over **USB** or wirelessly through a **ToneStrand Box**.
+Helix Floor / LT / Rack), connected over **USB** or wirelessly through a [**ToneStrand Box**](https://github.com/radioactivetoy/tonestrand-box).
 
 Written in Rust with [egui](https://github.com/emilk/egui) / eframe. One self-contained
 program; no account, no cloud, nothing leaves your computer.
@@ -117,13 +117,28 @@ that box from the same network, for example to send presets to the pedal.
 necessarily make the box reject that token. If a copy may have leaked, also reset the box's
 pairings as the box's own documentation describes, then pair again.
 
+## The ToneStrand Box (wireless)
+
+A small box (a Waveshare ESP32-P4-NANO) that you plug the pedal into by USB. It puts the pedal on your Wi-Fi, so ToneStrand edits it
+with no cable to the computer. Where there is no Wi-Fi, hold BOOT on the box for a few seconds and it makes its own network
+(**direct mode**) that the computer joins instead. For editing, the box only passes the pedal's USB traffic along; it never reads or
+changes your presets. It is also a Bluetooth MIDI device for setlist apps.
+
+- Firmware, browser flasher (desktop Chrome or Edge), build and setup guides: **[radioactivetoy/tonestrand-box](https://github.com/radioactivetoy/tonestrand-box)**
+  (flash it from https://radioactivetoy.github.io/tonestrand-box/).
+- In the app: pick the box in the **Connect** menu; it is found automatically. The first time, press **Pair** and then press **BOOT** on the box once.
+- It is a fork: it starts from the [Helrig Box](https://github.com/maveric1977/helrig-box) by maveric1977, whose firmware is
+  [ToneRelay](https://github.com/maveric1977/ToneRelay) by Mark Peskett and maveric1977. The box repository says what is theirs and what we changed
+  (`PROVENANCE.md`). ToneStrand also still works with a Helrig Box.
+- Tested so far on one board with an HX Stomp (Wi-Fi and direct mode). See the box repository's `docs/status.md` for what is and is not verified.
+
 ## Documentation
 
 | File | For |
 |---|---|
 | [docs/BUILDING.md](docs/BUILDING.md) | Toolchains, platform requirements, build and test commands |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the program is organised: modules, threads, data flow, UI |
-| [docs/PROTOCOL.md](docs/PROTOCOL.md) | The pedal's USB protocol and the Helrig Box relay |
+| [docs/PROTOCOL.md](docs/PROTOCOL.md) | The pedal's USB protocol and the box relay (ToneRelay) |
 | [docs/FILE_FORMATS.md](docs/FILE_FORMATS.md) | Preset documents, `.hlx`, `.hxb`/`.hls`, IR `.wav`, NAM conversion |
 | [docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md) | Command Center: slots, command types, document layout, live editing |
 | [AGENTS.md](AGENTS.md) | Working rules and checklists for coding agents (Claude, Antigravity, ...) |
