@@ -421,7 +421,6 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                     // The first effect that fits: Enter takes it while searching.
                     let mut first: Option<(i64, Option<i64>)> = None;
                     let mut first_pane: Option<(String, String)> = None;
-                    let mut row_no = 0usize;
                     egui::ScrollArea::vertical().id_salt("pick-models").max_height(340.0).auto_shrink([false, false]).show(ui, |ui| {
                         for g in groups.iter().filter(|g| !search.is_empty() || groups.len() == 1 || g.sub == st.sub) {
                             let loops = st.fx_loops.unwrap_or_else(|| snapshots::family_of_device(crate::nam::unit()).fx_loops);
@@ -454,11 +453,6 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                 let fits = cost <= st.free + 0.01;
                                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 34.0), egui::Sense::click());
                                 let p = ui.painter();
-                                // A faint stripe on every other row guides the eye to the DSP figure.
-                                if row_no % 2 == 1 {
-                                    p.rect_filled(rect, CornerRadius::same(6), wash(5));
-                                }
-                                row_no += 1;
                                 if resp.hovered() && fits {
                                     p.rect_filled(rect, CornerRadius::same(6), card_hi());
                                 }
