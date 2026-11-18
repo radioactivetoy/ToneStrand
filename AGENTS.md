@@ -88,7 +88,7 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
   pedal's own ops 90/91 (checked on an HX Stomp only).
 - Sends/returns: drawn as loop markers; placing them uses the nearest free slot. A return
   placed before its send is flagged, not prevented.
-- macOS and Linux builds haven't been tried.
+- macOS builds in CI but has never been run; Linux is not supported (no HX Edit files for the effect list).
 - Command Center on the pedal document (checked on an HX Stomp only): a trigger grid (Instant 1-6, FS 1-5, EXP 1-2) with
   a per-trigger editor for every command type, a snapshot selector (each snapshot keeps its own values) and
   a Momentary switch for CC Toggle and Hotkey. Slot order is from live capture. On the loaded preset a

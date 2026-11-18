@@ -9,17 +9,13 @@
     for linking (for example from MSYS2: `pacman -S mingw-w64-x86_64-gcc`).
   - `x86_64-pc-windows-msvc` needs the Visual Studio Build Tools ("Desktop development with C++").
 - macOS: Xcode command-line tools (`xcode-select --install`).
-- Linux: a C toolchain plus the development packages eframe/rfd need, for example on
-  Debian/Ubuntu:
-  `sudo apt install build-essential pkg-config libgtk-3-dev libxkbcommon-dev libgl1-mesa-dev libudev-dev`
-  (GTK is for the file dialogs, OpenGL for drawing, udev for USB device discovery).
-  USB access to the pedal needs a udev rule for vendor `0e41` (Line 6), e.g.
-  `SUBSYSTEM=="usb", ATTR{idVendor}=="0e41", MODE="0666"` in `/etc/udev/rules.d/50-line6.rules`.
+- Linux: not supported. The effect list, names and knob ranges come from HX Edit's resource files and
+  there is no HX Edit for Linux. (The Windows and macOS builds need nothing more than the above.)
 
 No other system libraries: USB uses the pure-Rust `nusb` crate (no libusb), the WebSocket to
 the Helrig Box uses `tungstenite`, and box discovery uses `mdns-sd`.
 
-So far it has only been built and used on **Windows 11**. The code has macOS/Linux branches
+So far it has only been built and used on **Windows 11**; CI builds macOS but nobody has run it. The code has macOS/Linux branches
 (file manager, link opening, window level) but those builds haven't been tried; expect small
 fixes there.
 

@@ -75,7 +75,7 @@ page, in either form:
 
 You also need [HX Edit](https://line6.com/software/) installed (see above). The program isn't
 code-signed, so Windows SmartScreen may warn the first time: choose **More info**, then
-**Run anyway**. Only Windows has been tried; macOS and Linux users can build from source.
+**Run anyway**. Only Windows has been tried. On a Mac you can build from source (CI builds it; nobody has run it). Linux is not supported: the effect list comes from HX Edit's files, and there is no HX Edit for Linux.
 
 ## Quick start (build from source)
 
