@@ -137,6 +137,8 @@ pub struct App {
     usb_scanned: Option<Instant>,
     boxes: Vec<BoxInfo>,
     box_rx: Receiver<BoxInfo>,
+    box_tx: std::sync::mpsc::Sender<BoxInfo>,
+    box_lookup_at: Option<Instant>,
     _mdns: Option<mdns_sd::ServiceDaemon>,
     pick: Option<Pick>,
     /// The person picked a pedal or box themselves (otherwise one is picked for them).
@@ -270,6 +272,8 @@ impl App {
             usb_scanned: None,
             boxes,
             box_rx,
+            box_tx: tx_local.clone(),
+            box_lookup_at: None,
             _mdns: mdns,
             pick: None,
             pick_manual: false,

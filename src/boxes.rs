@@ -335,28 +335,42 @@ pub fn lookup_local_names(tx: Sender<BoxInfo>) {
             if attempt > 0 {
                 std::thread::sleep(Duration::from_secs(4));
             }
-            let mut found = false;
-            for (name, product) in
-                [("tonestrandbox.local", "ToneStrand Box"), ("helrigbox.local", "Helrig Box"), ("tonerelay.local", "ToneRelay box")]
-            {
-                use std::net::ToSocketAddrs;
-                let Ok(addrs) = (name, 80).to_socket_addrs() else { continue };
-                for a in addrs.filter(|a| a.is_ipv4()) {
-                    let host = a.ip().to_string();
-                    if let Ok(st) = relay_status(&host) {
-                        let label = if st.id.is_empty() { product.to_owned() } else { format!("{product} {}", st.id) };
-                        found = true;
-                        if tx.send(BoxInfo { name: label, host, id: st.id }).is_err() {
-                            return;
-                        }
-                    }
-                }
-            }
-            if found {
+            if lookup_pass(&tx) {
                 return;
             }
         }
     });
+}
+
+/// One look for the box by its `.local` names, in the background. Used again and again while a box that was found
+/// before does not answer (it moved to another network, or into direct mode), so it is picked up at its new address
+/// without waiting for the network search to notice.
+pub fn lookup_local_names_once(tx: Sender<BoxInfo>) {
+    std::thread::spawn(move || {
+        lookup_pass(&tx);
+    });
+}
+
+/// Returns true when a box answered (or the receiver is gone).
+fn lookup_pass(tx: &Sender<BoxInfo>) -> bool {
+    let mut found = false;
+    for (name, product) in
+        [("tonestrandbox.local", "ToneStrand Box"), ("helrigbox.local", "Helrig Box"), ("tonerelay.local", "ToneRelay box")]
+    {
+        use std::net::ToSocketAddrs;
+        let Ok(addrs) = (name, 80).to_socket_addrs() else { continue };
+        for a in addrs.filter(|a| a.is_ipv4()) {
+            let host = a.ip().to_string();
+            if let Ok(st) = relay_status(&host) {
+                let label = if st.id.is_empty() { product.to_owned() } else { format!("{product} {}", st.id) };
+                found = true;
+                if tx.send(BoxInfo { name: label, host, id: st.id }).is_err() {
+                    return true;
+                }
+            }
+        }
+    }
+    found
 }
 
 #[cfg(test)]

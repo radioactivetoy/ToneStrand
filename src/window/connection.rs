@@ -17,8 +17,20 @@ impl App {
             }
         }
         self.maybe_reconnect(ctx);
+        // A box that did not answer (it changed network, or went into direct mode) is looked for again by its .local name every
+        // few seconds, so it is found at its new address in seconds, not minutes.
+        let unanswered = matches!(&self.status, Some((_, Err(_)))) || (self.boxes.is_empty() && self.settings.discover_boxes);
+        if unanswered && self.box_lookup_at.is_none_or(|t| t.elapsed() > Duration::from_secs(5)) {
+            self.box_lookup_at = Some(Instant::now());
+            boxes::lookup_local_names_once(self.box_tx.clone());
+        }
+        let mut moved: Option<String> = None;
         while let Ok(b) = self.box_rx.try_recv() {
             if let Some(existing) = self.boxes.iter_mut().find(|x| (!b.id.is_empty() && x.id == b.id) || x.host == b.host) {
+                if existing.host != b.host {
+                    // The same box at another address: follow it and ask it again.
+                    moved = Some(b.host.clone());
+                }
                 existing.host = b.host.clone();
                 if existing.id.is_empty() {
                     existing.id = b.id.clone();
@@ -27,6 +39,10 @@ impl App {
                 self.note(LogLevel::Info, format!("Found {} at {}", b.name, b.host));
                 self.boxes.push(b);
             }
+        }
+        if let Some(host) = moved {
+            self.note(LogLevel::Info, format!("The box is now at {host}"));
+            self.check_box(host);
         }
         if let Some((host, rx)) = &self.status_rx {
             if let Ok(r) = rx.try_recv() {
@@ -547,6 +563,9 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 if ui.small_button("Check again").clicked() {
                     self.check_box(b.host.clone());
+                    // Also look for it by name: it may have moved to another network (direct mode, or back to Wi-Fi).
+                    self.box_lookup_at = Some(Instant::now());
+                    boxes::lookup_local_names_once(self.box_tx.clone());
                 }
                 if let Some(p) = &self.pairing {
                     let left = boxes::PAIR_WINDOW_SECS.saturating_sub(p.started.elapsed().as_secs());

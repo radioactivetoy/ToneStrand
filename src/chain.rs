@@ -597,6 +597,10 @@ impl Chain<'_> {
                 } else if r.clicked() {
                     hits.push(Hit::Click(lane, col));
                 }
+                // A right-click selects the block too, so its knobs show beside the menu that opens.
+                if r.secondary_clicked() && matches!(&cell, Cell::Block { .. }) {
+                    hits.push(Hit::Click(lane, col));
+                }
                 r.context_menu(|ui| {
                     if let Cell::Block { on, .. } = &cell {
                         if ui.button("Edit knobs").clicked() {
