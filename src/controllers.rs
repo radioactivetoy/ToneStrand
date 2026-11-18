@@ -638,25 +638,6 @@ fn in_pedal_group(key: &str) -> bool {
     key == "commandExpSwitch" || key.starts_with("commandExpPedal")
 }
 
-/// An outline around the expression pedal's slots, with its name beside it, so they read as one thing: the pedal.
-fn pedal_outline(ui: &egui::Ui, rects: &[egui::Rect]) {
-    let Some(first) = rects.first() else { return };
-    let group = rects.iter().fold(*first, |a, r| a.union(*r));
-    ui.painter().rect_stroke(
-        group.expand(5.0),
-        egui::CornerRadius::same(11),
-        egui::Stroke::new(1.0_f32, muted().linear_multiply(0.6)),
-        egui::StrokeKind::Outside,
-    );
-    ui.painter().text(
-        egui::pos2(group.right() + 14.0, group.bottom() - 10.0),
-        egui::Align2::LEFT_CENTER,
-        "Expression pedal",
-        egui::FontId::proportional(11.0),
-        muted(),
-    );
-}
-
 /// Rows of Command Center trigger slots for the unit, matching the pedal's layout.
 pub fn slots_for_family(fam: snapshots::Family) -> Vec<Vec<CmdSlot>> {
     let inst: Vec<CmdSlot> = (1..=6)
@@ -842,7 +823,6 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
         .unwrap_or_else(|| "commandInst1".into());
 
     // Trigger grid (Instant 1..6, Footswitches, Expression pedals).
-    let mut pedal_rects: Vec<egui::Rect> = Vec::new();
     for row in &rows {
         ui.horizontal_wrapped(|ui| {
             let mut prev_kind = None;
@@ -858,9 +838,6 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
                 let active_cmd = read_slot_cmd(json, &slot.key, cur_snap);
                 let is_sel = slot.key == selected_key;
                 let (rect, resp) = ui.allocate_exact_size(Vec2::new(66.0, 52.0), egui::Sense::click());
-                if in_pedal_group(&slot.key) {
-                    pedal_rects.push(rect);
-                }
                 crate::theme::focus_ring(ui, &resp, 8);
                 resp.widget_info(|| {
                     egui::WidgetInfo::labeled(
@@ -908,7 +885,6 @@ fn command_center_ui(ui: &mut egui::Ui, json: &mut serde_json::Value, dirty: &mu
         });
         ui.add_space(4.0);
     }
-    pedal_outline(ui, &pedal_rects);
     ui.data_mut(|d| d.insert_temp(sel_id, selected_key.clone()));
 
     ui.add_space(6.0);
@@ -1206,7 +1182,6 @@ pub fn device_command_center(
         }
         let sel_id = egui::Id::new("dev-cc-selected");
         let mut sel: usize = ui.data(|d| d.get_temp(sel_id)).unwrap_or(0usize).min(slots.len() - 1);
-        let mut pedal_rects: Vec<egui::Rect> = Vec::new();
         for row in &rows {
             ui.horizontal_wrapped(|ui| {
                 let mut prev_pedal = false;
@@ -1219,9 +1194,6 @@ pub fn device_command_center(
                     let in_use = preset.command(i).is_some_and(|(id, _)| id != 0);
                     let is_sel = i == sel;
                     let (rect, resp) = ui.allocate_exact_size(Vec2::new(66.0, 52.0), egui::Sense::click());
-                    if in_pedal_group(&slot.key) {
-                        pedal_rects.push(rect);
-                    }
                     crate::theme::focus_ring(ui, &resp, 8);
                     resp.widget_info(|| {
                         egui::WidgetInfo::labeled(
@@ -1268,7 +1240,6 @@ pub fn device_command_center(
             });
             ui.add_space(4.0);
         }
-        pedal_outline(ui, &pedal_rects);
         ui.data_mut(|d| d.insert_temp(sel_id, sel));
         ui.add_space(6.0);
 
