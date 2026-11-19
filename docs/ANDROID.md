@@ -79,7 +79,7 @@ What the emulator reports (one debug-level line at start-up in `android/src/lib.
 
 ### Checking the real tablet (the graphics driver differs, so this must be done)
 
-1. Build and install: `androidbuild.ps1 -Abi arm64-v8a -Device <serial>` from PowerShell (`adb devices` shows the serial).
+1. Build and install: `android\build.ps1 -Abi arm64-v8a -Device <serial>` from PowerShell (`adb devices` shows the serial).
 2. Screenshot: `adb -s <serial> exec-out screencap -p > tablet-dark.png`.
 3. Read a pixel by opening the PNG in Paint and using the colour picker, or in PowerShell: `Add-Type -AssemblyName System.Drawing; $c=[System.Drawing.Bitmap]::FromFile("C:\path\to\tablet-dark.png").GetPixel(100,800); '{0:x2}{1:x2}{2:x2}' -f $c.R,$c.G,$c.B`. Read the pixel at (100,800) (inside the left preset panel, with the Editor page open and the tablet in landscape at 2560x1600; scale the point for another size). It must be #15161a within 3 per channel; the background at (1280,800) must be #101114 within 3. A value near #404248 may mean a second conversion is happening.
 4. Settings > Display > Light, screenshot again: top bar (1500,60) within 3 of #f6f7fa, background (1280,800) within 3 of #eceef3.
