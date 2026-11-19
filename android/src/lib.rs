@@ -22,7 +22,13 @@ fn android_main(app: AndroidApp) {
         "ToneStrand",
         options,
         Box::new(move |cc| {
-            Ok(Box::new(AndroidShell { inner: App::new(cc, None), android: app, keyboard: keyboard::Keyboard::new(), last_rect: None }))
+            Ok(Box::new(AndroidShell {
+                inner: App::new(cc, None),
+                insets: insets::Insets::new(&app),
+                android: app,
+                keyboard: keyboard::Keyboard::new(),
+                last_rect: None,
+            }))
         }),
     );
     if let Err(e) = run {
@@ -34,11 +40,12 @@ fn android_main(app: AndroidApp) {
     std::process::exit(0);
 }
 
-/// The desktop window plus what only Android needs (insets: added later).
+/// The desktop window plus what only Android needs (the system-bar insets).
 struct AndroidShell {
     inner: App,
     android: AndroidApp,
     keyboard: keyboard::Keyboard,
+    insets: insets::Insets,
     last_rect: Option<eframe::egui::Rect>,
 }
 
@@ -51,8 +58,14 @@ impl eframe::App for AndroidShell {
 
     fn raw_input_hook(&mut self, ctx: &eframe::egui::Context, raw: &mut eframe::egui::RawInput) {
         // Keep the window's content clear of the system bars; every frame so rotation follows.
-        let ppp = raw.viewports.get(&raw.viewport_id).and_then(|v| v.native_pixels_per_point).unwrap_or_else(|| ctx.pixels_per_point());
-        if let Some(rect) = insets::content_rect_points(&self.android, ppp) {
+        // egui points = pixels / (native scale x UI zoom).
+        let native = raw
+            .viewports
+            .get(&raw.viewport_id)
+            .and_then(|v| v.native_pixels_per_point)
+            .unwrap_or_else(|| ctx.native_pixels_per_point().unwrap_or(1.0));
+        let ppp = native * ctx.zoom_factor();
+        if let Some(rect) = self.insets.content_rect_points(&self.android, ppp) {
             if self.last_rect != Some(rect) {
                 log::info!("content rect {rect:?} at {ppp} ppp (raw {:?})", self.android.content_rect());
                 self.last_rect = Some(rect);

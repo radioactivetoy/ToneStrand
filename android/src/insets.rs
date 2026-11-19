@@ -1,16 +1,75 @@
-//! Area clear of the system bars (status bar, navigation bar), in egui points.
+//! Area clear of the system bars (status bar, navigation bar, display cutout), in egui points.
 //!
 //! Under edge-to-edge (targetSdk 35) `AndroidApp::content_rect()` is the whole screen, so the bar
-//! sizes come from the decor view's root window insets through JNI.
+//! sizes come from the decor view's root window insets through JNI. They are cached and read again
+//! only when the content rect or the native window size changes (rotation, resize).
 
 use eframe::egui::{pos2, Rect};
 use jni::objects::{JObject, JValue};
+use jni::{JNIEnv, JavaVM};
 use winit::platform::android::activity::AndroidApp;
 
-/// System bar sizes in pixels: (left, top, right, bottom).
-fn system_bars(app: &AndroidApp) -> Result<(i32, i32, i32, i32), jni::errors::Error> {
-    let vm = unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut _)? };
-    let mut env = vm.attach_current_thread()?;
+type Bars = (i32, i32, i32, i32); // left, top, right, bottom in pixels
+
+pub struct Insets {
+    vm: Option<JavaVM>,
+    key: Option<((i32, i32, i32, i32), (i32, i32))>,
+    bars: Bars,
+    failed: bool,
+}
+
+impl Insets {
+    pub fn new(app: &AndroidApp) -> Self {
+        // SAFETY: vm_as_ptr is the process's JavaVM, valid for the life of the app.
+        let vm = unsafe { JavaVM::from_raw(app.vm_as_ptr() as *mut _) }.ok();
+        Insets { vm, key: None, bars: (0, 0, 0, 0), failed: false }
+    }
+
+    /// The window's content rectangle in points (egui points: pixels / `pixels_per_point`, zoom
+    /// included), clear of the system bars; `None` when unknown or empty.
+    pub fn content_rect_points(&mut self, app: &AndroidApp, pixels_per_point: f32) -> Option<Rect> {
+        let r = app.content_rect();
+        let size = app.native_window().map(|w| (w.width(), w.height())).unwrap_or((0, 0));
+        let key = ((r.left, r.top, r.right, r.bottom), size);
+        if self.key != Some(key) {
+            self.key = Some(key);
+            match self.read(app) {
+                Ok(b) => self.bars = b,
+                Err(e) => {
+                    // Logged once, not every frame.
+                    if !self.failed {
+                        log::error!("system bar insets: {e}");
+                        self.failed = true;
+                    }
+                    self.bars = (0, 0, 0, 0);
+                }
+            }
+        }
+        let (l, t, rt, b) = self.bars;
+        let (left, top, right, bottom) = (r.left + l, r.top + t, r.right - rt, r.bottom - b);
+        if right <= left || bottom <= top || pixels_per_point <= 0.0 {
+            return None;
+        }
+        let p = pixels_per_point;
+        Some(Rect::from_min_max(pos2(left as f32 / p, top as f32 / p), pos2(right as f32 / p, bottom as f32 / p)))
+    }
+
+    fn read(&self, app: &AndroidApp) -> Result<Bars, jni::errors::Error> {
+        let vm = self.vm.as_ref().ok_or(jni::errors::Error::JavaVMMethodNotFound("no JavaVM"))?;
+        // The android_main thread is already attached by android-activity; this is then a no-op guard.
+        let mut env = vm.attach_current_thread()?;
+        let res = env.with_local_frame(16, |env| bars(env, app));
+        if res.is_err() && env.exception_check()? {
+            // A failed call leaves a Java exception pending; clear it or later JNI calls misbehave.
+            env.exception_clear()?;
+        }
+        res
+    }
+}
+
+fn bars(env: &mut JNIEnv, app: &AndroidApp) -> Result<Bars, jni::errors::Error> {
+    // SAFETY: activity_as_ptr is the live Activity reference owned by android-activity; JObject does
+    // not free it on drop.
     let activity = unsafe { JObject::from_raw(app.activity_as_ptr() as jni::sys::jobject) };
     let window = env.call_method(&activity, "getWindow", "()Landroid/view/Window;", &[])?.l()?;
     let decor = env.call_method(&window, "getDecorView", "()Landroid/view/View;", &[])?.l()?;
@@ -18,26 +77,22 @@ fn system_bars(app: &AndroidApp) -> Result<(i32, i32, i32, i32), jni::errors::Er
     if root.is_null() {
         return Ok((0, 0, 0, 0));
     }
-    let kind = env.call_static_method("android/view/WindowInsets$Type", "systemBars", "()I", &[])?.i()?;
-    let insets = env.call_method(&root, "getInsets", "(I)Landroid/graphics/Insets;", &[JValue::Int(kind)])?.l()?;
-    let mut side = |name: &str| -> Result<i32, jni::errors::Error> { env.get_field(&insets, name, "I")?.i() };
-    Ok((side("left")?, side("top")?, side("right")?, side("bottom")?))
-}
-
-/// The window's content rectangle in points, clear of the system bars; `None` when unknown or empty.
-pub fn content_rect_points(app: &AndroidApp, pixels_per_point: f32) -> Option<Rect> {
-    let r = app.content_rect();
-    let (l, t, rt, b) = match system_bars(app) {
-        Ok(v) => v,
-        Err(e) => {
-            log::error!("system bar insets: {e}");
-            (0, 0, 0, 0)
-        }
-    };
-    let (left, top, right, bottom) = (r.left + l, r.top + t, r.right - rt, r.bottom - b);
-    if right <= left || bottom <= top || pixels_per_point <= 0.0 {
-        return None;
+    let sdk = env.get_static_field("android/os/Build$VERSION", "SDK_INT", "I")?.i()?;
+    if sdk >= 30 {
+        let ty = "android/view/WindowInsets$Type";
+        let bars = env.call_static_method(ty, "systemBars", "()I", &[])?.i()?;
+        let cutout = env.call_static_method(ty, "displayCutout", "()I", &[])?.i()?;
+        let insets = env.call_method(&root, "getInsets", "(I)Landroid/graphics/Insets;", &[JValue::Int(bars | cutout)])?.l()?;
+        let mut side = |name: &str| -> Result<i32, jni::errors::Error> { env.get_field(&insets, name, "I")?.i() };
+        Ok((side("left")?, side("top")?, side("right")?, side("bottom")?))
+    } else {
+        // API 26-29: the older accessors (no display cutout).
+        let mut side = |name: &str| -> Result<i32, jni::errors::Error> { env.call_method(&root, name, "()I", &[])?.i() };
+        Ok((
+            side("getSystemWindowInsetLeft")?,
+            side("getSystemWindowInsetTop")?,
+            side("getSystemWindowInsetRight")?,
+            side("getSystemWindowInsetBottom")?,
+        ))
     }
-    let s = 1.0 / pixels_per_point;
-    Some(Rect::from_min_max(pos2(left as f32 * s, top as f32 * s), pos2(right as f32 * s, bottom as f32 * s)))
 }
