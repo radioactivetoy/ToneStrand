@@ -1057,36 +1057,75 @@ pub struct Chip {
     pub colour: Color32,
 }
 
-/// A one-row, sideways-scrolling strip of chips, one per block. True when a chip was tapped.
-pub fn chip_strip(ui: &mut egui::Ui, chips: &[Chip], selected: &mut Option<usize>) -> bool {
-    if chips.is_empty() {
+/// One line of the strip: a lane of a path ("1A" the main lane, "1B" the lower lane after a split, "2A"...).
+/// `label` is empty when the preset is a single plain lane.
+pub struct ChipRow {
+    pub label: String,
+    pub chips: Vec<Chip>,
+}
+
+/// Group blocks given as (path index, lane, chip) into the strip's rows: 1A, 1B, 2A, 2B in that order,
+/// leaving out lanes with no blocks. A lone 1A row gets no label. Chips keep their given order within a row.
+pub fn chip_rows(items: impl IntoIterator<Item = (usize, usize, Chip)>) -> Vec<ChipRow> {
+    let mut by: std::collections::BTreeMap<(usize, usize), Vec<Chip>> = std::collections::BTreeMap::new();
+    for (path, lane, chip) in items {
+        by.entry((path, lane)).or_default().push(chip);
+    }
+    let lone_plain = by.len() == 1 && by.contains_key(&(0, 0));
+    by.into_iter()
+        .map(|((path, lane), chips)| ChipRow {
+            label: if lone_plain { String::new() } else { format!("{}{}", path + 1, if lane == 0 { 'A' } else { 'B' }) },
+            chips,
+        })
+        .collect()
+}
+
+/// The rows of block chips, sideways-scrolling together as one. True when a chip was tapped.
+pub fn chip_strip(ui: &mut egui::Ui, rows: &[ChipRow], selected: &mut Option<usize>) -> bool {
+    if rows.is_empty() {
         ui.label(RichText::new("No blocks").color(muted()));
         return false;
     }
     let mut tapped = false;
+    let labelled = rows.iter().any(|r| !r.label.is_empty());
     egui::ScrollArea::horizontal().id_salt("chip-strip").auto_shrink([false, true]).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            for chip in chips {
-                let font = egui::FontId::proportional(14.0);
-                let galley = ui.painter().layout_no_wrap(chip.name.clone(), font, Color32::WHITE);
-                let size = Vec2::new(galley.size().x + 24.0, 32.0_f32.max(galley.size().y + 12.0));
-                let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
-                let is_sel = *selected == Some(chip.sel);
-                let p = ui.painter();
-                p.rect_filled(rect, CornerRadius::same(8), chip.colour);
-                if is_sel {
-                    p.rect_stroke(rect, CornerRadius::same(8), Stroke::new(2.0_f32, accent()), egui::StrokeKind::Inside);
-                } else if resp.hovered() {
-                    p.rect_stroke(rect, CornerRadius::same(8), Stroke::new(1.0_f32, theme::wash(90)), egui::StrokeKind::Inside);
-                }
-                let bright = theme::is_light()
-                    && (0.299 * chip.colour.r() as f32 + 0.587 * chip.colour.g() as f32 + 0.114 * chip.colour.b() as f32) > 140.0;
-                let tc = if bright { Color32::from_rgb(0x14, 0x17, 0x1c) } else { Color32::WHITE };
-                p.text(rect.center(), egui::Align2::CENTER_CENTER, &chip.name, egui::FontId::proportional(14.0), tc);
-                if resp.clicked() {
-                    *selected = Some(chip.sel);
-                    tapped = true;
-                }
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 6.0;
+            for row in rows {
+                ui.horizontal(|ui| {
+                    if labelled {
+                        let (rect, _) = ui.allocate_exact_size(Vec2::new(26.0, 32.0), egui::Sense::hover());
+                        ui.painter().text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            &row.label,
+                            egui::FontId::proportional(13.0),
+                            muted(),
+                        );
+                    }
+                    for chip in &row.chips {
+                        let font = egui::FontId::proportional(14.0);
+                        let galley = ui.painter().layout_no_wrap(chip.name.clone(), font, Color32::WHITE);
+                        let size = Vec2::new(galley.size().x + 24.0, 32.0_f32.max(galley.size().y + 12.0));
+                        let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+                        let is_sel = *selected == Some(chip.sel);
+                        let p = ui.painter();
+                        p.rect_filled(rect, CornerRadius::same(8), chip.colour);
+                        if is_sel {
+                            p.rect_stroke(rect, CornerRadius::same(8), Stroke::new(2.0_f32, accent()), egui::StrokeKind::Inside);
+                        } else if resp.hovered() {
+                            p.rect_stroke(rect, CornerRadius::same(8), Stroke::new(1.0_f32, theme::wash(90)), egui::StrokeKind::Inside);
+                        }
+                        let bright = theme::is_light()
+                            && (0.299 * chip.colour.r() as f32 + 0.587 * chip.colour.g() as f32 + 0.114 * chip.colour.b() as f32) > 140.0;
+                        let tc = if bright { Color32::from_rgb(0x14, 0x17, 0x1c) } else { Color32::WHITE };
+                        p.text(rect.center(), egui::Align2::CENTER_CENTER, &chip.name, egui::FontId::proportional(14.0), tc);
+                        if resp.clicked() {
+                            *selected = Some(chip.sel);
+                            tapped = true;
+                        }
+                    }
+                });
             }
         });
     });
@@ -1107,6 +1146,22 @@ mod part_tests {
         assert!(!chain_part() && panel_part() && !strip_part());
         set_part(0);
         assert!(chain_part() && panel_part() && !strip_part());
+    }
+
+    fn chip(n: usize) -> Chip {
+        Chip { sel: n, name: format!("b{n}"), colour: Color32::GRAY }
+    }
+
+    #[test]
+    fn rows_follow_paths_and_lanes() {
+        let rows = chip_rows([(0, 0, chip(0)), (1, 0, chip(3)), (0, 1, chip(2)), (0, 0, chip(1))]);
+        let labels: Vec<&str> = rows.iter().map(|r| r.label.as_str()).collect();
+        assert_eq!(labels, ["1A", "1B", "2A"]);
+        assert_eq!(rows[0].chips.iter().map(|c| c.sel).collect::<Vec<_>>(), [0, 1]);
+        let plain = chip_rows([(0, 0, chip(0)), (0, 0, chip(1))]);
+        assert_eq!(plain.len(), 1);
+        assert!(plain[0].label.is_empty());
+        assert!(chip_rows([]).is_empty());
     }
 }
 

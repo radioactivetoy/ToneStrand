@@ -7,15 +7,48 @@ use super::*;
 pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<usize>, picker: &mut Option<PickerState>) {
     let DeviceEdit { preset, live, cmds, cat, dirty } = ed;
     if strip_part() {
-        let chips: Vec<Chip> = preset
-            .slots()
-            .iter()
-            .filter(|s| s.model.is_some() && !matches!(s.kind, Kind::Input | Kind::Output | Kind::Split | Kind::Join | Kind::Empty))
-            .map(|s| {
-                let (name, _, colour) = s.model.map(|m| describe(cat, m)).unwrap_or((s.kind.label().to_owned(), String::new(), muted()));
-                Chip { sel: s.global, name, colour }
-            })
-            .collect();
+        // The same lanes the chain draws: per path, the lower lane between split and merge,
+        // and the main lane between input and output (only what the chain has room for).
+        let slots = preset.slots();
+        let mut paths: Vec<i64> = slots.iter().map(|s| s.path).collect();
+        paths.dedup();
+        let mut items: Vec<(usize, usize, Chip)> = Vec::new();
+        for (pi, path) in paths.iter().enumerate() {
+            let in_path: Vec<&SlotView> = slots.iter().filter(|s| s.path == *path).collect();
+            let pos = |k: Kind| in_path.iter().find(|s| s.kind == k).map(|s| s.position);
+            let (inp, out, split, join) = (pos(Kind::Input), pos(Kind::Output), pos(Kind::Split), pos(Kind::Join));
+            let lower: Vec<&SlotView> = match (split, join) {
+                (Some(a), Some(b)) if a < b => in_path.iter().copied().filter(|s| s.position > a && s.position < b).collect(),
+                _ => Vec::new(),
+            };
+            let main = in_path
+                .iter()
+                .copied()
+                .filter(|s| {
+                    let inside = match (inp, out) {
+                        (Some(a), Some(b)) => s.position > a && s.position < b,
+                        _ => true,
+                    };
+                    inside
+                        && !matches!(s.kind, Kind::Input | Kind::Output | Kind::Split | Kind::Join)
+                        && !lower.iter().any(|l| l.global == s.global)
+                })
+                .take(chain::COLS);
+            let mut add = |s: &SlotView, lane: usize| {
+                if s.model.is_some() && !matches!(s.kind, Kind::Input | Kind::Output | Kind::Split | Kind::Join | Kind::Empty) {
+                    let (name, _, colour) =
+                        s.model.map(|m| describe(cat, m)).unwrap_or((s.kind.label().to_owned(), String::new(), muted()));
+                    items.push((pi, lane, Chip { sel: s.global, name, colour }));
+                }
+            };
+            for s in main {
+                add(s, 0);
+            }
+            for s in lower {
+                add(s, 1);
+            }
+        }
+        let chips = chip_rows(items);
         chip_strip(ui, &chips, selected);
         return;
     }

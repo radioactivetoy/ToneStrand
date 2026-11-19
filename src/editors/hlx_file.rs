@@ -158,14 +158,23 @@ pub fn hlx_editor(
         *selected = blocks.iter().position(is_amp).or(if blocks.is_empty() { None } else { Some(0) });
     }
     if strip_part() {
-        let chips: Vec<Chip> = blocks
-            .iter()
-            .enumerate()
-            .map(|(i, b)| {
+        // The same lanes the chain draws: per path (dsp), the main lane and, when it is really split, the lower lane.
+        let paths: Vec<String> = hlx::dsps(json).into_iter().take(unit.paths).collect();
+        let mut items: Vec<(usize, usize, Chip)> = Vec::new();
+        for (pi, dsp) in paths.iter().enumerate() {
+            let split = hlx::split_of(json, dsp).filter(|_| hlx::split_active(json, dsp) && unit.lanes);
+            let mut mine: Vec<(usize, &hlx::HlxBlock)> =
+                blocks.iter().enumerate().filter(|(_, b)| &b.dsp == dsp && b.key.starts_with("block")).collect();
+            mine.sort_by_key(|(_, b)| (b.path, b.position));
+            for (i, b) in mine {
+                if b.path != 0 && split.is_none() {
+                    continue;
+                }
                 let (name, _, colour) = name_of(&b.model);
-                Chip { sel: i, name, colour }
-            })
-            .collect();
+                items.push((pi, usize::from(b.path != 0), Chip { sel: i, name, colour }));
+            }
+        }
+        let chips = chip_rows(items);
         chip_strip(ui, &chips, selected);
         return;
     }

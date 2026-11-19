@@ -1403,15 +1403,15 @@ impl App {
                 .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin { left: 18, right: 18, top: 6, bottom: 10 }))
                 .show_inside(ui, |ui| {
                     if layout == 2 {
-                        // One row: a strip of the chain's blocks (to pick the one whose knobs are below),
-                        // with the help and restore button at its right end.
-                        let row = ui.horizontal(|ui| {
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        // A strip of the chain's blocks (one row per path and lane, to pick the one whose knobs
+                        // are below), with the help and restore button at the right of the first row.
+                        let row = ui.horizontal_top(|ui| {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                                 if layout_button(ui, "Restore", "Back to the normal layout") {
                                     new_layout = Some(0);
                                 }
-                                theme::help(ui, "The blocks of the chain: tap one to edit its knobs below. Restore brings the chain back.");
-                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                                theme::help(ui, "The blocks of the chain, a line per path and lane: tap one to edit its knobs below. Restore brings the chain back.");
+                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
                                     self.editor(ui, i, 4);
                                 });
                             });
