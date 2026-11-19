@@ -267,7 +267,7 @@ impl App {
                 if purpose == Purpose::SaveToFile {
                     let _ = std::fs::create_dir_all(&self.library_dir);
                     let default = format!("{} {}.hxpreset", slot_label(slot), device::sanitize(&name));
-                    if let Some(p) = rfd::FileDialog::new()
+                    if let Some(p) = crate::platform::FileDialog::new()
                         .set_directory(&self.library_dir)
                         .set_file_name(&default)
                         .add_filter("Pedal preset", &["hxpreset"])
@@ -686,7 +686,7 @@ impl App {
                 ui.menu_button("Backups", |ui| {
                     if ui.button("Back up this setlist...").on_hover_text("Save every preset of this setlist as files").clicked() {
                         ui.close_menu();
-                        if let Some(folder) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
+                        if let Some(folder) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
                             let names = self.presets.clone();
                             self.send(Cmd::Backup { setlist: self.setlist, count: self.presets.len(), folder, names });
                         }
@@ -697,7 +697,7 @@ impl App {
                         .clicked()
                     {
                         ui.close_menu();
-                        if let Some(folder) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
+                        if let Some(folder) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
                             self.send(Cmd::FullBackup { folder });
                         }
                     }

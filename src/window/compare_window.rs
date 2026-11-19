@@ -127,7 +127,8 @@ impl App {
                 }
             });
         if let Some(side) = file_for {
-            if let Some(p) = rfd::FileDialog::new().set_directory(&self.library_dir).add_filter("Presets", &["hlx", "hxpreset"]).pick_file()
+            if let Some(p) =
+                crate::platform::FileDialog::new().set_directory(&self.library_dir).add_filter("Presets", &["hlx", "hxpreset"]).pick_file()
             {
                 *(if side == 0 { &mut new_a } else { &mut new_b }) = self.pick_file(&p, &cat);
             }

@@ -76,7 +76,7 @@ impl App {
     /// "Restore the whole pedal": pick a backup folder and show what is in it.
     pub(super) fn open_restore_all(&mut self) {
         let Some(folder) =
-            rfd::FileDialog::new().set_directory(&self.library_dir).set_title("Pick a whole-pedal backup folder").pick_folder()
+            crate::platform::FileDialog::new().set_directory(&self.library_dir).set_title("Pick a whole-pedal backup folder").pick_folder()
         else {
             return;
         };

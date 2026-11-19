@@ -230,7 +230,7 @@ impl ToneLib {
                 ui.horizontal_wrapped(|ui| {
                     theme::search_box(ui, &mut self.search, "Search IRs and captures", 220.0);
                     if ui.button("Import files...").on_hover_text("Copy .wav IRs and .nam captures into the selected folder").clicked() {
-                        if let Some(files) = rfd::FileDialog::new().add_filter("IRs and NAM captures", &["wav", "nam"]).pick_files() {
+                        if let Some(files) = crate::platform::FileDialog::new().add_filter("IRs and NAM captures", &["wav", "nam"]).pick_files() {
                             let dir = self.folder();
                             let _ = std::fs::create_dir_all(&dir);
                             let n = files.iter().filter(|f| crate::files::copy_into(f, &dir).is_ok()).count();

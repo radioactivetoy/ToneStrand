@@ -188,8 +188,9 @@ impl App {
                     }
                 }
                 library::Action::Import => {
-                    if let Some(files) =
-                        rfd::FileDialog::new().add_filter("Presets, backups and setlists", &["hlx", "hxpreset", "hxb", "hls"]).pick_files()
+                    if let Some(files) = crate::platform::FileDialog::new()
+                        .add_filter("Presets, backups and setlists", &["hlx", "hxpreset", "hxb", "hls"])
+                        .pick_files()
                     {
                         self.import_files(files);
                     }

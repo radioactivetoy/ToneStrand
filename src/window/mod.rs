@@ -587,7 +587,7 @@ impl App {
         let path = if save_as || doc.path.is_none() {
             let _ = std::fs::create_dir_all(&lib);
             let base = if doc.name.is_empty() { doc.title.clone() } else { doc.name.clone() };
-            rfd::FileDialog::new()
+            crate::platform::FileDialog::new()
                 .set_directory(&lib)
                 .set_file_name(format!("{}.{ext}", device::sanitize(&base)))
                 .add_filter("Preset", &[ext])
@@ -1316,7 +1316,7 @@ impl App {
                 });
             });
         if choose {
-            if let Some(d) = rfd::FileDialog::new().pick_folder() {
+            if let Some(d) = crate::platform::FileDialog::new().pick_folder() {
                 self.settings.hx_edit = Some(d.to_string_lossy().into_owned());
                 self.settings.save();
                 self.reload_catalog();

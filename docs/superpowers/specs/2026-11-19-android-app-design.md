@@ -132,6 +132,9 @@ synchronously) so call sites have one shape: request → pending → result on a
   then disconnects cleanly between commands (never mid-transfer). Writes in progress finish before suspend is
   allowed; on return, reconnect and re-read the live preset.
 
+- **Learned from the spike (2026-11-19):** Box pairing and live editing worked from the emulator. Knobs and
+  block drag worked on touch. A knob sends to the pedal only when released.
+
 ### 4. Catalog (the HX Edit bypass)
 
 - **Converter:** a desktop command-line tool `tonestrand --export-catalog <hx edit res folder> <out dir>` that
@@ -177,6 +180,20 @@ Shared UI changes, active when the input is touch (`egui` reports touch events; 
 - **Desktop unchanged:** every touch change is gated on touch input or narrow width, so the Windows layout and
   mouse behaviour stay as they are. Desktop screenshots before/after (`--screenshot`) are compared at each step.
 
+**Learned from the spike (2026-11-19):**
+
+- **GameActivity, not NativeActivity.** With NativeActivity, Android says the keyboard is shown but Gboard
+  draws no keys: there is no input connection. GameActivity has one, so the app uses it.
+- **Keyboard glue.** winit 0.30 drops GameActivity's text events, so the app reads `text_input_state()` itself,
+  with a one-character placeholder in the field, and gives a lone key release the key press it is missing.
+  One backspace tap arrives twice (a key release and a text change); count it once.
+- **Colours look washed on the emulator** (the panel colour #15161a shows as about #404248). Check on a real
+  tablet before changing the palette (Task 7).
+- **Back, then reopen, gave a black screen.** Exit the process when the window closes.
+- **The system bars overlap the top bar.** Lay the app out inside the content rectangle the system gives.
+- **The preset list cannot scroll by touch:** a drag becomes drag-and-drop. Plain drags must scroll; long-press
+  picks up.
+
 ### 6. Library and backups
 
 - **Backups** (slot and IR backups, whole-pedal backups): always written to app-private storage first, with the
@@ -214,6 +231,8 @@ Shared UI changes, active when the input is touch (`egui` reports touch events; 
   Desktop-only dependencies (`rfd`, `nusb` if replaced on Android, `webbrowser`) move under
   `[target.'cfg(not(target_os = "android"))'.dependencies]`; Android-only ones (`jni`, `ndk-context`,
   `android-activity` via eframe's feature) under `cfg(target_os = "android")`.
+- **Decided by the spike:** Gradle with `androidx.games:games-activity:4.4.0` (plus appcompat and kotlin-bom
+  1.8.22), with the Rust library built by `cargo-ndk`. The activity is GameActivity (see section 5).
 - Build with `cargo-ndk` (or `xbuild`) into a minimal Gradle project under `android/` (manifest with the USB
   device filter for vendor 0x0e41, internet, Wi-Fi multicast; the small Kotlin helper for SAF/USB permission).
   Targets: `arm64-v8a` (tablets and phones), `x86_64` (emulator). Builder's call between `cargo-apk`,

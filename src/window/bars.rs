@@ -170,7 +170,9 @@ impl App {
     }
 
     pub(super) fn open_file_dialog(&mut self) {
-        if let Some(p) = rfd::FileDialog::new().set_directory(&self.library_dir).add_filter("Presets", &["hlx", "hxpreset"]).pick_file() {
+        if let Some(p) =
+            crate::platform::FileDialog::new().set_directory(&self.library_dir).add_filter("Presets", &["hlx", "hxpreset"]).pick_file()
+        {
             self.open_file(&p);
         }
     }
@@ -554,7 +556,7 @@ impl App {
 
     /// "Save..." in the Activity list: the log as a text file.
     fn save_log(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = crate::platform::FileDialog::new()
             .set_directory(&self.library_dir)
             .set_file_name("ToneStrand log.txt")
             .add_filter("Text", &["txt"])

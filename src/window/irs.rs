@@ -5,11 +5,14 @@ use super::*;
 impl App {
     /// Pick .nam captures and a folder, write a User IR .wav for each, and show what happened.
     pub(super) fn convert_nam_files(&mut self) {
-        let Some(files) = rfd::FileDialog::new().set_title("Pick NAM captures").add_filter("NAM captures", &["nam"]).pick_files() else {
+        let Some(files) =
+            crate::platform::FileDialog::new().set_title("Pick NAM captures").add_filter("NAM captures", &["nam"]).pick_files()
+        else {
             return;
         };
         let start = self.settings.nam_out_dir.clone().map(PathBuf::from).unwrap_or_else(|| self.library_dir.clone());
-        let Some(out) = rfd::FileDialog::new().set_title("Where to save the .wav files").set_directory(&start).pick_folder() else {
+        let Some(out) = crate::platform::FileDialog::new().set_title("Where to save the .wav files").set_directory(&start).pick_folder()
+        else {
             return;
         };
         self.settings.nam_out_dir = Some(out.to_string_lossy().into_owned());
@@ -39,7 +42,7 @@ impl App {
     /// Pick .wav IRs or .nam captures and ask before writing them into slots: the
     /// selected slots when there are as many, otherwise empty slots from the first selected one.
     pub(super) fn upload_irs(&mut self) {
-        let Some(files) = rfd::FileDialog::new()
+        let Some(files) = crate::platform::FileDialog::new()
             .set_title("Pick IRs or NAM captures to send to the pedal")
             .set_directory(self.tone_dir())
             .add_filter("IRs and NAM captures", &["wav", "nam"])

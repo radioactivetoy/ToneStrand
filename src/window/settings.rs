@@ -34,7 +34,7 @@ impl App {
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
                             if theme::primary_button(ui, "Choose folder...").clicked() {
-                                if let Some(d) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
+                                if let Some(d) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
                                     new_dir = Some(Some(d));
                                 }
                             }
@@ -68,7 +68,7 @@ impl App {
                         });
                         ui.horizontal(|ui| {
                             if ui.button("Choose folder...").clicked() {
-                                if let Some(d) = rfd::FileDialog::new().set_directory(self.tone_dir()).pick_folder() {
+                                if let Some(d) = crate::platform::FileDialog::new().set_directory(self.tone_dir()).pick_folder() {
                                     tone_change = Some(Some(d.to_string_lossy().into_owned()));
                                 }
                             }
@@ -118,7 +118,7 @@ impl App {
                         });
                         ui.horizontal(|ui| {
                             if ui.button("Choose folder...").clicked() {
-                                if let Some(d) = rfd::FileDialog::new().pick_folder() {
+                                if let Some(d) = crate::platform::FileDialog::new().pick_folder() {
                                     self.settings.hx_edit = Some(d.to_string_lossy().into_owned());
                                     self.settings.save();
                                     reload = true;

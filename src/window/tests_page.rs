@@ -92,7 +92,7 @@ impl App {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(format!("Backups go to {}", folder.display())).small().color(muted()));
                             if ui.small_button("Change...").clicked() {
-                                if let Some(d) = rfd::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
+                                if let Some(d) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
                                     self.tests.folder = Some(d);
                                 }
                             }
