@@ -1,0 +1,8 @@
+target/
+jniLibs/
+*.apk
+*.idsig
+app/.gradle/
+app/app/build/
+app/build/
+app/local.properties

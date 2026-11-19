@@ -1,0 +1,32 @@
+# The Android app: the desktop library started inside a GameActivity.
+# Its own workspace so nothing here reaches the Windows build.
+[package]
+name = "tonestrand-android"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "tonestrand_android"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+tonestrand = { path = ".." }
+tonestrand-core = { path = "../core" }
+eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "android-game-activity"] }
+log = "0.4"
+winit = { version = "0.30", default-features = false, features = ["android-game-activity"] }
+android_logger = "0.14"
+
+[workspace]
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 2
+
+[patch.crates-io]
+webbrowser = { path = "../vendor/webbrowser" }
+autocfg = { path = "../vendor/autocfg" }
