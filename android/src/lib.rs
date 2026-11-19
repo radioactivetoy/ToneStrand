@@ -1,5 +1,6 @@
 //! The ToneStrand app on Android: the desktop library's window, started inside a GameActivity.
 
+mod files;
 mod insets;
 mod keyboard;
 mod multicast;
@@ -15,9 +16,12 @@ fn android_main(app: AndroidApp) {
         std::env::set_var("HOME", &dir);
         std::env::set_var("XDG_CONFIG_HOME", dir.join("config"));
         std::env::set_var("XDG_DOCUMENTS_DIR", dir.join("Documents"));
-        std::env::set_var("TONESTRAND_LIBRARY", dir.join("Library"));
     }
     std::panic::set_hook(Box::new(|p| log::error!("panic: {p}")));
+    // The shared Documents/ToneStrand folder when usable, else the private Library; the picker.
+    if let Some(dir) = app.internal_data_path() {
+        files::init(&app, &dir.join("Library"));
+    }
     multicast::acquire(&app);
     let options = eframe::NativeOptions { android_app: Some(app.clone()), ..Default::default() };
     let run = eframe::run_native(
