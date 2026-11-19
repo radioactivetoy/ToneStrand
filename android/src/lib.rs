@@ -26,6 +26,7 @@ fn android_main(app: AndroidApp) {
     if let Err(e) = run {
         log::error!("run_native: {e}");
     }
+    log::info!("window closed; exiting");
     // Back destroys the activity and ends the window; winit cannot start a second event loop in
     // this process, so end it and let the next launch start a fresh one.
     std::process::exit(0);

@@ -31,8 +31,23 @@ Back / Home check (screenshots go to `target/android-check/`):
 
 Start, screenshot; `adb shell input keyevent KEYCODE_BACK`, wait 3 s, start, screenshot;
 `KEYCODE_HOME`, start, screenshot. All three must show the editor, not a black screen.
-After the window closes the library calls `std::process::exit(0)` so the next launch gets a
-fresh process (winit cannot create a second event loop in one process).
+
+Caveat: on this emulator (API 35) Back on the root activity only moved the app to the background
+(`am start` said "intent delivered to running instance"), so this script does NOT exercise the
+exit path. A fresh process was exercised separately: `adb shell am force-stop com.tonestrand.app`,
+start, screenshot (`4-after-force-stop.png`), and swipe-away from recents
+(`KEYCODE_APP_SWITCH`, `input swipe 1280 900 1280 100 200`; the process was gone afterwards,
+start gave a new pid and the editor, `6-after-swipe-away.png`). Whether the system killed the
+process or the exit ran was not visible (no "window closed; exiting" log line was seen).
+
+After the window closes the Android crate (`android/src/lib.rs`) logs "window closed; exiting" and
+calls `std::process::exit(0)`, so the next launch gets a fresh process (winit cannot create a
+second event loop in one process). As on desktop, `App::on_exit` saves settings and shuts the
+device link down first, which can take up to 8 s.
+
+`build.ps1` installs with `adb install -r`, so settings, Box pairing, backups and the library
+survive a rebuild. `allowBackup` is off in the manifest: settings hold the Box pairing token and
+Android cloud backup must not copy it.
 
 ## Pins and why
 
@@ -44,5 +59,5 @@ fresh process (winit cannot create a second event loop in one process).
 
 ## What has been tried
 
-- Emulator (x86_64, Android API 35 tablet): starts, shows the editor; Back then start again and Home then start again both show the editor.
+- Emulator (x86_64, Android API 35 tablet): starts, shows the editor; Back then start again and Home then start again both show the editor (Back only backgrounded the app); after force-stop and after swipe-away from recents a fresh start shows the editor.
 - Real tablet: nothing yet.

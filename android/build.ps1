@@ -9,6 +9,7 @@ Remove-Item app/jniLibs -Recurse -Force -ErrorAction SilentlyContinue
 cargo ndk -t $Abi -P 26 -o app/jniLibs --link-libcxx-shared build --release
 if ($LASTEXITCODE) { throw 'cargo ndk failed' }
 $strip = Get-ChildItem "$env:ANDROID_NDK_HOME\toolchains\llvm\prebuilt" -Recurse -Filter llvm-strip.exe | Select-Object -First 1
+if (-not $strip) { throw "llvm-strip.exe not found under $env:ANDROID_NDK_HOME" }
 & $strip.FullName --strip-unneeded "app/jniLibs/$Abi/libtonestrand_android.so"
 if ($LASTEXITCODE) { throw "strip failed" }
 "sdk.dir=" + ($sdk.Replace('\', '/')) | Set-Content app\local.properties
@@ -20,8 +21,8 @@ $apk = 'app\app\build\outputs\apk\debug\app-debug.apk'
 "APK {0:N1} MB: {1}" -f ((Get-Item $apk).Length / 1MB), (Resolve-Path $apk)
 if ($NoInstall) { return }
 $adb = "$sdk\platform-tools\adb.exe"
-& $adb -s $Device uninstall com.tonestrand.spike | Out-Null   # the old test app, if still there
-& $adb -s $Device uninstall com.tonestrand.app | Out-Null
-& $adb -s $Device install $apk
+# The old spike app, only if it is there. The new app is updated in place (-r) so its settings, pairing and library stay.
+if (& $adb -s $Device shell pm list packages com.tonestrand.spike) { & $adb -s $Device uninstall com.tonestrand.spike | Out-Null }
+& $adb -s $Device install -r $apk
 if ($LASTEXITCODE) { throw 'install failed' }
 & $adb -s $Device shell am start -n com.tonestrand.app/com.google.androidgamesdk.GameActivity
