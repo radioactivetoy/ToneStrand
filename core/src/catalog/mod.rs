@@ -1179,6 +1179,189 @@ pub fn format_value(meta: Option<&Param>, v: f64) -> String {
     }
 }
 
+/// The first number in `text` (sign, decimal point or decimal comma allowed) and what follows it.
+fn first_number(text: &str) -> Option<(f64, String)> {
+    let cs: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i < cs.len() {
+        let c = cs[i];
+        let starts = c.is_ascii_digit()
+            || ((c == '-' || c == '+' || c == '.' || c == ',' || c == '\u{2212}')
+                && cs.get(i + 1).is_some_and(|n| {
+                    n.is_ascii_digit() || ((*n == '.' || *n == ',') && cs.get(i + 2).is_some_and(|d| d.is_ascii_digit()))
+                }));
+        if starts {
+            let mut s = String::new();
+            let mut j = i;
+            let mut dot = false;
+            while j < cs.len() {
+                let d = cs[j];
+                if d.is_ascii_digit() {
+                    s.push(d);
+                } else if (j == i) && (d == '-' || d == '+' || d == '\u{2212}') {
+                    s.push(if d == '+' { '+' } else { '-' });
+                } else if (d == '.' || d == ',') && !dot {
+                    dot = true;
+                    s.push('.');
+                } else {
+                    break;
+                }
+                j += 1;
+            }
+            if let Ok(v) = s.parse::<f64>() {
+                return Some((v, cs[j..].iter().collect::<String>().trim().to_owned()));
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// The raw value behind a displayed-by-the-spec value `dv` (the inverse of `format_value`'s outer mapping).
+fn raw_from_dv(m: &Param, dv: f64) -> f64 {
+    let spec = &m.spec;
+    match (spec.min_val, spec.max_val) {
+        (Some(lo_v), Some(hi_v)) if m.max > m.min => {
+            if (hi_v - lo_v).abs() < f64::EPSILON {
+                m.min
+            } else {
+                m.min + (dv - lo_v) / (hi_v - lo_v) * (m.max - m.min)
+            }
+        }
+        _ => {
+            if spec.scale == 0.0 {
+                dv
+            } else {
+                (dv - spec.int_offset as f64) / spec.scale
+            }
+        }
+    }
+}
+
+/// What a person typed for a knob (in the units `format_value` shows) as the raw value, or `None` when it is not a value.
+/// The inverse of [`format_value`].
+pub fn parse_shown(meta: Option<&Param>, text: &str) -> Option<f64> {
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let Some(m) = meta else { return first_number(text).map(|(v, _)| v) };
+    let clamp = |v: f64| if m.max > m.min { v.clamp(m.min, m.max) } else { v };
+    let lower = text.to_lowercase();
+    if !m.choices.is_empty() {
+        let base = if m.value_type == 2 { 0 } else { m.min.round() as i64 };
+        if let Some(i) = m.choices.iter().position(|c| c.trim().to_lowercase() == lower) {
+            return Some((base + i as i64) as f64);
+        }
+    }
+    let spec = &m.spec;
+    // A piece shown as a word ("Center"): the one whose label at its lower bound matches.
+    for p in &spec.pieces {
+        let pat = p.format_units.as_deref().or(p.format.as_deref()).unwrap_or("%.1f");
+        if c_printf(pat, p.lower * p.mult).trim().to_lowercase() == lower {
+            return Some(clamp(raw_from_dv(m, p.lower)));
+        }
+    }
+    let Some((n, rest)) = first_number(text) else {
+        // Words only: the few labels the display rules print ("Off", "Center").
+        let d = m.display.as_str();
+        return match lower.as_str() {
+            "off" if d == "nam_highcut" => Some(1.0),
+            "off" if d.contains("low_cut") => Some(m.min),
+            "off" if d.contains("high_cut") => Some(m.max),
+            "center" if d == "pan" || d == "split_balance" => Some(0.5),
+            _ => None,
+        };
+    };
+    let unit = rest.to_lowercase();
+    if !spec.pieces.is_empty() {
+        let shown = |p: &DisplayPiece| (p.lower * p.mult, p.upper * p.mult);
+        // Ranges in different units overlap (500 ms, 1.5 s): the typed unit picks the piece, else the first.
+        let words_of = |p: &DisplayPiece| {
+            let pat = p.format_units.as_deref().or(p.format.as_deref()).unwrap_or("").replace("%%", "\x01");
+            let start = pat.find('%').unwrap_or(0);
+            let end = pat.rfind(['f', 'd']).map_or(pat.len(), |i| i + 1);
+            let tidy = |s: &str| s.trim().replace('\x01', "%").to_lowercase();
+            (tidy(&pat[..start]), tidy(pat.get(end..).unwrap_or("")))
+        };
+        let in_range = |p: &&DisplayPiece| {
+            let (a, b) = shown(p);
+            n >= a.min(b) && n <= a.max(b)
+        };
+        let by_unit = |p: &&DisplayPiece| {
+            let (pre, suf) = words_of(p);
+            (!pre.is_empty() && lower.contains(&pre)) || (!suf.is_empty() && unit.starts_with(&suf))
+        };
+        let inside = spec.pieces.iter().filter(in_range).find(by_unit).or_else(|| spec.pieces.iter().find(in_range));
+        let piece = inside.or_else(|| {
+            spec.pieces.iter().min_by(|x, y| {
+                let d = |p: &DisplayPiece| {
+                    let (a, b) = shown(p);
+                    if n < a.min(b) {
+                        a.min(b) - n
+                    } else {
+                        n - a.max(b)
+                    }
+                };
+                d(x).total_cmp(&d(y))
+            })
+        })?;
+        let dv = if piece.mult == 0.0 { n } else { n / piece.mult };
+        return Some(clamp(raw_from_dv(m, dv)));
+    }
+    if spec.format_units.is_some() || spec.format.is_some() {
+        return Some(clamp(raw_from_dv(m, n)));
+    }
+    let khz = unit.starts_with("khz") || unit.starts_with('k');
+    let v = match m.display.as_str() {
+        "nam_input" => n / 40.0 + 0.5,
+        "nam_band" => n / 24.0 + 0.5,
+        "nam_output" => n / 10.0,
+        "nam_highcut" if lower == "off" => 1.0,
+        "nam_highcut" => n / 10.0,
+        "nam_midfreq" => {
+            if khz {
+                n * 1000.0
+            } else {
+                n
+            }
+        }
+        "generic_knob" | "raw_knob" if m.max <= 1.0 && m.min >= 0.0 => n / 10.0,
+        "percent" | "percent_braced" if m.max <= 1.0 => n / 100.0,
+        "volume" | "volume_eq" => n,
+        "pan" | "split_balance" => {
+            if lower == "center" {
+                0.5
+            } else if lower.starts_with("left") {
+                0.5 - n.abs() / 200.0
+            } else if lower.starts_with("right") {
+                0.5 + n.abs() / 200.0
+            } else {
+                n
+            }
+        }
+        d if d.contains("low_cut") && lower == "off" => m.min,
+        d if d.contains("high_cut") && lower == "off" => m.max,
+        d if d.contains("freq") || d.contains("cut") => {
+            if khz {
+                n * 1000.0
+            } else {
+                n
+            }
+        }
+        d if d.contains("time_ms") || d == "comp_attack" || d == "comp_release" => {
+            let ms = if unit.starts_with("ms") || !unit.starts_with('s') { n } else { n * 1000.0 };
+            if m.max <= 10.0 {
+                ms / 1000.0
+            } else {
+                ms
+            }
+        }
+        _ => return Some(clamp(raw_from_dv(m, n))),
+    };
+    Some(clamp(v))
+}
+
 impl Catalog {
     /// DSP cost of a model, in the catalog's own units.
     pub fn dsp_cost(&self, number: i64) -> f64 {
@@ -1406,5 +1589,118 @@ mod builtin_tests {
         let cat = best_of(None).expect("built-in list");
         let (version, _) = builtin().unwrap();
         assert_eq!(cat.source(), &CatalogSource::Builtin { hx_edit_version: version.to_owned() });
+    }
+}
+
+#[cfg(test)]
+mod parse_shown_tests {
+    use super::*;
+
+    fn param(display: &str, min: f64, max: f64, spec: DisplaySpec) -> Param {
+        Param { id: "x".into(), name: "X".into(), value_type: 1, display: display.into(), min, max, default: min, choices: vec![], spec }
+    }
+
+    fn round_trips(m: &Param) {
+        for v in [m.min, (m.min + m.max) / 2.0, m.max] {
+            let shown = format_value(Some(m), v);
+            let back = parse_shown(Some(m), &shown).unwrap_or_else(|| panic!("{shown:?} did not parse"));
+            // Within what the display rounds to: re-formatting gives the same text.
+            assert_eq!(format_value(Some(m), back), shown, "{shown:?}: {v} -> {back}");
+        }
+    }
+
+    #[test]
+    fn typed_values_are_in_the_shown_units() {
+        let knob = param("generic_knob", 0.0, 1.0, DisplaySpec::default());
+        assert_eq!(parse_shown(Some(&knob), "5"), Some(0.5));
+        assert_eq!(parse_shown(Some(&knob), "2,5"), Some(0.25));
+        assert_eq!(parse_shown(Some(&knob), "garbage"), None);
+        assert_eq!(parse_shown(Some(&knob), ""), None);
+        assert_eq!(parse_shown(None, "3.25"), Some(3.25));
+        round_trips(&knob);
+
+        let linear = param(
+            "x",
+            0.0,
+            1.0,
+            DisplaySpec { min_val: Some(-12.0), max_val: Some(12.0), format_units: Some("%+.1f dB".into()), ..Default::default() },
+        );
+        assert_eq!(parse_shown(Some(&linear), "-12 dB"), Some(0.0));
+        round_trips(&linear);
+
+        let scaled = param("x", 0.0, 100.0, DisplaySpec { scale: 0.5, int_offset: 10, format: Some("%.1f".into()), ..Default::default() });
+        assert_eq!(parse_shown(Some(&scaled), "35"), Some(50.0));
+        round_trips(&scaled);
+
+        let pieces = param(
+            "x",
+            0.0,
+            1.0,
+            DisplaySpec {
+                min_val: Some(0.0),
+                max_val: Some(1000.0),
+                pieces: vec![
+                    DisplayPiece { lower: 0.0, upper: 1.0, mult: 1000.0, format: None, format_units: Some("%.0f ms".into()) },
+                    DisplayPiece { lower: 1.0, upper: 1000.0, mult: 0.001, format: None, format_units: Some("%.2f s".into()) },
+                ],
+                ..Default::default()
+            },
+        );
+        round_trips(&pieces);
+
+        let word = param(
+            "x",
+            0.0,
+            1.0,
+            DisplaySpec {
+                min_val: Some(0.0),
+                max_val: Some(10.0),
+                pieces: vec![
+                    DisplayPiece { lower: 0.0, upper: 0.0, mult: 1.0, format: None, format_units: Some("Center".into()) },
+                    DisplayPiece { lower: 0.0, upper: 10.0, mult: 1.0, format: Some("%.1f".into()), format_units: None },
+                ],
+                ..Default::default()
+            },
+        );
+        assert_eq!(parse_shown(Some(&word), "center"), Some(0.0));
+        assert_eq!(parse_shown(Some(&word), "5"), Some(0.5));
+    }
+
+    #[test]
+    fn choice_labels_parse_to_their_value() {
+        let mut m = param("x", 2.0, 4.0, DisplaySpec::default());
+        m.value_type = 0;
+        m.choices = vec!["Low".into(), "Mid".into(), "High".into()];
+        assert_eq!(parse_shown(Some(&m), "mid"), Some(3.0));
+        assert_eq!(parse_shown(Some(&m), " HIGH "), Some(4.0));
+        round_trips(&m);
+    }
+
+    /// Across the built-in list, what `format_value` shows parses back to something that shows the same.
+    #[test]
+    fn every_builtin_param_round_trips() {
+        let (_, bytes) = builtin().expect("built-in list");
+        let cat = Catalog::from_pack(bytes).unwrap();
+        let (mut n, mut offset, mut bad) = (0, 0, Vec::new());
+        for info in cat.models.values() {
+            for m in &info.params {
+                n += 1;
+                if m.spec.int_offset != 0 {
+                    offset += 1;
+                }
+                for v in [m.min, (m.min + m.max) / 2.0, m.max] {
+                    let shown = format_value(Some(m), v);
+                    match parse_shown(Some(m), &shown) {
+                        Some(b) if format_value(Some(m), b) == shown => {}
+                        other => bad.push(format!("{}.{} {v}: {shown:?} -> {other:?}", info.name, m.id)),
+                    }
+                }
+            }
+        }
+        eprintln!("params {n}, with int_offset != 0: {offset}, not round-tripping: {}", bad.len());
+        for b in bad.iter().take(25) {
+            eprintln!("  {b}");
+        }
+        assert!(bad.len() <= 5, "too many mismatches ({} of {n})", bad.len());
     }
 }

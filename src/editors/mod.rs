@@ -914,6 +914,11 @@ fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<V
                 }
             } else {
                 let mut dv = egui::DragValue::new(&mut x).speed(0.1);
+                if let Some(m) = meta {
+                    dv = dv
+                        .custom_formatter(|n, _| crate::catalog::format_value(Some(m), n))
+                        .custom_parser(|s| crate::catalog::parse_shown(Some(m), s));
+                }
                 if let Some(m) = meta.filter(|m| m.max > m.min) {
                     dv = dv.range(m.min as i64..=m.max as i64);
                 }
@@ -1397,7 +1402,8 @@ fn bound_cell(ui: &mut egui::Ui, v: &Value, meta: Option<&crate::catalog::Param>
                 egui::DragValue::new(&mut x)
                     .range(lo..=hi)
                     .speed(if int { 0.2 } else { (hi - lo) / 200.0 })
-                    .custom_formatter(|n, _| crate::catalog::format_value(meta, n)),
+                    .custom_formatter(|n, _| crate::catalog::format_value(meta, n))
+                    .custom_parser(|s| crate::catalog::parse_shown(meta, s)),
             );
             r.changed().then(|| if int { Value::int(x.round() as i64) } else { Value::F32(x as f32) })
         }

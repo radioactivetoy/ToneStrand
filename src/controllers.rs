@@ -122,7 +122,8 @@ fn knob_row(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catalo
                     egui::DragValue::new(&mut a)
                         .range(min..=max)
                         .speed(step)
-                        .custom_formatter(|n, _| crate::catalog::format_value(param.as_ref(), n)),
+                        .custom_formatter(|n, _| crate::catalog::format_value(param.as_ref(), n))
+                        .custom_parser(|s| crate::catalog::parse_shown(param.as_ref(), s)),
                 )
                 .changed();
             ui.label(RichText::new("to").color(muted()));
@@ -131,7 +132,8 @@ fn knob_row(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catalo
                     egui::DragValue::new(&mut z)
                         .range(min..=max)
                         .speed(step)
-                        .custom_formatter(|n, _| crate::catalog::format_value(param.as_ref(), n)),
+                        .custom_formatter(|n, _| crate::catalog::format_value(param.as_ref(), n))
+                        .custom_parser(|s| crate::catalog::parse_shown(param.as_ref(), s)),
                 )
                 .changed();
             let mut c = cc.unwrap_or(1);
