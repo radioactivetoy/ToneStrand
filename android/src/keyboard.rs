@@ -39,7 +39,9 @@ impl Keyboard {
         if wants_keyboard {
             // Plain text with no suggestions, so letters arrive as they are typed.
             app.set_ime_editor_info(
-                InputType::TYPE_CLASS_TEXT | InputType::TYPE_TEXT_VARIATION_VISIBLE_PASSWORD | InputType::TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                InputType::TYPE_CLASS_TEXT
+                    | InputType::TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                    | InputType::TYPE_TEXT_FLAG_NO_SUGGESTIONS
                     | InputType::TYPE_TEXT_FLAG_MULTI_LINE,
                 TextInputAction::Done,
                 ImeOptions::IME_FLAG_NO_FULLSCREEN | ImeOptions::IME_FLAG_NO_ENTER_ACTION,
