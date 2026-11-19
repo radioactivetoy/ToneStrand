@@ -8,7 +8,7 @@ Read this first, then `docs/ARCHITECTURE.md`. The protocol and formats are in
 ```sh
 cargo build --workspace         # debug (optimised enough to use); two crates: the app and core/
 cargo build --release
-cargo test --workspace          # 121 tests (1 ignored); must stay green
+cargo test --workspace          # 123 tests (1 ignored); must stay green
 cargo fmt                       # rustfmt.toml sets the style; CI runs `cargo fmt --check`
 cargo clippy --workspace --all-targets -- -D warnings   # must stay clean (CI runs these)
 cargo run -- --help             # the command-line tools

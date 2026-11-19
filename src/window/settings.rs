@@ -105,7 +105,7 @@ impl App {
                                 Some(crate::catalog::CatalogSource::Builtin { hx_edit_version }) => {
                                     use super::BuiltinWhy::*;
                                     let base = format!("Built into ToneStrand (HX Edit {hx_edit_version})");
-                                    match (super::builtin_reason(custom.as_deref()), custom) {
+                                    match (self.catalog_why.unwrap_or(NotInstalled), custom) {
                                         (FolderHasNoFiles, Some(p)) => format!("{base}. The folder {p} is not used: no HX Edit files there."),
                                         (FolderOlder, Some(p)) => format!("{base}. The folder {p} is not used: the built-in list is newer."),
                                         (InstalledOlder, _) => format!("{base}. HX Edit's list is older."),

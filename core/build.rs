@@ -3,9 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-fn version_key(name: &str) -> Vec<u64> {
-    name.split('.').map(|p| p.parse().unwrap_or(0)).collect()
-}
+include!("src/catalog/version.rs");
 
 fn newest(dir: &Path) -> Option<(String, PathBuf)> {
     let mut found: Vec<(Vec<u64>, String, PathBuf)> = std::fs::read_dir(dir)
@@ -14,7 +12,7 @@ fn newest(dir: &Path) -> Option<(String, PathBuf)> {
         .filter_map(|e| {
             let pack = e.path().join("catalog.json.gz");
             let name = e.file_name().to_string_lossy().into_owned();
-            (pack.is_file() && name.chars().next().is_some_and(|c| c.is_ascii_digit())).then(|| (version_key(&name), name, pack))
+            (pack.is_file() && is_version(&name)).then(|| (version_key(&name), name, pack))
         })
         .collect();
     found.sort();

@@ -399,8 +399,8 @@ fn box_proxy_tool(rest: &[String]) {
 /// Convert an HX Edit resource folder into `<out>/<version>/catalog.json.gz` and `meta.json`.
 /// Refuses if that version's folder already exists.
 pub fn export_catalog(res: &std::path::Path, out: &std::path::Path, version: &str) -> Result<std::path::PathBuf, String> {
-    if version.is_empty() || version.contains(['/', '\\', ':']) || version.starts_with('.') {
-        return Err(format!("\"{version}\" is not a usable version name"));
+    if !catalog::version::is_version(version) {
+        return Err(format!("\"{version}\" is not a version name (numbers and dots, like 3.82)"));
     }
     let dir = out.join(version);
     if dir.exists() {
@@ -421,10 +421,19 @@ pub fn export_catalog(res: &std::path::Path, out: &std::path::Path, version: &st
     sources.sort();
     let created = crate::support::stamp(std::time::SystemTime::now()).chars().take(10).collect();
     let meta = catalog::PackMeta { format: catalog::PACK_FORMAT, hx_edit_version: version.to_owned(), created, sources };
-    let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    crate::files::write_atomic(&dir.join("catalog.json.gz"), &pack).map_err(|e| format!("catalog.json.gz: {e}"))?;
-    crate::files::write_atomic(&dir.join("meta.json"), meta_json.as_bytes()).map_err(|e| format!("meta.json: {e}"))?;
+    let mut meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    meta_json.push('\n');
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    // `create_dir` (not `_all`) fails if the folder appeared meanwhile: an existing version is never written into.
+    std::fs::create_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let written = crate::files::write_atomic(&dir.join("catalog.json.gz"), &pack)
+        .map_err(|e| format!("catalog.json.gz: {e}"))
+        .and_then(|_| crate::files::write_atomic(&dir.join("meta.json"), meta_json.as_bytes()).map_err(|e| format!("meta.json: {e}")));
+    if let Err(e) = written {
+        // Leave no half-made version behind (it would block the next try).
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(e);
+    }
     Ok(dir)
 }
 
@@ -998,8 +1007,14 @@ mod tests {
         assert_eq!(meta.format, PACK_FORMAT);
         assert!(meta.sources.iter().any(|(n, _)| n == "Helix.sym"));
         assert!(Catalog::from_pack(&std::fs::read(dir.join("catalog.json.gz")).unwrap()).is_ok());
+        assert!(std::fs::read_to_string(dir.join("meta.json")).unwrap().ends_with('\n'));
         assert!(export_catalog(&res, &out, "9.99").is_err());
-        assert!(export_catalog(&res, &out, "../x").is_err());
+        for bad in ["../x", "3*8", "3.8 ", "v3"] {
+            assert!(export_catalog(&res, &out, bad).is_err(), "{bad:?}");
+        }
+        // A failed export (no HX Edit files) leaves no folder behind.
+        assert!(export_catalog(&out.join("missing"), &out, "9.98").is_err());
+        assert!(!out.join("9.98").exists());
         let _ = std::fs::remove_dir_all(&out);
     }
 }

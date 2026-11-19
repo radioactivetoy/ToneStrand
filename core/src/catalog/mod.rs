@@ -18,6 +18,29 @@ mod pack;
 pub use pack::{read_pack_meta, PackMeta, PACK_FORMAT};
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
+pub mod version;
+
+#[cfg(test)]
+mod version_tests {
+    use super::version::{is_version, version_key};
+
+    #[test]
+    fn versions_sort_as_numbers() {
+        let mut v = vec!["3.100", "3.82", "3.9", "4.0", "3.9.1"];
+        v.sort_by_key(|n| version_key(n));
+        assert_eq!(v, ["3.9", "3.9.1", "3.82", "3.100", "4.0"]);
+    }
+
+    #[test]
+    fn only_dotted_numbers_are_versions() {
+        for ok in ["3.82", "4", "3.9.1"] {
+            assert!(is_version(ok), "{ok}");
+        }
+        for bad in ["", ".", "3.", ".3", "3..8", "../x", "3.8a", "3*8", "3.8 ", "v3.8"] {
+            assert!(!is_version(bad), "{bad:?}");
+        }
+    }
+}
 
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DisplayPiece {

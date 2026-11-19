@@ -172,6 +172,8 @@ pub struct App {
     screenshot: Option<(PathBuf, u32, bool)>,
 
     catalog: Option<Arc<Catalog>>,
+    /// Why the built-in list is in use (worked out when the list is loaded, not every frame).
+    catalog_why: Option<BuiltinWhy>,
     picker: Option<editors::PickerState>,
     view: View,
     lib: Library,
@@ -300,6 +302,7 @@ impl App {
             log: VecDeque::new(),
             screenshot: screenshot.map(|p| (p, 0, false)),
             catalog: None,
+            catalog_why: None,
             picker: None,
             view: View::Editor,
             lib: Library::new(PathBuf::new()),
@@ -336,6 +339,7 @@ impl App {
             catalog_card_hidden: false,
         };
         app.catalog = crate::catalog::load_best(app.settings.hx_edit.as_deref()).map(Arc::new);
+        app.catalog_why = catalog_why(app.catalog.as_deref(), app.settings.hx_edit.as_deref());
         app.lib = Library::new(app.library_dir.clone());
         app.unit = app.settings.unit.unwrap_or(2162694);
         // Start for a given unit (used to check pictures for each pedal).
@@ -1004,14 +1008,14 @@ impl App {
     /// found and not older than the built-in list, else the list built into ToneStrand.
     fn reload_catalog(&mut self) {
         self.catalog = crate::catalog::load_best(self.settings.hx_edit.as_deref()).map(Arc::new);
+        self.catalog_why = catalog_why(self.catalog.as_deref(), self.settings.hx_edit.as_deref());
         self.scan_library();
-        let chosen = self.settings.hx_edit.clone();
         match self.catalog.as_ref().map(|c| c.source().clone()) {
             Some(crate::catalog::CatalogSource::HxEdit(dir)) => {
                 self.note(LogLevel::Good, format!("Using HX Edit's effects list ({}).", dir.display()));
             }
             Some(crate::catalog::CatalogSource::Builtin { hx_edit_version }) => {
-                let msg = match builtin_reason(chosen.as_deref()) {
+                let msg = match self.catalog_why.unwrap_or(BuiltinWhy::NotInstalled) {
                     BuiltinWhy::FolderHasNoFiles => {
                         format!("That folder has no HX Edit files; using the list built into ToneStrand (HX Edit {hx_edit_version}).")
                     }
@@ -1675,7 +1679,7 @@ impl App {
                 {
                     to_library = true;
                 }
-                convert_menu(ui, doc, &mut convert);
+                // "Make .hlx" is drawn once, in the first half (both halves share one row).
                 pedal_row(ui, doc, &mut cmds, &mut confirm);
             }
         }
@@ -2070,6 +2074,7 @@ fn side_section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::U
 }
 
 /// Why the built-in effects list is in use instead of HX Edit's.
+#[derive(Clone, Copy)]
 pub(crate) enum BuiltinWhy {
     FolderHasNoFiles,
     FolderOlder,
@@ -2077,7 +2082,12 @@ pub(crate) enum BuiltinWhy {
     InstalledOlder,
 }
 
-pub(crate) fn builtin_reason(custom: Option<&str>) -> BuiltinWhy {
+/// `Some(why)` when `cat` is the built-in list; `None` when it is HX Edit's or there is none.
+fn catalog_why(cat: Option<&Catalog>, custom: Option<&str>) -> Option<BuiltinWhy> {
+    matches!(cat.map(|c| c.source()), Some(crate::catalog::CatalogSource::Builtin { .. })).then(|| builtin_reason(custom))
+}
+
+fn builtin_reason(custom: Option<&str>) -> BuiltinWhy {
     match custom {
         Some(f) => {
             let dir = std::path::Path::new(f);
