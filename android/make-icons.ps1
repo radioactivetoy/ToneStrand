@@ -12,7 +12,7 @@ function New-Icon([int]$size, [bool]$round, [string]$path) {
     $g.Clear([System.Drawing.Color]::Transparent)
     if ($round) {
         $gp = New-Object System.Drawing.Drawing2D.GraphicsPath
-        $gp.AddEllipse(0, 0, $size - 1, $size - 1)
+        $gp.AddEllipse(0, 0, $size, $size)
         $g.SetClip($gp)
     }
     $g.DrawImage($src, 0, 0, $size, $size)

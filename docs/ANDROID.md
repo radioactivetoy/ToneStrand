@@ -51,15 +51,15 @@ Android cloud backup must not copy it.
 
 ## Finding the Box (multicast lock)
 
-Android drops Wi-Fi multicast packets, which hides the Box's mDNS announcements. At start ndroid/src/multicast.rs takes a WifiManager.MulticastLock (tag 	onestrand, not reference counted) through JNI, using the CHANGE_WIFI_MULTICAST_STATE permission, and logs multicast lock acquired (or the error; start-up never fails because of it). The emulator can't see mDNS, so only the log line is checked there; finding the Box by name needs a real device on the same Wi-Fi.
+Android drops Wi-Fi multicast packets, which hides the Box's mDNS announcements. At start `android/src/multicast.rs` takes a `WifiManager.MulticastLock` (tag `tonestrand`, not reference counted) through JNI, using the `CHANGE_WIFI_MULTICAST_STATE` permission, and logs `multicast lock acquired` (or the error; start-up never fails because of it). The emulator can't see mDNS, so only the log line is checked there; finding the Box by name needs a real device on the same Wi-Fi.
 
 ## Launcher icon
 
-ndroid\make-icons.ps1 (PowerShell and System.Drawing, no other tools) writes square and round PNGs for mdpi to xxxhdpi (48 to 192 px) into ndroid/app/app/src/main/res/mipmap-* from ssets/logos/AppIcon.jpg; the manifest sets icon and oundIcon. Re-run it after changing the picture.
+`android\make-icons.ps1` (PowerShell and System.Drawing, no other tools) writes square and round PNGs for mdpi to xxxhdpi (48 to 192 px) into `android/app/app/src/main/res/mipmap-*` from `assets/logos/AppIcon.jpg`; the manifest sets `icon` and `roundIcon`. Re-run it after changing the picture.
 
 ## CI
 
-Job ndroid in .github/workflows/ci.yml (ubuntu-latest, continue-on-error): JDK 17, NDK 27.2.12479018, cargo install cargo-ndk --locked, cargo ndk -t arm64-v8a -P 26 -o app/jniLibs --link-libcxx-shared build --release in ndroid/, Gradle 8.9 ssembleDebug in ndroid/app, and the debug APK is uploaded as the artifact 	onestrand-android-debug. It has not been seen running yet (written without a way to run Actions).
+Job `android` in `.github/workflows/ci.yml` (ubuntu-latest, `continue-on-error`): JDK 17, NDK 27.2.12479018, `cargo install cargo-ndk --locked`, `cargo ndk -t arm64-v8a -P 26 -o app/jniLibs --link-libcxx-shared build --release` in `android/`, Gradle 8.9 `assembleDebug` in `android/app`, and the debug APK is uploaded as the artifact `tonestrand-android-debug`. It has not been seen running yet (written without a way to run Actions).
 
 ## Pins and why
 
@@ -72,7 +72,7 @@ Job ndroid in .github/workflows/ci.yml (ubuntu-latest, continue-on-error): JDK 
 ## What has been tried
 
 - Emulator (x86_64, Android API 35 tablet): starts, shows the editor; Back then start again and Home then start again both show the editor (Back only backgrounded the app); after force-stop and after swipe-away from recents a fresh start shows the editor.
-- Emulator: multicast lock acquired (log line); the launcher icon shows in the app drawer (	arget/android-check/t8-drawer.png).
+- Emulator: multicast lock acquired (log line); the launcher icon shows in the app drawer (`target/android-check/t8-drawer.png`).
 - Real tablet: nothing yet. To check there: pairing and connecting to the Box by name (mDNS) and by address, loading a preset, turning a knob, changing a snapshot, typing a preset name on the on-screen keyboard, Back and reopen.
 
 ## Colours
