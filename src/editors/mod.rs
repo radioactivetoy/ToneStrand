@@ -1155,7 +1155,10 @@ fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: b
                     }
                     *dirty = true;
                 }
-                if live && pacing::live_send(ui, ("blk", s.global, cab, vi), nv.is_some(), commit) {
+                let hidden = model.zip(cat).is_some_and(|(m, c)| c.is_hidden_value(m, vi));
+                // A hidden value writes the pedal's edit buffer: it goes on commit only, never paced mid-drag.
+                let go = live && if hidden { commit } else { pacing::live_send(ui, ("blk", s.global, cab, vi), nv.is_some(), commit) };
+                if go {
                     let cur = if cab {
                         preset.paired_values(s.path, s.position).get(vi).cloned()
                     } else {
@@ -1163,7 +1166,6 @@ fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: b
                     };
                     if let Some(value) = cur {
                         // Key 26 picks the block's own knobs (0) or its cab's (1). The Mic and Trails are not settable that way.
-                        let hidden = model.zip(cat).is_some_and(|(m, c)| c.is_hidden_value(m, vi));
                         cmds.push(if hidden {
                             Cmd::SetHidden { block: s.wire_block(), cab, index: vi as i64, value }
                         } else {
