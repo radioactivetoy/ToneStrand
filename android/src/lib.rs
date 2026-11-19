@@ -2,6 +2,7 @@
 
 mod insets;
 mod keyboard;
+mod multicast;
 
 use tonestrand::window::App;
 use winit::platform::android::activity::AndroidApp;
@@ -17,6 +18,7 @@ fn android_main(app: AndroidApp) {
         std::env::set_var("TONESTRAND_LIBRARY", dir.join("Library"));
     }
     std::panic::set_hook(Box::new(|p| log::error!("panic: {p}")));
+    multicast::acquire(&app);
     let options = eframe::NativeOptions { android_app: Some(app.clone()), ..Default::default() };
     let run = eframe::run_native(
         "ToneStrand",

@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-    <application android:allowBackup="false" android:label="ToneStrand (test)" android:theme="@style/Theme.AppCompat.NoActionBar">
+    <application android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="false" android:label="ToneStrand (test)" android:theme="@style/Theme.AppCompat.NoActionBar">
         <activity android:name="com.google.androidgamesdk.GameActivity" android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|density|uiMode"
             android:windowSoftInputMode="adjustResize">

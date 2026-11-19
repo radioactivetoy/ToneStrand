@@ -43,3 +43,43 @@ jobs:
         run: cargo build --workspace --all-targets
       - name: Tests
         run: cargo test --workspace
+
+  # The Android app (android/): builds the debug APK for arm64 devices. Informational for now; the
+  # APK is uploaded so a build can be tried on a device. See docs/ANDROID.md.
+  android:
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: android
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Install the NDK
+        run: sdkmanager "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0"
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+      - name: Build the native library
+        working-directory: android
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          cargo ndk -t arm64-v8a -P 26 -o app/jniLibs --link-libcxx-shared build --release
+      - name: Build the APK
+        working-directory: android/app
+        run: gradle --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tonestrand-android-debug
+          path: android/app/app/build/outputs/apk/debug/app-debug.apk

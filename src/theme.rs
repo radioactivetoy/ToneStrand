@@ -79,7 +79,9 @@ pub fn row_payload<P: std::any::Any + Send + Sync>(resp: &egui::Response, payloa
 
 /// Open the context menu `response.context_menu` draws, for the row `id`, at `pos`.
 fn open_menu_at(ctx: &egui::Context, id: egui::Id, pos: egui::Pos2) {
-    // The id egui keeps its one context menu under.
+    // The id egui keeps its one context menu under. This copies a private constant of egui 0.31
+    // (__egui::context_menu); it is pinned to that version. After an egui upgrade, re-check it:
+    // if it changed, nothing fails to compile, the long-press menu on touch just silently never opens.
     let menu_id = egui::Id::new("__egui::context_menu");
     let mut bar = egui::menu::BarState::load(ctx, menu_id);
     **bar = Some(egui::menu::MenuRoot::new(pos, id));

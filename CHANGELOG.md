@@ -5,6 +5,10 @@
 ### New
 - **A built-in effects list.** The effect names, knob names, ranges and categories made from HX Edit 3.82 are kept in `catalogs/`.
   `tonestrand --export-catalog <HX Edit res folder> <catalogs folder> <version>` makes a list for another HX Edit version.
+- **Android app (work in progress).** The editor runs on an Android tablet with touch, the on-screen keyboard and the system bars handled. The Android app takes a Wi-Fi multicast lock at start so it can find the ToneStrand Box, and has the ToneStrand launcher icon. CI builds a debug APK (informational). See `docs/ANDROID.md`.
+
+### Changed
+- The Getting started card shows the Install HX Edit step only when no effects list is loaded at all; the other steps are renumbered.
 
 ## 1.0.0-beta.5 - 2026-11-18
 

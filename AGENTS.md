@@ -83,6 +83,9 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 | Command Center slot tables and fields | `core/src/cmdslots.rs` |
 | Effect names / formatting | `core/src/catalog/` (`mod.rs`, `pack.rs`), `core/src/realnames.rs`; built-in lists in `catalogs/` |
 | Colours, widgets, icons | `theme.rs`, `icons.rs` |
+| Android start-up, system-bar insets, on-screen keyboard, multicast lock | `android/src/lib.rs`, `insets.rs`, `keyboard.rs`, `multicast.rs` |
+| Android launcher icons (re-run after changing `assets/logos/AppIcon.jpg`), manifest, build | `android/make-icons.ps1`, `android/app/app/src/main/`, `android/build.ps1`, `docs/ANDROID.md` |
+| Android CI build (debug APK, informational) | `.github/workflows/ci.yml` job `android` |
 
 ## Known gaps and unverified areas
 

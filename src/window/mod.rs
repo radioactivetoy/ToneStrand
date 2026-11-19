@@ -1218,7 +1218,7 @@ impl App {
     }
 
     /// A short "Getting started" card on the editor page until the person has connected a pedal
-    /// once (or dismisses it): three steps, with what the program can already see.
+    /// once (or dismisses it): up to three steps (the HX Edit one only when no effects list is loaded), with what the program can already see.
     fn getting_started_card(&mut self, ctx: &egui::Context) {
         if self.settings.hide_getting_started || self.connected.is_some() || self.screenshot.is_some() {
             return;
@@ -1242,9 +1242,20 @@ impl App {
                             }
                         });
                     };
-                    let hx =
-                        if self.catalog.is_some() { ("HX Edit found".to_owned(), good()) } else { ("not found yet".to_owned(), orange()) };
-                    step(ui, "1", "Install Line 6's HX Edit on this computer (ToneStrand reads the effect names from it).", Some(hx));
+                    // The HX Edit step only when no effects list is loaded at all (the built-in one counts).
+                    let mut n = 0;
+                    let mut num = || {
+                        n += 1;
+                        n.to_string()
+                    };
+                    if self.catalog.is_none() {
+                        step(
+                            ui,
+                            &num(),
+                            "Install Line 6's HX Edit on this computer (ToneStrand reads the effect names from it).",
+                            Some(("not found yet".to_owned(), orange())),
+                        );
+                    }
                     let seen = match (found_usb, found_box) {
                         (Some(p), _) => Some((format!("{p} on USB"), good())),
                         (None, Some(b)) => Some((format!("{b} on the network"), good())),
@@ -1252,11 +1263,11 @@ impl App {
                     };
                     step(
                         ui,
-                        "2",
+                        &num(),
                         "Plug the pedal into a USB port, or switch on a ToneStrand Box and pair it (Pair, then press BOOT on the box).",
                         seen,
                     );
-                    step(ui, "3", "Click the pedal button at the top (\"not connected\"), then Connect.", None);
+                    step(ui, &num(), "Click the pedal button at the top (\"not connected\"), then Connect.", None);
                     ui.add_space(2.0);
                     ui.horizontal(|ui| {
                         if ui.button("Got it").on_hover_text("Hide this card for good").clicked() {

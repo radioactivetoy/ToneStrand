@@ -2,7 +2,8 @@
 //!
 //! Under edge-to-edge (targetSdk 35) `AndroidApp::content_rect()` is the whole screen, so the bar
 //! sizes come from the decor view's root window insets through JNI. They are cached and read again
-//! only when the content rect or the native window size changes (rotation, resize).
+//! when the content rect or the native window size changes (rotation, resize), and at least once a
+//! second so a missed change heals. A failed read keeps the last good bars.
 
 use eframe::egui::{pos2, Rect};
 use jni::objects::{JObject, JValue};
@@ -42,6 +43,8 @@ impl Insets {
                 Ok(Some(b)) => {
                     self.bars = b;
                     self.key = Some(key);
+                    // A later, different error is worth logging again.
+                    self.failed = false;
                 }
                 // The decor view is not attached yet: leave the key unset so the next frame reads again.
                 Ok(None) => {}
@@ -51,7 +54,7 @@ impl Insets {
                         log::error!("system bar insets: {e}");
                         self.failed = true;
                     }
-                    self.bars = (0, 0, 0, 0);
+                    // Keep the last good bars (zeroing them would flash the UI under the status bar).
                     self.key = Some(key);
                 }
             }
