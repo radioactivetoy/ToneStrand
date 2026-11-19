@@ -72,8 +72,25 @@ pub fn set_commit_backend(f: Box<dyn Fn(u64, PathBuf) + Send + Sync>) {
 }
 
 /// Answers a request; called by the backend, from any thread.
+/// Results for a request that is not the pending one (stale answers) are dropped.
 pub fn deliver(id: u64, result: PickResult) {
-    state().queue.push((id, result));
+    let mut s = state();
+    if s.pending == Some(id) {
+        s.queue.push((id, result));
+    }
+}
+
+/// Escape hatch for a stuck request: clears the pending one and queues `Cancelled` for it.
+pub fn cancel_pending() {
+    let mut s = state();
+    if let Some(id) = s.pending.take() {
+        s.queue.push((id, PickResult::Cancelled));
+    }
+}
+
+/// The app's write after `SaveTo` failed: ends the save with `Failed`.
+pub fn abort_save(id: u64, error: String) {
+    deliver(id, PickResult::Failed(error));
 }
 
 /// Finished requests, oldest first. A request stops being pending when its final result is taken.
@@ -90,10 +107,19 @@ pub fn poll() -> Vec<(u64, PickResult)> {
 
 /// After the whole file has been written to the `SaveTo` path.
 pub fn commit_save(id: u64, written: &Path) {
-    let commit = state().commit_backend.clone();
+    let commit = {
+        let s = state();
+        if s.pending != Some(id) {
+            return;
+        }
+        s.commit_backend.clone()
+    };
     match commit {
         Some(f) => f(id, written.to_path_buf()),
+        #[cfg(not(target_os = "android"))]
         None => deliver(id, PickResult::Saved),
+        #[cfg(target_os = "android")]
+        None => deliver(id, PickResult::Failed("No file picker".into())),
     }
 }
 
@@ -138,7 +164,7 @@ impl FileDialog {
         self.request(PickKind::Open { multiple: true })
     }
     pub fn save_file(self) -> Option<u64> {
-        let suggested = self.file_name.clone().unwrap_or_default();
+        let suggested = self.file_name.clone().unwrap_or_else(|| "Untitled".into());
         self.request(PickKind::Save { suggested })
     }
     pub fn pick_folder(self) -> Option<u64> {
@@ -287,6 +313,46 @@ mod tests {
         deliver(id, PickResult::Saved);
         assert_eq!(poll(), vec![(id, PickResult::Saved)]);
         assert!(FileDialog::new().open_file().is_some());
+    }
+
+    #[test]
+    fn cancel_pending_unblocks() {
+        let _g = setup();
+        cancel_pending();
+        assert!(poll().is_empty());
+        let id = FileDialog::new().open_file().unwrap();
+        cancel_pending();
+        assert_eq!(poll(), vec![(id, PickResult::Cancelled)]);
+        assert!(FileDialog::new().open_file().is_some());
+    }
+
+    #[test]
+    fn abort_save_ends_a_save() {
+        let _g = setup();
+        let id = FileDialog::new().save_file().unwrap();
+        deliver(id, PickResult::SaveTo(PathBuf::from("p")));
+        poll();
+        abort_save(id, "disk full".into());
+        assert_eq!(poll(), vec![(id, PickResult::Failed("disk full".into()))]);
+        assert!(FileDialog::new().open_file().is_some());
+    }
+
+    #[test]
+    fn stale_results_are_dropped() {
+        let _g = setup();
+        let id = FileDialog::new().open_file().unwrap();
+        deliver(id + 7, PickResult::Cancelled);
+        commit_save(id + 7, Path::new("p"));
+        assert!(poll().is_empty());
+        deliver(id, PickResult::Cancelled);
+        assert_eq!(poll().len(), 1);
+    }
+
+    #[test]
+    fn save_suggests_untitled() {
+        let _g = setup();
+        FileDialog::new().save_file().unwrap();
+        assert!(matches!(&LAST.lock().unwrap().as_ref().unwrap().kind, PickKind::Save { suggested } if suggested == "Untitled"));
     }
 
     #[test]
