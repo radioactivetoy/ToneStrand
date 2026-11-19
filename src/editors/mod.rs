@@ -1115,6 +1115,9 @@ pub struct DeviceEdit<'a> {
 }
 
 /// The knobs of a block (or of its paired cab), two columns wide.
+/// The vertical gap between two rows of knobs, so a row's value text does not touch the next row's names.
+pub(crate) const ROW_GAP: f32 = 16.0;
+
 fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: bool) {
     let DeviceEdit { preset, live, cmds, cat, dirty } = ed;
     let values = if cab { preset.paired_values(s.path, s.position) } else { s.values.clone() };
@@ -1129,7 +1132,10 @@ fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: b
             all.insert(0, mic);
         }
     }
-    for row in all.chunks(per_row) {
+    for (row_no, row) in all.chunks(per_row).enumerate() {
+        if row_no > 0 {
+            ui.add_space(ROW_GAP);
+        }
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = Vec2::new(6.0, 12.0);
             for &(vi, v) in row.iter() {

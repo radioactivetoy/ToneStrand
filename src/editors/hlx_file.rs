@@ -776,7 +776,10 @@ pub fn hlx_editor(
                     }
                 };
                 let per_row = ((ui.available_width() + 6.0) / 116.0).floor().max(1.0) as usize;
-                for row in keys.chunks(per_row) {
+                for (row_no, row) in keys.chunks(per_row).enumerate() {
+                    if row_no > 0 {
+                        ui.add_space(ROW_GAP);
+                    }
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = Vec2::new(6.0, 12.0);
                         for k in row.iter() {
@@ -871,7 +874,10 @@ pub fn hlx_editor(
                             let mut cab_moved: Option<(String, serde_json::Value)> = None;
                             ui.push_id(&cab_block.key, |ui| {
                                 let per_row = ((ui.available_width() + 6.0) / 116.0).floor().max(1.0) as usize;
-                                for row in cab_keys.chunks(per_row) {
+                                for (row_no, row) in cab_keys.chunks(per_row).enumerate() {
+                                    if row_no > 0 {
+                                        ui.add_space(ROW_GAP);
+                                    }
                                     ui.horizontal(|ui| {
                                         ui.spacing_mut().item_spacing = Vec2::new(6.0, 12.0);
                                         for k in row.iter() {
