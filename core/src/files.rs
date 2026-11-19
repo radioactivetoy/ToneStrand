@@ -47,32 +47,86 @@ pub fn copy_into(from: &Path, dir: &Path) -> std::io::Result<PathBuf> {
     Ok(to)
 }
 
-/// Copy every file under `from` whose relative path does not exist under `to`, creating folders;
-/// never overwrites. Returns how many files were copied.
-pub fn copy_missing(from: &Path, to: &Path) -> std::io::Result<usize> {
-    copy_missing_skipping(from, to, &|_| false)
+/// What a copy did: files copied, and the entries that could not be (with why).
+#[derive(Debug, Default)]
+pub struct CopyReport {
+    pub copied: usize,
+    pub failed: Vec<(PathBuf, String)>,
 }
 
-/// `copy_missing`, leaving out every path for which `skip` is true (files and folders).
-pub fn copy_missing_skipping(from: &Path, to: &Path, skip: &dyn Fn(&Path) -> bool) -> std::io::Result<usize> {
-    let mut copied = 0;
-    for e in std::fs::read_dir(from)? {
-        let e = e?;
+/// Temporary names used while copying: `.<name>.tstmp`.
+fn is_copy_temp(name: &std::ffi::OsStr) -> bool {
+    let n = name.to_string_lossy();
+    n.starts_with('.') && n.ends_with(".tstmp")
+}
+
+/// Copy every file under `from` whose relative path does not exist under `to`, creating folders;
+/// never overwrites. Returns how many files were copied (the first failure is an error).
+pub fn copy_missing(from: &Path, to: &Path) -> std::io::Result<usize> {
+    let r = copy_missing_report(from, to, &|_| false);
+    match r.failed.into_iter().next() {
+        Some((p, why)) => Err(std::io::Error::other(format!("{}: {why}", p.display()))),
+        None => Ok(r.copied),
+    }
+}
+
+/// Like `copy_missing`, but a bad entry is reported and the rest still copies; every path for
+/// which `skip` is true is left out. Each file goes to a temporary name next to its destination
+/// and is renamed into place only if the final name is still free, so a half copy is never
+/// taken for a file and nothing is replaced.
+pub fn copy_missing_report(from: &Path, to: &Path, skip: &dyn Fn(&Path) -> bool) -> CopyReport {
+    let mut rep = CopyReport::default();
+    let rd = match std::fs::read_dir(from) {
+        Ok(rd) => rd,
+        Err(e) => {
+            rep.failed.push((from.to_path_buf(), e.to_string()));
+            return rep;
+        }
+    };
+    for e in rd.flatten() {
         let src = e.path();
-        if skip(&src) {
+        if skip(&src) || is_copy_temp(&e.file_name()) {
             continue;
         }
         let dst = to.join(e.file_name());
-        let kind = e.file_type()?;
+        let Ok(kind) = e.file_type() else { continue };
         if kind.is_dir() {
-            copied += copy_missing_skipping(&src, &dst, skip)?;
-        } else if kind.is_file() && !dst.exists() {
-            std::fs::create_dir_all(to)?;
-            std::fs::copy(&src, &dst)?;
-            copied += 1;
+            let sub = copy_missing_report(&src, &dst, skip);
+            rep.copied += sub.copied;
+            rep.failed.extend(sub.failed);
+        } else if kind.is_file() {
+            if dst.is_dir() {
+                rep.failed.push((src, "a folder is in the way at the destination".into()));
+            } else if !dst.exists() {
+                match copy_one(&src, &dst) {
+                    Ok(true) => rep.copied += 1,
+                    Ok(false) => {}
+                    Err(err) => rep.failed.push((src, err.to_string())),
+                }
+            }
         }
     }
-    Ok(copied)
+    rep
+}
+
+fn copy_one(src: &Path, dst: &Path) -> std::io::Result<bool> {
+    let dir = dst.parent().unwrap_or(Path::new("."));
+    std::fs::create_dir_all(dir)?;
+    let name = dst.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tmp = dir.join(format!(".{name}.tstmp"));
+    let _ = std::fs::remove_file(&tmp);
+    let result = (|| {
+        std::fs::copy(src, &tmp)?;
+        if dst.exists() {
+            return Ok(false);
+        }
+        std::fs::rename(&tmp, dst)?;
+        Ok(true)
+    })();
+    if !matches!(result, Ok(true)) {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
 }
 
 /// Unix seconds as (year, month, day, hour, minute) in UTC.
@@ -223,8 +277,41 @@ mod tests {
         std::fs::create_dir_all(from.join("cache")).unwrap();
         std::fs::write(from.join("cache/x.txt"), "x").unwrap();
         std::fs::write(from.join("a.txt"), "a").unwrap();
-        assert_eq!(copy_missing_skipping(&from, &to, &|p| p.ends_with("cache")).unwrap(), 1);
+        assert_eq!(copy_missing_report(&from, &to, &|p| p.ends_with("cache")).copied, 1);
         assert!(!to.join("cache").exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn stale_temp_file_does_not_stop_the_copy() {
+        let d = scratch("copy-d");
+        let (from, to) = (d.join("from"), d.join("to"));
+        std::fs::create_dir_all(&from).unwrap();
+        std::fs::create_dir_all(&to).unwrap();
+        std::fs::write(from.join("a.txt"), "real").unwrap();
+        std::fs::write(from.join(".old.txt.tstmp"), "junk").unwrap();
+        std::fs::write(to.join(".a.txt.tstmp"), "half").unwrap();
+        let r = copy_missing_report(&from, &to, &|_| false);
+        assert_eq!((r.copied, r.failed.len()), (1, 0));
+        assert_eq!(std::fs::read_to_string(to.join("a.txt")).unwrap(), "real");
+        assert!(!to.join(".a.txt.tstmp").exists());
+        assert!(!to.join(".old.txt.tstmp").exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_bad_entry_is_reported_and_the_rest_copies() {
+        let d = scratch("copy-e");
+        let (from, to) = (d.join("from"), d.join("to"));
+        std::fs::create_dir_all(&from).unwrap();
+        std::fs::create_dir_all(to.join("a.txt")).unwrap(); // a folder where a file should go
+        std::fs::write(from.join("a.txt"), "a").unwrap();
+        std::fs::write(from.join("b.txt"), "b").unwrap();
+        let r = copy_missing_report(&from, &to, &|_| false);
+        assert_eq!(r.copied, 1);
+        assert_eq!(r.failed.len(), 1);
+        assert!(r.failed[0].0.ends_with("a.txt"));
+        assert!(to.join("b.txt").exists());
         let _ = std::fs::remove_dir_all(&d);
     }
 

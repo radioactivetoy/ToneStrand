@@ -54,7 +54,7 @@ impl App {
                             }
                         });
                         if cfg!(target_os = "android") {
-                            let allowed = matches!(crate::platform::storage(), crate::platform::Storage::Shared(_));
+                            let allowed = matches!(self.effective_storage(), crate::platform::Storage::Shared(_));
                             ui.label(format!("Storage access: {}", if allowed { "allowed" } else { "not allowed" }));
                             if crate::platform::android_api() >= 30 {
                                 ui.label(RichText::new("On Android 11 and newer, files put in this folder by other apps (a sync app, a PC over USB) or by an earlier install of ToneStrand are not visible here.").small().color(muted()));

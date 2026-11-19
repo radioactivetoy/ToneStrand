@@ -271,6 +271,7 @@ mod tests {
         use crate::platform::Storage;
         let private = Path::new("/p");
         assert_eq!(library_for(&Storage::Shared("/s".into()), private), (PathBuf::from("/s"), false));
+        assert_eq!(library_for(&Storage::Unknown, private), (PathBuf::from("/p"), false));
         assert_eq!(library_for(&Storage::Private, private), (PathBuf::from("/p"), true));
         assert_eq!(library_for(&Storage::Refused, private), (PathBuf::from("/p"), true));
     }

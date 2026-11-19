@@ -145,6 +145,8 @@ pub fn is_cache_path(p: &Path) -> bool {
 /// Where the app may keep its library on Android (set by the android crate, from any thread).
 #[derive(Clone, Debug, PartialEq)]
 pub enum Storage {
+    /// Not reported yet (the start state; the app keeps what it has).
+    Unknown,
     /// Only the app's private folder (no shared folder yet).
     Private,
     /// The shared Documents/ToneStrand folder is usable.
@@ -153,7 +155,7 @@ pub enum Storage {
     Refused,
 }
 
-static STORAGE: Mutex<Storage> = Mutex::new(Storage::Private);
+static STORAGE: Mutex<Storage> = Mutex::new(Storage::Unknown);
 static PERMISSION_BACKEND: Mutex<Option<Arc<dyn Fn() + Send + Sync>>> = Mutex::new(None);
 static ANDROID_API: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 

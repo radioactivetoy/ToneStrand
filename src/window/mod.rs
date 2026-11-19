@@ -256,6 +256,22 @@ pub struct App {
     restore_all_folders: Option<Vec<PathBuf>>,
     /// Android: the app's private library folder (None on the desktop).
     private_library: Option<PathBuf>,
+    /// Android: the background copy into the shared folder, while it runs.
+    copy_job: Option<Receiver<crate::files::CopyReport>>,
+    /// Android: the shared folder a copy was started for.
+    copied_for: Option<PathBuf>,
+    /// Android: a shared folder that failed its write test.
+    shared_failed: Option<PathBuf>,
+    /// Android: the shared folder last used (its backups stay listed on the private library).
+    last_shared: Option<PathBuf>,
+}
+
+/// Make sure a folder exists and can be written: a small file is written and removed.
+fn check_writable(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let t = dir.join(".tonestrand-write-test");
+    std::fs::write(&t, b"x")?;
+    std::fs::remove_file(&t)
 }
 
 /// Which library folder to use for the storage state, and whether to warn that backups are only
@@ -263,6 +279,7 @@ pub struct App {
 pub(super) fn library_for(storage: &crate::platform::Storage, private: &Path) -> (PathBuf, bool) {
     match storage {
         crate::platform::Storage::Shared(d) => (d.clone(), false),
+        crate::platform::Storage::Unknown => (private.to_path_buf(), false),
         _ => (private.to_path_buf(), true),
     }
 }
@@ -386,10 +403,15 @@ impl App {
             close_requested: false,
             restore_all_folders: None,
             private_library: std::env::var_os("TONESTRAND_LIBRARY_PRIVATE").map(PathBuf::from),
+            copy_job: None,
+            copied_for: None,
+            shared_failed: None,
+            last_shared: None,
         };
         app.catalog = crate::catalog::load_best(app.settings.hx_edit.as_deref()).map(Arc::new);
         app.catalog_why = catalog_why(app.catalog.as_deref(), app.settings.hx_edit.as_deref());
         app.lib = Library::new(app.library_dir.clone());
+        app.last_shared = app.private_library.as_ref().filter(|p| **p != app.library_dir).map(|_| app.library_dir.clone());
         app.unit = app.settings.unit.unwrap_or(2162694);
         // Start for a given unit (used to check pictures for each pedal).
         if let Some(u) = std::env::var("TONESTRAND_UNIT").ok().and_then(|v| v.parse::<i64>().ok()) {
@@ -531,43 +553,100 @@ impl App {
         self.library_dir.join("Pedal backups")
     }
 
-    /// The folders holding pedal backups: the library's first, then the private one on Android
-    /// when it is a different folder that exists.
+    /// The folders holding pedal backups: the library's first, then the private one and the last
+    /// shared one when they are other folders that exist.
     pub(super) fn backup_dirs(&self) -> Vec<PathBuf> {
         let mut dirs = vec![self.backup_dir()];
-        if let Some(p) = &self.private_library {
-            let private = p.join("Pedal backups");
-            if !dirs.contains(&private) && private.is_dir() {
-                dirs.push(private);
+        for base in self.private_library.iter().chain(self.last_shared.iter()) {
+            let d = base.join("Pedal backups");
+            if !dirs.contains(&d) && std::fs::read_dir(&d).is_ok() {
+                dirs.push(d);
             }
         }
         dirs
     }
 
-    /// Android: whether backups are only kept inside the app (no shared folder).
-    pub(super) fn storage_warning(&self) -> bool {
-        cfg!(target_os = "android") && self.private_library.as_ref().is_some_and(|p| library_for(&crate::platform::storage(), p).1)
+    /// The storage state, except that a shared folder that failed its write test counts as refused.
+    pub(super) fn effective_storage(&self) -> crate::platform::Storage {
+        use crate::platform::Storage;
+        match crate::platform::storage() {
+            Storage::Shared(d) if self.shared_failed.as_ref() == Some(&d) => Storage::Refused,
+            s => s,
+        }
     }
 
-    /// Android, at the start of a frame: follow the storage state. When the shared folder becomes
-    /// usable, switch to it and copy across what it lacks; when it goes away, back to the private one.
-    fn follow_storage(&mut self) {
+    /// Android: whether backups are only kept inside the app (no shared folder).
+    pub(super) fn storage_warning(&self) -> bool {
+        cfg!(target_os = "android") && self.private_library.as_ref().is_some_and(|p| library_for(&self.effective_storage(), p).1)
+    }
+
+    /// Android, at the start of a frame: follow the storage state. A usable shared folder gets a
+    /// background copy of what it lacks and becomes the library at once; when it goes away, back
+    /// to the private one.
+    fn follow_storage(&mut self, ctx: &egui::Context) {
+        use crate::platform::Storage;
         let Some(private) = self.private_library.clone() else { return };
-        let (dir, _) = library_for(&crate::platform::storage(), &private);
-        if dir == self.library_dir {
+        self.poll_copy(ctx);
+        let live = crate::platform::storage();
+        if live == Storage::Unknown {
             return;
         }
-        let _ = std::fs::create_dir_all(&dir);
-        let copied =
-            if dir != private { crate::files::copy_missing_skipping(&private, &dir, &crate::platform::is_cache_path) } else { Ok(0) };
-        self.library_dir = dir.clone();
-        self.lib = Library::new(dir.clone());
-        self.scan_library();
-        self.scan_tones();
-        match copied {
-            Ok(n) if n > 0 => self.note(LogLevel::Good, format!("Copied {n} files into Documents/ToneStrand")),
-            Ok(_) => {}
-            Err(e) => self.note(LogLevel::Bad, format!("Could not copy the files into {}: {e}", dir.display())),
+        if !matches!(&live, Storage::Shared(d) if self.shared_failed.as_ref() == Some(d)) {
+            self.shared_failed = None;
+        }
+        if let Storage::Shared(d) = self.effective_storage() {
+            if self.copied_for.as_ref() != Some(&d) {
+                if self.copy_job.is_some() {
+                    return;
+                }
+                match check_writable(&d) {
+                    Ok(()) => {
+                        self.copied_for = Some(d.clone());
+                        self.last_shared = Some(d.clone());
+                        let (tx, rx) = channel();
+                        let from = private.clone();
+                        std::thread::spawn(move || {
+                            let _ = tx.send(crate::files::copy_missing_report(&from, &d, &crate::platform::is_cache_path));
+                        });
+                        self.copy_job = Some(rx);
+                    }
+                    Err(e) => {
+                        self.note(LogLevel::Bad, format!("Cannot use {}: {e}", d.display()));
+                        self.shared_failed = Some(d);
+                    }
+                }
+            }
+        }
+        let (dir, _) = library_for(&self.effective_storage(), &private);
+        if dir != self.library_dir {
+            self.library_dir = dir.clone();
+            self.lib = Library::new(dir);
+            self.scan_library();
+            self.scan_tones();
+        }
+    }
+
+    /// Collect the background copy into the shared folder, when it is done.
+    fn poll_copy(&mut self, ctx: &egui::Context) {
+        use std::sync::mpsc::TryRecvError;
+        let Some(rx) = &self.copy_job else { return };
+        match rx.try_recv() {
+            Ok(rep) => {
+                self.copy_job = None;
+                if rep.copied > 0 {
+                    self.note(LogLevel::Good, format!("Copied {} files into Documents/ToneStrand", rep.copied));
+                }
+                if !rep.failed.is_empty() {
+                    self.note(LogLevel::Bad, format!("Could not copy {} files", rep.failed.len()));
+                    for (p, why) in rep.failed.iter().take(20) {
+                        self.note(LogLevel::Info, format!("{}: {why}", p.display()));
+                    }
+                }
+                self.scan_library();
+                self.scan_tones();
+            }
+            Err(TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(300)),
+            Err(TryRecvError::Disconnected) => self.copy_job = None,
         }
     }
 
@@ -2154,7 +2233,7 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         theme::track_keyboard_nav(ctx);
         if cfg!(target_os = "android") {
-            self.follow_storage();
+            self.follow_storage(ctx);
         }
         // Answers of the file dialogs, before anything is drawn.
         self.poll_picks();
