@@ -1245,8 +1245,8 @@ pub fn parse_shown(meta: Option<&Param>, text: &str) -> Option<f64> {
     if text.is_empty() {
         return None;
     }
-    let Some(m) = meta else { return first_number(text).map(|(v, _)| v) };
-    let clamp = |v: f64| if m.max > m.min { v.clamp(m.min, m.max) } else { v };
+    let Some(m) = meta else { return text.parse::<f64>().ok() };
+    let clamp = |v: f64| v.clamp(m.min.min(m.max), m.min.max(m.max));
     let lower = text.to_lowercase();
     if !m.choices.is_empty() {
         let base = if m.value_type == 2 { 0 } else { m.min.round() as i64 };
@@ -1269,7 +1269,7 @@ pub fn parse_shown(meta: Option<&Param>, text: &str) -> Option<f64> {
             "off" if d == "nam_highcut" => Some(1.0),
             "off" if d.contains("low_cut") => Some(m.min),
             "off" if d.contains("high_cut") => Some(m.max),
-            "center" if d == "pan" || d == "split_balance" => Some(0.5),
+            "c" | "center" if d == "pan" || d == "split_balance" => Some(0.5),
             _ => None,
         };
     };
@@ -1290,7 +1290,11 @@ pub fn parse_shown(meta: Option<&Param>, text: &str) -> Option<f64> {
         };
         let by_unit = |p: &&DisplayPiece| {
             let (pre, suf) = words_of(p);
-            (!pre.is_empty() && lower.contains(&pre)) || (!suf.is_empty() && unit.starts_with(&suf))
+            if pre.is_empty() {
+                !suf.is_empty() && unit.starts_with(&suf)
+            } else {
+                lower.starts_with(&pre)
+            }
         };
         let inside = spec.pieces.iter().filter(in_range).find(by_unit).or_else(|| spec.pieces.iter().find(in_range));
         let piece = inside.or_else(|| {
@@ -1317,7 +1321,6 @@ pub fn parse_shown(meta: Option<&Param>, text: &str) -> Option<f64> {
         "nam_input" => n / 40.0 + 0.5,
         "nam_band" => n / 24.0 + 0.5,
         "nam_output" => n / 10.0,
-        "nam_highcut" if lower == "off" => 1.0,
         "nam_highcut" => n / 10.0,
         "nam_midfreq" => {
             if khz {
@@ -1330,18 +1333,15 @@ pub fn parse_shown(meta: Option<&Param>, text: &str) -> Option<f64> {
         "percent" | "percent_braced" if m.max <= 1.0 => n / 100.0,
         "volume" | "volume_eq" => n,
         "pan" | "split_balance" => {
-            if lower == "center" {
-                0.5
-            } else if lower.starts_with("left") {
+            // "Left 30" / "Right 30"; a bare number is Right when positive, Left when negative.
+            if lower.starts_with('l') {
                 0.5 - n.abs() / 200.0
-            } else if lower.starts_with("right") {
+            } else if lower.starts_with('r') {
                 0.5 + n.abs() / 200.0
             } else {
-                n
+                0.5 + n / 200.0
             }
         }
-        d if d.contains("low_cut") && lower == "off" => m.min,
-        d if d.contains("high_cut") && lower == "off" => m.max,
         d if d.contains("freq") || d.contains("cut") => {
             if khz {
                 n * 1000.0
@@ -1667,6 +1667,55 @@ mod parse_shown_tests {
     }
 
     #[test]
+    fn review_cases() {
+        // No meta: egui's strict number parse.
+        assert_eq!(parse_shown(None, " 2.5 "), Some(2.5));
+        assert_eq!(parse_shown(None, "2.5 dB"), None);
+        // Negative numbers, linear -12..12 dB.
+        let linear = param("x", 0.0, 1.0, DisplaySpec { min_val: Some(-12.0), max_val: Some(12.0), ..Default::default() });
+        assert_eq!(parse_shown(Some(&linear), "-6"), Some(0.25));
+        assert_eq!(parse_shown(Some(&linear), "-99"), Some(0.0), "clamped");
+        // Pan: bare numbers follow the sign.
+        let pan = param("pan", 0.0, 1.0, DisplaySpec::default());
+        assert_eq!(parse_shown(Some(&pan), "30"), Some(0.65));
+        assert_eq!(parse_shown(Some(&pan), "-30"), Some(0.35));
+        assert_eq!(parse_shown(Some(&pan), "0"), Some(0.5));
+        assert_eq!(parse_shown(Some(&pan), "c"), Some(0.5));
+        assert_eq!(parse_shown(Some(&pan), "Left 30"), Some(0.35));
+        assert_eq!(parse_shown(Some(&pan), "Right 100"), Some(1.0));
+        // A degenerate range never produces a value outside it.
+        let flat = param("x", 3.0, 3.0, DisplaySpec::default());
+        assert_eq!(parse_shown(Some(&flat), "7"), Some(3.0));
+        // "Off" is the param's own off value.
+        let nam = param("nam_highcut", 0.0, 1.0, DisplaySpec::default());
+        assert_eq!(parse_shown(Some(&nam), "Off"), Some(1.0));
+        // A two-sided delay: the letter picks the side, not the unit.
+        let d = param(
+            "dualIR_time_ms",
+            -0.05,
+            0.05,
+            DisplaySpec {
+                scale: 1000.0,
+                pieces: vec![
+                    DisplayPiece { lower: -50.1, upper: -9.95, mult: -1.0, format: None, format_units: Some("A %.0f ms".into()) },
+                    DisplayPiece { lower: 9.95, upper: 50.1, mult: 1.0, format: None, format_units: Some("B %.0f ms".into()) },
+                ],
+                ..Default::default()
+            },
+        );
+        assert_eq!(parse_shown(Some(&d), "B 50 ms"), Some(0.05));
+        assert_eq!(parse_shown(Some(&d), "A 50 ms"), Some(-0.05));
+    }
+
+    #[test]
+    fn integer_parse_rounds_like_the_editor() {
+        // The editor rounds what parse_shown returns, so an inexact float stores the nearer integer.
+        let m = param("x", 0.0, 100.0, DisplaySpec { scale: 0.1, ..Default::default() });
+        let v = parse_shown(Some(&m), "5.5").map(f64::round);
+        assert_eq!(v, Some(55.0));
+    }
+
+    #[test]
     fn choice_labels_parse_to_their_value() {
         let mut m = param("x", 2.0, 4.0, DisplaySpec::default());
         m.value_type = 0;
@@ -1701,6 +1750,6 @@ mod parse_shown_tests {
         for b in bad.iter().take(25) {
             eprintln!("  {b}");
         }
-        assert!(bad.len() <= 5, "too many mismatches ({} of {n})", bad.len());
+        assert!(bad.is_empty(), "{} of {n} params do not round-trip", bad.len());
     }
 }

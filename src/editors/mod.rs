@@ -917,7 +917,7 @@ fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<V
                 if let Some(m) = meta {
                     dv = dv
                         .custom_formatter(|n, _| crate::catalog::format_value(Some(m), n))
-                        .custom_parser(|s| crate::catalog::parse_shown(Some(m), s));
+                        .custom_parser(|s| crate::catalog::parse_shown(Some(m), s).map(f64::round));
                 }
                 if let Some(m) = meta.filter(|m| m.max > m.min) {
                     dv = dv.range(m.min as i64..=m.max as i64);
