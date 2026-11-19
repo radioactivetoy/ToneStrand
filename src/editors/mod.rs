@@ -914,6 +914,11 @@ fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<V
                 }
             } else {
                 let mut dv = egui::DragValue::new(&mut x).speed(0.1);
+                if let Some(m) = meta {
+                    dv = dv
+                        .custom_formatter(|n, _| crate::catalog::format_value(Some(m), n))
+                        .custom_parser(|s| crate::catalog::parse_shown(Some(m), s).map(f64::round));
+                }
                 if let Some(m) = meta.filter(|m| m.max > m.min) {
                     dv = dv.range(m.min as i64..=m.max as i64);
                 }
@@ -1032,16 +1037,220 @@ pub fn current_note(ctx: &egui::Context) -> Option<String> {
 }
 
 /// Which part of an editor to draw: 0 everything, 1 only the chain (and what's above it),
-/// 2 only the selected block's panel. The panel is docked at the bottom.
+/// 2 only the selected block's panel, 4 only a one-row strip of chips (one per block).
+/// The panel is docked at the bottom.
 static PART: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 pub fn set_part(p: u8) {
     PART.store(p, std::sync::atomic::Ordering::Relaxed);
 }
 fn chain_part() -> bool {
-    PART.load(std::sync::atomic::Ordering::Relaxed) != 2
+    let p = PART.load(std::sync::atomic::Ordering::Relaxed);
+    p != 2 && p != 4
 }
 fn panel_part() -> bool {
-    PART.load(std::sync::atomic::Ordering::Relaxed) != 1
+    let p = PART.load(std::sync::atomic::Ordering::Relaxed);
+    p != 1 && p != 4
+}
+fn strip_part() -> bool {
+    PART.load(std::sync::atomic::Ordering::Relaxed) == 4
+}
+
+/// One tappable block in the chip strip. `sel` is what the editor's `selected` holds for this block.
+pub struct Chip {
+    pub sel: usize,
+    pub name: String,
+    pub colour: Color32,
+    /// The block's column in the chain (empty slots count), used to place a lane's split point.
+    pub col: usize,
+}
+
+/// One line of the strip: a lane of a path ("1A" the main lane, "1B" the lower lane after a split, "2A"...).
+/// `label` is empty when the preset is a single plain lane.
+pub struct ChipRow {
+    pub label: String,
+    pub chips: Vec<Chip>,
+    /// For a lower (B) row: how many chips of the path's A row come before the split point, so the row
+    /// can start under the A chip where the split happens. 0 for an A row.
+    pub split_col: usize,
+}
+
+/// Group blocks given as (path index, lane, chip) into the strip's rows: 1A, 1B, 2A, 2B in that order,
+/// leaving out lanes with no blocks. A lone 1A row gets no label. Chips keep their given order within a row.
+/// `splits` gives, per path index, the chain column where its lane splits; a B row records how many of its
+/// A row's chips sit before that column (never more than the A row has).
+pub fn chip_rows(items: impl IntoIterator<Item = (usize, usize, Chip)>, splits: &[(usize, usize)]) -> Vec<ChipRow> {
+    let mut by: std::collections::BTreeMap<(usize, usize), Vec<Chip>> = std::collections::BTreeMap::new();
+    for (path, lane, chip) in items {
+        by.entry((path, lane)).or_default().push(chip);
+    }
+    let lone_plain = by.len() == 1 && by.contains_key(&(0, 0));
+    let split_cols: Vec<((usize, usize), usize)> = by
+        .keys()
+        .filter(|(_, lane)| *lane != 0)
+        .map(|&(path, lane)| {
+            let at = splits.iter().find(|(p, _)| *p == path).map_or(0, |s| s.1);
+            let n = by.get(&(path, 0)).map_or(0, |a| a.iter().filter(|c| c.col < at).count());
+            ((path, lane), n)
+        })
+        .collect();
+    by.into_iter()
+        .map(|((path, lane), chips)| ChipRow {
+            label: if lone_plain { String::new() } else { format!("{}{}", path + 1, if lane == 0 { 'A' } else { 'B' }) },
+            chips,
+            split_col: split_cols.iter().find(|(k, _)| *k == (path, lane)).map_or(0, |x| x.1),
+        })
+        .collect()
+}
+
+const CHIP_TEXT: f32 = 12.0;
+/// Side padding inside a chip, and the gap between chips.
+const CHIP_PAD: f32 = 6.0;
+const CHIP_GAP: f32 = 4.0;
+/// A chip is at most this wide; a longer name is cut short with an ellipsis.
+const CHIP_MAX_W: f32 = 100.0;
+
+fn chip_font() -> egui::FontId {
+    egui::FontId::proportional(CHIP_TEXT)
+}
+
+/// The name as it fits a chip: whole if it fits `CHIP_MAX_W`, else cut short with "…".
+fn fit_chip_name(ui: &egui::Ui, name: &str) -> String {
+    let max_text = CHIP_MAX_W - 2.0 * CHIP_PAD;
+    let width = |s: &str| ui.fonts(|f| f.layout_no_wrap(s.to_owned(), chip_font(), Color32::WHITE).size().x);
+    if width(name) <= max_text {
+        return name.to_owned();
+    }
+    let chars: Vec<char> = name.chars().collect();
+    for keep in (0..chars.len()).rev() {
+        let cand = format!("{}…", chars[..keep].iter().collect::<String>().trim_end());
+        if width(&cand) <= max_text {
+            return cand;
+        }
+    }
+    "…".to_owned()
+}
+
+/// The rows of block chips, sideways-scrolling together as one. True when a chip was tapped.
+pub fn chip_strip(ui: &mut egui::Ui, rows: &[ChipRow], selected: &mut Option<usize>) -> bool {
+    if rows.is_empty() {
+        ui.label(RichText::new("No blocks").color(muted()));
+        return false;
+    }
+    let mut tapped = false;
+    let labelled = rows.iter().any(|r| !r.label.is_empty());
+    egui::ScrollArea::horizontal().id_salt("chip-strip").auto_shrink([false, true]).show(ui, |ui| {
+        ui.vertical(|ui| {
+            ui.spacing_mut().item_spacing.y = 6.0;
+            // Left x of each A row's chips (and its right end), so a B row can start under its split.
+            let mut a_xs: Vec<(char, Vec<f32>, f32)> = Vec::new();
+            for row in rows {
+                let is_b = row.label.ends_with('B');
+                let key = row.label.chars().next().unwrap_or(' ');
+                let start = if is_b {
+                    a_xs.iter().find(|(k, _, _)| *k == key).map(|(_, xs, end)| xs.get(row.split_col).copied().unwrap_or(*end))
+                } else {
+                    None
+                };
+                let mut xs: Vec<f32> = Vec::new();
+                let mut end = 0.0_f32;
+                ui.horizontal(|ui| {
+                    if labelled {
+                        let (rect, _) = ui.allocate_exact_size(Vec2::new(26.0, 32.0), egui::Sense::hover());
+                        ui.painter().text(
+                            rect.center(),
+                            egui::Align2::CENTER_CENTER,
+                            &row.label,
+                            egui::FontId::proportional(13.0),
+                            muted(),
+                        );
+                    }
+                    if let Some(x) = start {
+                        let gap = x - ui.cursor().min.x;
+                        if gap > 0.0 {
+                            ui.add_space(gap);
+                        }
+                    }
+                    ui.spacing_mut().item_spacing.x = CHIP_GAP;
+                    for chip in &row.chips {
+                        let shown = fit_chip_name(ui, &chip.name);
+                        let text_w = ui.fonts(|f| f.layout_no_wrap(shown.clone(), chip_font(), Color32::WHITE).size().x);
+                        let size = Vec2::new(text_w + 2.0 * CHIP_PAD, 32.0);
+                        let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+                        let resp = resp.on_hover_text(chip.name.as_str());
+                        xs.push(rect.min.x);
+                        end = rect.max.x + ui.spacing().item_spacing.x;
+                        let is_sel = *selected == Some(chip.sel);
+                        let p = ui.painter();
+                        p.rect_filled(rect, CornerRadius::same(8), chip.colour);
+                        if is_sel {
+                            p.rect_stroke(rect, CornerRadius::same(8), Stroke::new(2.0_f32, accent()), egui::StrokeKind::Inside);
+                        } else if resp.hovered() {
+                            p.rect_stroke(rect, CornerRadius::same(8), Stroke::new(1.0_f32, theme::wash(90)), egui::StrokeKind::Inside);
+                        }
+                        let bright = theme::is_light()
+                            && (0.299 * chip.colour.r() as f32 + 0.587 * chip.colour.g() as f32 + 0.114 * chip.colour.b() as f32) > 140.0;
+                        let tc = if bright { Color32::from_rgb(0x14, 0x17, 0x1c) } else { Color32::WHITE };
+                        p.text(rect.center(), egui::Align2::CENTER_CENTER, &shown, chip_font(), tc);
+                        if resp.clicked() {
+                            *selected = Some(chip.sel);
+                            tapped = true;
+                        }
+                    }
+                });
+                if !is_b {
+                    a_xs.push((key, xs, end));
+                }
+            }
+        });
+    });
+    tapped
+}
+
+#[cfg(test)]
+mod part_tests {
+    use super::*;
+
+    #[test]
+    fn part_flags() {
+        set_part(4);
+        assert!(!chain_part() && !panel_part() && strip_part());
+        set_part(1);
+        assert!(chain_part() && !panel_part() && !strip_part());
+        set_part(2);
+        assert!(!chain_part() && panel_part() && !strip_part());
+        set_part(0);
+        assert!(chain_part() && panel_part() && !strip_part());
+    }
+
+    fn chip(n: usize) -> Chip {
+        Chip { sel: n, name: format!("b{n}"), colour: Color32::GRAY, col: n }
+    }
+
+    #[test]
+    fn rows_follow_paths_and_lanes() {
+        let rows = chip_rows([(0, 0, chip(0)), (1, 0, chip(3)), (0, 1, chip(2)), (0, 0, chip(1))], &[]);
+        let labels: Vec<&str> = rows.iter().map(|r| r.label.as_str()).collect();
+        assert_eq!(labels, ["1A", "1B", "2A"]);
+        assert_eq!(rows[0].chips.iter().map(|c| c.sel).collect::<Vec<_>>(), [0, 1]);
+        let plain = chip_rows([(0, 0, chip(0)), (0, 0, chip(1))], &[]);
+        assert_eq!(plain.len(), 1);
+        assert!(plain[0].label.is_empty());
+        assert!(chip_rows([], &[]).is_empty());
+    }
+
+    #[test]
+    fn lower_row_knows_its_split_column() {
+        let items = || [(0, 0, chip(0)), (0, 0, chip(1)), (0, 0, chip(2)), (0, 0, chip(3)), (0, 1, chip(9))];
+        // Split before column 3: three A chips come first.
+        assert_eq!(chip_rows(items(), &[(0, 3)])[1].split_col, 3);
+        // Past the last A chip: clamps to the A count.
+        assert_eq!(chip_rows(items(), &[(0, 40)])[1].split_col, 4);
+        // Empty slots count as columns: chips at columns 0, 1, 5 with a split at column 4.
+        let gap = [(0, 0, Chip { col: 5, ..chip(2) }), (0, 0, chip(0)), (0, 0, chip(1)), (0, 1, chip(9))];
+        assert_eq!(chip_rows(gap, &[(0, 4)])[1].split_col, 2);
+        assert_eq!(chip_rows(items(), &[])[1].split_col, 0);
+        assert_eq!(chip_rows(items(), &[(0, 3)])[0].split_col, 0);
+    }
 }
 
 /// Width of the photo-and-notes column beside a block's knobs.
@@ -1193,7 +1402,8 @@ fn bound_cell(ui: &mut egui::Ui, v: &Value, meta: Option<&crate::catalog::Param>
                 egui::DragValue::new(&mut x)
                     .range(lo..=hi)
                     .speed(if int { 0.2 } else { (hi - lo) / 200.0 })
-                    .custom_formatter(|n, _| crate::catalog::format_value(meta, n)),
+                    .custom_formatter(|n, _| crate::catalog::format_value(meta, n))
+                    .custom_parser(|s| crate::catalog::parse_shown(meta, s)),
             );
             r.changed().then(|| if int { Value::int(x.round() as i64) } else { Value::F32(x as f32) })
         }

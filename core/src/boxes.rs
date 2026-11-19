@@ -87,6 +87,8 @@ pub struct Settings {
     pub auto_reconnect: bool,
     /// Units whose "what is checked" notice has been shown (their device numbers).
     pub units_seen: Vec<i64>,
+    /// Editor page layout: 0 normal, 1 chain maximized, 2 block panel maximized.
+    pub editor_layout: u8,
 }
 
 impl Default for Settings {
@@ -120,6 +122,7 @@ impl Default for Settings {
             last_tabs: Vec::new(),
             auto_reconnect: true,
             units_seen: Vec::new(),
+            editor_layout: 0,
         }
     }
 }
@@ -376,6 +379,15 @@ fn lookup_pass(tx: &Sender<BoxInfo>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn editor_layout_defaults_to_normal_and_round_trips() {
+        let s: Settings = serde_json::from_str("{}").unwrap();
+        assert_eq!(s.editor_layout, 0);
+        let s = Settings { editor_layout: 2, ..Settings::default() };
+        let back: Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert_eq!(back.editor_layout, 2);
+    }
 
     #[test]
     fn a_broken_settings_file_is_kept_not_lost() {

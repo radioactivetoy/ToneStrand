@@ -157,6 +157,31 @@ pub fn hlx_editor(
         let is_amp = |b: &hlx::HlxBlock| cat.and_then(|c| c.category_of_symbol(&b.model)).is_some_and(|(n, _)| n.starts_with("Amp"));
         *selected = blocks.iter().position(is_amp).or(if blocks.is_empty() { None } else { Some(0) });
     }
+    if strip_part() {
+        // The same lanes the chain draws: per path (dsp), the main lane and, when it is really split, the lower lane.
+        let paths: Vec<String> = hlx::dsps(json).into_iter().take(unit.paths).collect();
+        let mut items: Vec<(usize, usize, Chip)> = Vec::new();
+        let mut split_cols: Vec<(usize, usize)> = Vec::new();
+        for (pi, dsp) in paths.iter().enumerate() {
+            let split = hlx::split_of(json, dsp).filter(|_| hlx::split_active(json, dsp) && unit.lanes);
+            let mut mine: Vec<(usize, &hlx::HlxBlock)> =
+                blocks.iter().enumerate().filter(|(_, b)| &b.dsp == dsp && b.key.starts_with("block")).collect();
+            mine.sort_by_key(|(_, b)| (b.path, b.position));
+            if let Some(sp) = &split {
+                split_cols.push((pi, sp.1.max(0) as usize));
+            }
+            for (i, b) in mine {
+                if b.path != 0 && split.is_none() {
+                    continue;
+                }
+                let (name, _, colour) = name_of(&b.model);
+                items.push((pi, usize::from(b.path != 0), Chip { sel: i, name, colour, col: b.position.max(0) as usize }));
+            }
+        }
+        let chips = chip_rows(items, &split_cols);
+        chip_strip(ui, &chips, selected);
+        return;
+    }
     let dsps: Vec<String> = hlx::dsps(json).into_iter().take(unit.paths).collect();
     // Only a path that is really split shows its lower lane.
     let splits: Vec<Option<(String, i64, i64)>> =

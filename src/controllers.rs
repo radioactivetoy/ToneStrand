@@ -85,10 +85,10 @@ fn knob_row(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catalo
     let (name, min, max) = knob_meta(cat, b, knob);
     ui.horizontal(|ui| {
         ui.label(RichText::new(format!("{} › {}", block_name(cat, b), name)).strong());
+        let model = hlx::block(json, b).and_then(|o| o.get("@model")).and_then(|v| v.as_str()).unwrap_or("").to_owned();
+        let param = cat.and_then(|c| c.info_for_hlx(&model, false)).and_then(|i| i.params.iter().find(|p| p.id == knob)).cloned();
         if src == Source::Snapshots {
             // One value per snapshot (pick a snapshot above and turn the knob to change its value).
-            let model = hlx::block(json, b).and_then(|o| o.get("@model")).and_then(|v| v.as_str()).unwrap_or("").to_owned();
-            let param = cat.and_then(|c| c.info_for_hlx(&model, false)).and_then(|i| i.params.iter().find(|p| p.id == knob)).cloned();
             let cur = snapshots::current(json);
             for (i, sname) in snapshots::list(json) {
                 let v = if i == cur {
@@ -117,9 +117,25 @@ fn knob_row(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catalo
             let (mut a, mut z) = (lo, hi);
             let step = ((max - min) / 200.0).max(0.001);
             ui.label(RichText::new("from").color(muted()));
-            let c1 = ui.add(egui::DragValue::new(&mut a).range(min..=max).speed(step)).changed();
+            let c1 = ui
+                .add(
+                    egui::DragValue::new(&mut a)
+                        .range(min..=max)
+                        .speed(step)
+                        .custom_formatter(|n, _| crate::catalog::format_value(param.as_ref(), n))
+                        .custom_parser(|s| crate::catalog::parse_shown(param.as_ref(), s)),
+                )
+                .changed();
             ui.label(RichText::new("to").color(muted()));
-            let c2 = ui.add(egui::DragValue::new(&mut z).range(min..=max).speed(step)).changed();
+            let c2 = ui
+                .add(
+                    egui::DragValue::new(&mut z)
+                        .range(min..=max)
+                        .speed(step)
+                        .custom_formatter(|n, _| crate::catalog::format_value(param.as_ref(), n))
+                        .custom_parser(|s| crate::catalog::parse_shown(param.as_ref(), s)),
+                )
+                .changed();
             let mut c = cc.unwrap_or(1);
             let c3 = if src == Source::Midi {
                 ui.label(RichText::new("CC").color(muted()));
@@ -132,7 +148,7 @@ fn knob_row(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catalo
                 *dirty = true;
             }
         }
-        if ui.small_button("✕").on_hover_text("Remove this assignment").clicked() {
+        if ui.small_button("✖").on_hover_text("Remove this assignment").clicked() {
             if src == Source::Snapshots {
                 snapshots::release(json, b, knob);
             } else {
@@ -212,7 +228,7 @@ pub fn panel(ui: &mut egui::Ui, json: &mut serde_json::Value, cat: Option<&Catal
                                         snapshots::set_footswitch(json, b, Some(n), m, &block_name(cat, b));
                                         *dirty = true;
                                     }
-                                    if ui.small_button("✕").clicked() {
+                                    if ui.small_button("✖").clicked() {
                                         snapshots::set_footswitch(json, b, None, false, "");
                                         *dirty = true;
                                     }

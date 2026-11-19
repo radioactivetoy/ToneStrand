@@ -92,6 +92,7 @@ page or file.
 | `TONESTRAND_SIZE` | `1400x1100`: the window size (points) for a picture |
 | `TONESTRAND_SELECT` | With `TONESTRAND_OPEN`: the place in the chain to select (0 is the input) |
 | `TONESTRAND_CTL_TAB` | The Controllers card's tab to start on (0 Footswitches ... last = Command Center) |
+| `TONESTRAND_LAYOUT` | `chain` or `block`: start with the chain or the block panel maximized (not saved) |
 | `TONESTRAND_TABS` | Press Tab this many times in a picture (to see where the keyboard focus goes) |
 
 ## Read-only command-line tools
