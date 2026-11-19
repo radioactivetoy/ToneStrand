@@ -232,17 +232,15 @@ fn based_line(name: &str, based: Option<String>) -> String {
 fn describe(cat: Option<&Catalog>, model: i64) -> (String, String, Color32) {
     match cat {
         Some(c) => {
-            let (cname, col) = c.category(model).unwrap_or_else(|| ("Effect".into(), theme::number_colour(model)));
+            let (cname, col) =
+                c.category(model).map(|(n, c)| (n, theme::rgb(c))).unwrap_or_else(|| ("Effect".into(), theme::number_colour(model)));
             (c.model_name(model), cname, col)
         }
         None => (format!("Model {model}"), "effect".into(), theme::number_colour(model)),
     }
 }
 
-/// How much of one DSP the catalog's load figures add up to (an estimate).
-/// Calibrated on the person's 126 HX Stomp presets (all of which run on the pedal):
-/// without split/merge, the fullest adds up to 77.6, which reads 97% at 80.
-pub const DSP_BUDGET: f64 = 80.0;
+pub use crate::catalog::DSP_BUDGET;
 
 /// Share of the path's DSP a model costs, in percent.
 fn dsp_percent(cat: &Catalog, model: i64) -> f64 {
@@ -257,7 +255,7 @@ fn change_picker(c: &Catalog, slots: &[SlotView], s: &SlotView) -> PickerState {
         .filter(|x| x.path == s.path)
         .map(|x| x.model.map(|m| dsp_percent(c, m)).unwrap_or(0.0) + x.paired.map(|m| dsp_percent(c, m)).unwrap_or(0.0))
         .sum();
-    let (cname, _) = s.model.and_then(|m| c.category(m)).unwrap_or_default();
+    let cname = s.model.and_then(|m| c.category(m)).map(|x| x.0).unwrap_or_default();
     PickerState {
         block: s.wire_block(),
         slot: s.global,
@@ -327,7 +325,7 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
     for g in &all_groups {
         match categories.iter_mut().find(|c| c.0 == g.category) {
             Some(c) => c.2 += g.models.len(),
-            None => categories.push((g.category.clone(), g.colour, g.models.len())),
+            None => categories.push((g.category.clone(), theme::rgb(g.colour), g.models.len())),
         }
     }
     if st.category.is_empty() {
@@ -489,7 +487,11 @@ pub fn picker_window(ctx: &egui::Context, state: &mut Option<PickerState>, cat: 
                                     if g.category.contains("Amp") && g.category.contains("Cab") { "Amp+Cab" } else { g.category.as_str() };
                                 let tint = if fits { Color32::WHITE } else { Color32::from_white_alpha(90) };
                                 if !crate::icons::paint_model(p, ui.ctx(), sw, kind, sym_now, &m.name, tint) {
-                                    p.rect_filled(sw, CornerRadius::same(5), if fits { g.colour } else { g.colour.linear_multiply(0.35) });
+                                    p.rect_filled(
+                                        sw,
+                                        CornerRadius::same(5),
+                                        if fits { theme::rgb(g.colour) } else { theme::rgb(g.colour).linear_multiply(0.35) },
+                                    );
                                 }
                                 let tc = if fits { ink() } else { muted() };
                                 let title =

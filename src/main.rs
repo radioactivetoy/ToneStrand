@@ -6,6 +6,7 @@ mod boxproxy;
 mod catalog;
 mod chain;
 mod cli;
+mod cmdslots;
 mod cmdtool;
 mod compare;
 mod controllers;

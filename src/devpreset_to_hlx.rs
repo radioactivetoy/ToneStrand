@@ -358,11 +358,11 @@ impl DevicePreset {
         }
 
         // Command Center.
-        let cc_slots = crate::controllers::device_slots(fam);
+        let cc_slots = crate::cmdslots::device_slots(fam);
         if self.command_count() == cc_slots.len() {
             for (i, slot) in cc_slots.iter().enumerate() {
                 let Some((id, args)) = self.command(i) else { continue };
-                let keys = crate::controllers::hlx_arg_keys(slot.kind, id);
+                let keys = crate::cmdslots::hlx_arg_keys(slot.kind, id);
                 let mut obj = serde_json::Map::new();
                 obj.insert("@command".into(), json!(id));
                 for (k, a) in keys.iter().zip(&args) {

@@ -133,6 +133,11 @@ pub fn bad() -> Color32 {
     for_palette(Color32::from_rgb(0xff, 0x5c, 0x5c))
 }
 
+/// The one place a catalog colour becomes an egui colour.
+pub fn rgb(c: crate::catalog::Rgb) -> Color32 {
+    Color32::from_rgb(c.0, c.1, c.2)
+}
+
 pub fn family_colour(family: &str) -> Color32 {
     for_palette(family_base(family))
 }

@@ -1343,7 +1343,7 @@ impl DevicePreset {
     /// this document: every slot is cleared first, then the file's commands are set in the pedal's argument
     /// order, with the wait held to the pedal's 20, the Momentary flags and the snapshots' own values.
     fn apply_hlx_commands(&mut self, doc: &serde_json::Value, notes: &mut Vec<String>) {
-        use crate::controllers::{hlx_arg_keys, unit_slot_of_hlx_key, unit_slots};
+        use crate::cmdslots::{hlx_arg_keys, unit_slot_of_hlx_key, unit_slots};
         let Some(tone) = doc.pointer("/data/tone").and_then(serde_json::Value::as_object) else { return };
         let in_file = tone.keys().any(|k| k.starts_with("command"));
         let slots = unit_slots();
@@ -1357,7 +1357,7 @@ impl DevicePreset {
             }
             return;
         }
-        if in_file && !crate::controllers::layout_verified(crate::snapshots::family_of_device(crate::nam::unit())) {
+        if in_file && !crate::cmdslots::layout_verified(crate::snapshots::family_of_device(crate::nam::unit())) {
             notes.push("This unit's Command Center layout comes from the documentation and hasn't been checked on a pedal.".into());
         }
         for slot in 0..slots.len() {

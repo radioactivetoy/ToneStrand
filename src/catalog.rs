@@ -12,7 +12,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use eframe::egui::Color32;
 use serde_json::Value as Json;
 
 #[derive(Clone, Debug, Default)]
@@ -108,7 +107,7 @@ pub struct PickModel {
 pub struct PickGroup {
     pub category: String,
     pub sub: String,
-    pub colour: Color32,
+    pub colour: Rgb,
     pub models: Vec<PickModel>,
 }
 
@@ -119,7 +118,7 @@ pub struct Catalog {
     sym_index: HashMap<String, usize>,
     models: HashMap<String, ModelInfo>,
     /// Base model id -> (category name, colour).
-    category: HashMap<String, (String, Color32)>,
+    category: HashMap<String, (String, Rgb)>,
     pub groups: Vec<PickGroup>,
     /// The NAM A2 Lite block's look (name, knobs), shown in place of the mono
     /// Xenomorph Fuzz when that optional firmware is turned on.
@@ -185,10 +184,19 @@ pub fn find_dir(custom: Option<&str>) -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.join("Helix.sym").is_file())
 }
 
-fn colour_from(text: &str) -> Color32 {
+/// A colour as red, green, blue; the app turns it into its own colour type (`theme::rgb`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Rgb(pub u8, pub u8, pub u8);
+
+/// How much of one DSP the catalog's load figures add up to (an estimate).
+/// Calibrated on the person's 126 HX Stomp presets (all of which run on the pedal):
+/// without split/merge, the fullest adds up to 77.6, which reads 97% at 80.
+pub const DSP_BUDGET: f64 = 80.0;
+
+fn colour_from(text: &str) -> Rgb {
     let hex = text.trim_start_matches("0x").trim_start_matches('#');
     let n = u32::from_str_radix(hex, 16).unwrap_or(0x8899aa);
-    Color32::from_rgb((n >> 16) as u8, (n >> 8) as u8, n as u8)
+    Rgb((n >> 16) as u8, (n >> 8) as u8, n as u8)
 }
 
 /// Strip the variant ending the pedal's numbering adds to a model id.
@@ -633,8 +641,8 @@ impl Catalog {
 
         let nam_info = models.get(crate::nam::BASE_SYMBOL).map(|x| ModelInfo {
             name: crate::nam::NAME.to_owned(),
-            load: crate::editors::DSP_BUDGET * crate::nam::DSP_SHARE,
-            load_stereo: crate::editors::DSP_BUDGET * crate::nam::DSP_SHARE,
+            load: DSP_BUDGET * crate::nam::DSP_SHARE,
+            load_stereo: DSP_BUDGET * crate::nam::DSP_SHARE,
             params: x.params.iter().map(nam_param).collect(),
             cablink: None,
             devices: crate::nam::UNITS.to_vec(),
@@ -748,7 +756,7 @@ impl Catalog {
             for g in &mut groups {
                 g.models.retain(|m| m.number != num);
             }
-            let colour = groups.iter().find(|g| g.category == "Amp").map(|g| g.colour).unwrap_or(Color32::from_rgb(0xff, 0x8a, 0x3d));
+            let colour = groups.iter().find(|g| g.category == "Amp").map(|g| g.colour).unwrap_or(Rgb(0xff, 0x8a, 0x3d));
             let at = groups.iter().rposition(|g| g.category == "Amp").map(|i| i + 1).unwrap_or(groups.len());
             groups.insert(
                 at,
@@ -796,7 +804,7 @@ impl Catalog {
         }
     }
 
-    pub fn category_of_symbol(&self, symbol: &str) -> Option<(String, Color32)> {
+    pub fn category_of_symbol(&self, symbol: &str) -> Option<(String, Rgb)> {
         if crate::nam::is_nam_symbol(symbol) && crate::nam::in_amp_menu() {
             if let Some(g) = self.groups.iter().find(|g| g.category == "Amp") {
                 return Some(("Amp".into(), g.colour));
@@ -805,7 +813,7 @@ impl Catalog {
         self.category.get(base_id(symbol)).or_else(|| self.category.get(symbol)).cloned()
     }
 
-    pub fn category(&self, number: i64) -> Option<(String, Color32)> {
+    pub fn category(&self, number: i64) -> Option<(String, Rgb)> {
         self.category_of_symbol(self.symbol(number)?)
     }
 
@@ -1231,5 +1239,16 @@ mod trails_everywhere_tests {
             }
         }
         assert!(trails > 50 && mics > 20, "{trails} models with Trails, {mics} with a Mic");
+    }
+}
+
+#[cfg(test)]
+mod colour_tests {
+    use super::*;
+
+    #[test]
+    fn colour_from_reads_hex() {
+        assert_eq!(colour_from("0x8899aa"), Rgb(0x88, 0x99, 0xaa));
+        assert_eq!(colour_from("nonsense"), colour_from("0x8899aa"));
     }
 }

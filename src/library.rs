@@ -74,7 +74,7 @@ fn blocks_of(path: &Path, pedal_file: bool, cat: Option<&Catalog>) -> Scanned {
             .filter(|s| s.kind == Kind::Block)
             .filter_map(|s| s.model)
             .map(|m| match cat {
-                Some(c) => (c.model_name(m), c.category(m).map(|x| x.1).unwrap_or(muted())),
+                Some(c) => (c.model_name(m), c.category(m).map(|x| theme::rgb(x.1)).unwrap_or(muted())),
                 None => (format!("Model {m}"), theme::number_colour(m)),
             })
             .collect();
@@ -88,7 +88,7 @@ fn blocks_of(path: &Path, pedal_file: bool, cat: Option<&Catalog>) -> Scanned {
             .map(|b| match cat {
                 Some(c) => (
                     c.info_for_symbol(&b.model).map(|i| crate::realnames::show(&i.name)).unwrap_or_else(|| hlx::pretty_model(&b.model)),
-                    c.category_of_symbol(&b.model).map(|x| x.1).unwrap_or(muted()),
+                    c.category_of_symbol(&b.model).map(|x| theme::rgb(x.1)).unwrap_or(muted()),
                 ),
                 None => (hlx::pretty_model(&b.model), family_colour(hlx::family(&b.model))),
             })

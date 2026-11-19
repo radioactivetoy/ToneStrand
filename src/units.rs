@@ -75,7 +75,7 @@ pub fn convert(doc: &mut Value, target: i64, cat: Option<&Catalog>) -> Result<Ve
                 .filter(|b| b.dsp == dsp)
                 .filter_map(|b| {
                     let stereo = hlx::block(&work, b).and_then(|o| o.get("@stereo")).and_then(Value::as_bool).unwrap_or(false);
-                    c.number_for_hlx(&b.model, stereo).map(|n| c.dsp_cost(n) / crate::editors::DSP_BUDGET * 100.0)
+                    c.number_for_hlx(&b.model, stereo).map(|n| c.dsp_cost(n) / crate::catalog::DSP_BUDGET * 100.0)
                 })
                 .sum();
             if used > 100.5 {
@@ -95,7 +95,7 @@ pub fn convert(doc: &mut Value, target: i64, cat: Option<&Catalog>) -> Result<Ve
     }
 
     // Command Center triggers and commands.
-    for (slot_key, cmd_id) in crate::controllers::active_commands(&work) {
+    for (slot_key, cmd_id) in crate::cmdslots::active_commands(&work) {
         if let Some(n) = slot_key.strip_prefix("commandFS").and_then(|s| s.parse::<i64>().ok()) {
             if n > to.cc_switches {
                 errors.push(format!("Command Center uses FS {n}; the {to_name} has {} footswitches.", to.cc_switches));

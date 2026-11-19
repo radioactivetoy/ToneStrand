@@ -53,7 +53,7 @@ pub fn summary(device: i64) -> String {
         out.push_str("Not tried on a real pedal. Everything for this unit is built from the documented layouts ");
         out.push_str("(paths, slots, jacks, Command Center slots, snapshots) and from the HX Stomp's behaviour.\n");
     }
-    if !crate::controllers::layout_verified(fam) {
+    if !crate::cmdslots::layout_verified(fam) {
         out.push_str("Command Center layout: from the documentation, not checked.\n");
     }
     out

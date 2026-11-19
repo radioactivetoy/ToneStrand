@@ -5,7 +5,7 @@
 
 use serde_json::Value as Json;
 
-use crate::controllers::{self, CmdSlot};
+use crate::cmdslots::{self, CmdSlot};
 use crate::devpreset::DevicePreset;
 use crate::msgpack::Value;
 
@@ -106,8 +106,8 @@ pub fn hlx_overrides(doc: &Json) -> Vec<Override> {
 
 /// What a command id is called (from the Command Center definitions).
 pub fn command_name(id: i64) -> String {
-    for kind in [controllers::SlotKind::Switch, controllers::SlotKind::Instant, controllers::SlotKind::Pedal] {
-        if let Some(n) = controllers::command_name(kind, id) {
+    for kind in [cmdslots::SlotKind::Switch, cmdslots::SlotKind::Instant, cmdslots::SlotKind::Pedal] {
+        if let Some(n) = cmdslots::command_name(kind, id) {
             return n;
         }
     }
@@ -232,7 +232,7 @@ pub fn compare(dev: &[DevCmd], hlx: &[HlxCmd], slots: &[CmdSlot]) -> Vec<String>
 
 /// The HX Stomp's Command Center triggers in the order of the pedal document's slots (the only layout read so far).
 pub fn unit_slots() -> Vec<CmdSlot> {
-    controllers::unit_slots()
+    cmdslots::unit_slots()
 }
 
 /// "42B" (a slot label) to the slot's index.

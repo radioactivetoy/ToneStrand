@@ -125,7 +125,8 @@ pub fn hlx_editor(
         match cat {
             Some(c) => {
                 let name = c.info_for_symbol(model).map(|i| crate::realnames::show(&i.name)).unwrap_or_else(|| hlx::pretty_model(model));
-                let (cname, col) = c.category_of_symbol(model).unwrap_or((fam.to_owned(), family_colour(fam)));
+                let (cname, col) =
+                    c.category_of_symbol(model).map(|(n, c)| (n, theme::rgb(c))).unwrap_or((fam.to_owned(), family_colour(fam)));
                 (name, cname, col)
             }
             None => (hlx::pretty_model(model), fam.to_owned(), family_colour(fam)),
