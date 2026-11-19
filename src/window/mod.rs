@@ -1000,14 +1000,25 @@ impl App {
         self.note(LogLevel::Good, format!("Library folder: {}", d.display()));
     }
 
-    /// Load the effects list from HX Edit's resources (custom folder or the usual place).
+    /// Choose the effects list again: HX Edit's files (custom folder or the usual place) when
+    /// found and not older than the built-in list, else the list built into ToneStrand.
     fn reload_catalog(&mut self) {
         self.catalog = crate::catalog::load_best(self.settings.hx_edit.as_deref()).map(Arc::new);
         self.scan_library();
-        if self.catalog.is_some() {
-            self.note(LogLevel::Good, "Effects list loaded.");
-        } else {
-            self.note(LogLevel::Bad, "No effects list found in that folder.");
+        let chosen = self.settings.hx_edit.clone();
+        match self.catalog.as_ref().map(|c| c.source().clone()) {
+            Some(crate::catalog::CatalogSource::HxEdit(dir)) => {
+                self.note(LogLevel::Good, format!("Using HX Edit's effects list ({}).", dir.display()));
+            }
+            Some(crate::catalog::CatalogSource::Builtin { hx_edit_version }) => {
+                let msg = if chosen.is_some() {
+                    format!("That folder has no usable HX Edit files; using the list built into ToneStrand (HX Edit {hx_edit_version}).")
+                } else {
+                    format!("No newer HX Edit files found; using the list built into ToneStrand (HX Edit {hx_edit_version}).")
+                };
+                self.note(LogLevel::Good, msg);
+            }
+            None => self.note(LogLevel::Bad, "No effects list found."),
         }
     }
 

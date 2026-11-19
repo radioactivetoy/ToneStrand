@@ -9,8 +9,8 @@
     for linking (for example from MSYS2: `pacman -S mingw-w64-x86_64-gcc`).
   - `x86_64-pc-windows-msvc` needs the Visual Studio Build Tools ("Desktop development with C++").
 - macOS: Xcode command-line tools (`xcode-select --install`).
-- Linux: not supported. The effect list, names and knob ranges come from HX Edit's resource files and
-  there is no HX Edit for Linux. (The Windows and macOS builds need nothing more than the above.)
+- Linux: not tried yet. HX Edit is not needed to run ToneStrand: without it the effect list built into the program
+  (`catalogs/`) is used. (The Windows and macOS builds need nothing more than the above.)
 
 No other system libraries: USB uses the pure-Rust `nusb` crate (no libusb), the WebSocket to
 the ToneStrand Box link uses `tungstenite`, and box discovery uses `mdns-sd`.
@@ -57,17 +57,17 @@ from `src/`. Adding a photo: drop `<name>.png` into that folder and reference it
 ## Tests
 
 ```sh
-cargo test
-cargo clippy --all-targets -- -D warnings
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --check   # run `cargo fmt` to fix
 ```
 
-49 tests: the session against a fake pedal (`fakepedal.rs`: handshake order, refusals,
+121 tests (two crates, `cargo test --workspace`): the session against a fake pedal (`fakepedal.rs`: handshake order, refusals,
 Ignored on purpose: `cargo test -- --ignored recycles_to_the_bin` moves a scratch file into the real Windows Recycle Bin.
 timeouts, chunked writes, half-finished transfers, pings), the MessagePack codec, the pedal document round trip, `.hlx` editing,
 snapshots and controllers, unit conversion, IR/NAM conversion (byte-for-byte against the NAM
 A2 Lite project's own converter, using `tests/data/`), icons, catalog value formatting.
-Some tests read HX Edit's files when present and skip themselves otherwise.
+Some tests read HX Edit's files when present and skip themselves otherwise; the built-in effects list tests always run.
 
 ## Checking the UI without a person
 
@@ -102,7 +102,7 @@ Handy when working on formats or the protocol; none of them writes to the pedal.
 |---|---|
 | `--probe [host]` | Connect (USB, or a paired ToneStrand Box at `host`), list setlists/presets, disconnect |
 | `--find-boxes` | Look for boxes on the network (mDNS and the `.local` names) and print their status |
-| `--list-models` | Print the catalog read from HX Edit (category, variant, name) |
+| `--list-models` | Print the effects list in use (HX Edit's, else the built-in one): category, variant, name |
 | `--read-backup <file>` | List the presets inside an `.hxb` or `.hls` |
 | `--dump-doc <file>` | Print a pedal document's structure (`.hxpreset`) |
 | `--commands <file or slot> [host]` | Print a preset's Command Center as the pedal stores it (a `.hxpreset`, or a slot such as `42B` read from the pedal) |

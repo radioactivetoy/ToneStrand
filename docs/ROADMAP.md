@@ -67,7 +67,7 @@ On the first connection, say which unit was found, which parts of the app are ch
   `--lab` prefix, or mark them clearly in `--help`.
 - Bank/Program and HX Looper switch names and defaults, and HX Looper's press and release/hold fields: one capture
   on the Stomp.
-- macOS and Linux builds: a CI job that builds them; running them needs a person with the machine.
+- macOS and Linux builds: macOS has a CI job; Linux has none yet; running them needs a person with the machine.
 
 ## What a tester does for item 1 (about 30 minutes per unit)
 

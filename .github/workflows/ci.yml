@@ -15,16 +15,18 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      # Tests that need HX Edit's files skip themselves when it isn't installed (as here).
+      # Tests that need HX Edit's files skip themselves when it isn't installed (as here). The built-in effects list
+      # (`catalogs/`) is compiled in, so its tests now run in CI with no HX Edit needed.
       - name: Formatting
         run: cargo fmt --check
       - name: Clippy (warnings are errors)
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
-        run: cargo test
+        run: cargo test --workspace
+      - name: Build
+        run: cargo build --workspace --all-targets
 
-  # The app has only been run on Windows. This only checks that it builds (and its tests pass) on macOS, where HX Edit exists. There is no Linux build: HX Edit's files, which the effect list comes from, are not available there,
-  # so a change that breaks them is seen early. It runs when a pull request is opened or main changes.
+  # The app has only been run on Windows. This only checks that it builds (and its tests pass) on macOS, where HX Edit exists (the built-in effects list is tested there too). There is no Linux build yet, so a change that breaks macOS is seen early. It runs when a pull request is opened or main changes.
   portable:
     # Informational until it has been seen to pass: a failure here does not fail the run.
     continue-on-error: true
@@ -38,6 +40,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build
-        run: cargo build --all-targets
+        run: cargo build --workspace --all-targets
       - name: Tests
-        run: cargo test
+        run: cargo test --workspace

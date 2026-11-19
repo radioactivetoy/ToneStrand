@@ -6,11 +6,11 @@ Read this first, then `docs/ARCHITECTURE.md`. The protocol and formats are in
 ## Commands
 
 ```sh
-cargo build                     # debug (optimised enough to use)
+cargo build --workspace         # debug (optimised enough to use); two crates: the app and core/
 cargo build --release
-cargo test                      # 58 tests; must stay green
+cargo test --workspace          # 121 tests (1 ignored); must stay green
 cargo fmt                       # rustfmt.toml sets the style; CI runs `cargo fmt --check`
-cargo clippy --all-targets -- -D warnings   # must stay clean (CI runs these)
+cargo clippy --workspace --all-targets -- -D warnings   # must stay clean (CI runs these)
 cargo run -- --help             # the command-line tools
 cargo run -- --screenshot shot.png   # render the window to a PNG and exit
 ```
@@ -36,7 +36,7 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
    MessagePack format; extend `msgpack.rs` rather than bypassing it. Run `--ctl-check` /
    the round-trip tests on real backups when touching `devpreset.rs`.
 3. **Don't add Line 6 files.** Effect names, parameters and ranges come from an HX Edit
-   installation when there is one, else from the built-in list (`catalogs/`, see `catalog.rs`).
+   installation when there is one, else from the built-in list (`catalogs/`, see `core/src/catalog/`).
    The only Line 6 material kept in the repo is the effect photos and descriptions
    (`assets/models/`), the type icons (`assets/block Images/`) and the effects lists converted
    from HX Edit (`catalogs/`), by the owner's decision, under the README's "Third-party material
@@ -58,7 +58,7 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 
 ## How to verify a change
 
-- `cargo fmt`, `cargo test` and `cargo clippy --all-targets -- -D warnings` (CI runs all three on pull requests).
+- `cargo fmt`, `cargo test --workspace` and `cargo clippy --workspace --all-targets -- -D warnings` (CI runs all three on pull requests).
 - A change to `session.rs`: add a case to `fakepedal.rs` (a fake pedal behind `Wire`).
 - A screenshot (`--screenshot`) of the page you changed; use the `TONESTRAND_*` variables in
   `docs/BUILDING.md` to open a given page or file.
@@ -77,10 +77,11 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 | Library / IRs / Settings / Tests pages | `window/library_page.rs`, `window/irs.rs`, `window/settings.rs`, `window/tests_page.rs` |
 | Restore from a slot backup (`Pedal backups`), window-wide shortcuts, drag and drop | `window/backups.rs`, `window/mod.rs` (`shortcuts`, `drop_files`) |
 | Command-line tools | `cli.rs` |
-| A pedal operation | `session.rs` (request), `device.rs` (Cmd/Event), `proto.rs` (opcode) |
-| Pedal document fields | `devpreset.rs` (+ `docs/FILE_FORMATS.md`) |
-| `.hlx` editing | `hlx.rs`, `snapshots.rs`, `controllers.rs`, `units.rs` |
-| Effect names / formatting | `catalog.rs`, `realnames.rs` |
+| A pedal operation | `core/src/session.rs` (request), `core/src/device.rs` (Cmd/Event), `core/src/proto.rs` (opcode) |
+| Pedal document fields | `core/src/devpreset.rs` (+ `docs/FILE_FORMATS.md`) |
+| `.hlx` editing | `core/src/hlx.rs`, `core/src/snapshots.rs`, `core/src/units.rs`, `controllers.rs` (drawing) |
+| Command Center slot tables and fields | `core/src/cmdslots.rs` |
+| Effect names / formatting | `core/src/catalog/` (`mod.rs`, `pack.rs`), `core/src/realnames.rs`; built-in lists in `catalogs/` |
 | Colours, widgets, icons | `theme.rs`, `icons.rs` |
 
 ## Known gaps and unverified areas
@@ -90,7 +91,7 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
   pedal's own ops 90/91 (checked on an HX Stomp only).
 - Sends/returns: drawn as loop markers; placing them uses the nearest free slot. A return
   placed before its send is flagged, not prevented.
-- macOS builds in CI but has never been run; Linux is not supported (no HX Edit files for the effect list).
+- macOS builds in CI but has never been run; there is no Linux build yet.
 - Command Center on the pedal document (checked on an HX Stomp only): a trigger grid (Instant 1-6, FS 1-5, EXP 1-2) with
   a per-trigger editor for every command type, a snapshot selector (each snapshot keeps its own values) and
   a Momentary switch for CC Toggle and Hotkey. Slot order is from live capture. On the loaded preset a
