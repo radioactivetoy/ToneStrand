@@ -157,6 +157,18 @@ pub fn hlx_editor(
         let is_amp = |b: &hlx::HlxBlock| cat.and_then(|c| c.category_of_symbol(&b.model)).is_some_and(|(n, _)| n.starts_with("Amp"));
         *selected = blocks.iter().position(is_amp).or(if blocks.is_empty() { None } else { Some(0) });
     }
+    if strip_part() {
+        let chips: Vec<Chip> = blocks
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                let (name, _, colour) = name_of(&b.model);
+                Chip { sel: i, name, colour }
+            })
+            .collect();
+        chip_strip(ui, &chips, selected);
+        return;
+    }
     let dsps: Vec<String> = hlx::dsps(json).into_iter().take(unit.paths).collect();
     // Only a path that is really split shows its lower lane.
     let splits: Vec<Option<(String, i64, i64)>> =

@@ -6,6 +6,19 @@ use super::*;
 
 pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<usize>, picker: &mut Option<PickerState>) {
     let DeviceEdit { preset, live, cmds, cat, dirty } = ed;
+    if strip_part() {
+        let chips: Vec<Chip> = preset
+            .slots()
+            .iter()
+            .filter(|s| s.model.is_some() && !matches!(s.kind, Kind::Input | Kind::Output | Kind::Split | Kind::Join | Kind::Empty))
+            .map(|s| {
+                let (name, _, colour) = s.model.map(|m| describe(cat, m)).unwrap_or((s.kind.label().to_owned(), String::new(), muted()));
+                Chip { sel: s.global, name, colour }
+            })
+            .collect();
+        chip_strip(ui, &chips, selected);
+        return;
+    }
     if chain_part() {
         // A pedal document keeps the layout of the unit it came from; setting another unit does not convert it.
         {

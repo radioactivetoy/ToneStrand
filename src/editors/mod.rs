@@ -1032,16 +1032,82 @@ pub fn current_note(ctx: &egui::Context) -> Option<String> {
 }
 
 /// Which part of an editor to draw: 0 everything, 1 only the chain (and what's above it),
-/// 2 only the selected block's panel. The panel is docked at the bottom.
+/// 2 only the selected block's panel, 4 only a one-row strip of chips (one per block).
+/// The panel is docked at the bottom.
 static PART: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 pub fn set_part(p: u8) {
     PART.store(p, std::sync::atomic::Ordering::Relaxed);
 }
 fn chain_part() -> bool {
-    PART.load(std::sync::atomic::Ordering::Relaxed) != 2
+    let p = PART.load(std::sync::atomic::Ordering::Relaxed);
+    p != 2 && p != 4
 }
 fn panel_part() -> bool {
-    PART.load(std::sync::atomic::Ordering::Relaxed) != 1
+    let p = PART.load(std::sync::atomic::Ordering::Relaxed);
+    p != 1 && p != 4
+}
+fn strip_part() -> bool {
+    PART.load(std::sync::atomic::Ordering::Relaxed) == 4
+}
+
+/// One tappable block in the chip strip. `sel` is what the editor's `selected` holds for this block.
+pub struct Chip {
+    pub sel: usize,
+    pub name: String,
+    pub colour: Color32,
+}
+
+/// A one-row, sideways-scrolling strip of chips, one per block. True when a chip was tapped.
+pub fn chip_strip(ui: &mut egui::Ui, chips: &[Chip], selected: &mut Option<usize>) -> bool {
+    if chips.is_empty() {
+        ui.label(RichText::new("No blocks").color(muted()));
+        return false;
+    }
+    let mut tapped = false;
+    egui::ScrollArea::horizontal().id_salt("chip-strip").auto_shrink([false, true]).show(ui, |ui| {
+        ui.horizontal(|ui| {
+            for chip in chips {
+                let font = egui::FontId::proportional(14.0);
+                let galley = ui.painter().layout_no_wrap(chip.name.clone(), font, Color32::WHITE);
+                let size = Vec2::new(galley.size().x + 24.0, 32.0_f32.max(galley.size().y + 12.0));
+                let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+                let is_sel = *selected == Some(chip.sel);
+                let p = ui.painter();
+                p.rect_filled(rect, CornerRadius::same(8), chip.colour);
+                if is_sel {
+                    p.rect_stroke(rect, CornerRadius::same(8), Stroke::new(2.0_f32, accent()), egui::StrokeKind::Inside);
+                } else if resp.hovered() {
+                    p.rect_stroke(rect, CornerRadius::same(8), Stroke::new(1.0_f32, theme::wash(90)), egui::StrokeKind::Inside);
+                }
+                let bright = theme::is_light()
+                    && (0.299 * chip.colour.r() as f32 + 0.587 * chip.colour.g() as f32 + 0.114 * chip.colour.b() as f32) > 140.0;
+                let tc = if bright { Color32::from_rgb(0x14, 0x17, 0x1c) } else { Color32::WHITE };
+                p.text(rect.center(), egui::Align2::CENTER_CENTER, &chip.name, egui::FontId::proportional(14.0), tc);
+                if resp.clicked() {
+                    *selected = Some(chip.sel);
+                    tapped = true;
+                }
+            }
+        });
+    });
+    tapped
+}
+
+#[cfg(test)]
+mod part_tests {
+    use super::*;
+
+    #[test]
+    fn part_flags() {
+        set_part(4);
+        assert!(!chain_part() && !panel_part() && strip_part());
+        set_part(1);
+        assert!(chain_part() && !panel_part() && !strip_part());
+        set_part(2);
+        assert!(!chain_part() && panel_part() && !strip_part());
+        set_part(0);
+        assert!(chain_part() && panel_part() && !strip_part());
+    }
 }
 
 /// Width of the photo-and-notes column beside a block's knobs.
