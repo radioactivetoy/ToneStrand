@@ -604,7 +604,7 @@ impl App {
                 .set_directory(&lib)
                 .set_file_name(format!("{}.{ext}", device::sanitize(&base)))
                 .add_filter("Preset", &[ext])
-                .save_file()
+                .save_file_blocking()
         } else {
             doc.path.clone()
         };
@@ -1340,7 +1340,7 @@ impl App {
                 });
             });
         if choose {
-            if let Some(d) = crate::platform::FileDialog::new().pick_folder() {
+            if let Some(d) = crate::platform::FileDialog::new().pick_folder_blocking() {
                 self.settings.hx_edit = Some(d.to_string_lossy().into_owned());
                 self.settings.save();
                 self.reload_catalog();

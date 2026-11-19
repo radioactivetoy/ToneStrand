@@ -11,7 +11,8 @@ impl App {
             return;
         };
         let start = self.settings.nam_out_dir.clone().map(PathBuf::from).unwrap_or_else(|| self.library_dir.clone());
-        let Some(out) = crate::platform::FileDialog::new().set_title("Where to save the .wav files").set_directory(&start).pick_folder()
+        let Some(out) =
+            crate::platform::FileDialog::new().set_title("Where to save the .wav files").set_directory(&start).pick_folder_blocking()
         else {
             return;
         };

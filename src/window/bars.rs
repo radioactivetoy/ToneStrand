@@ -560,7 +560,7 @@ impl App {
             .set_directory(&self.library_dir)
             .set_file_name("ToneStrand log.txt")
             .add_filter("Text", &["txt"])
-            .save_file()
+            .save_file_blocking()
         else {
             return;
         };

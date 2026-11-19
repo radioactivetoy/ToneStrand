@@ -271,7 +271,7 @@ impl App {
                         .set_directory(&self.library_dir)
                         .set_file_name(&default)
                         .add_filter("Pedal preset", &["hxpreset"])
-                        .save_file()
+                        .save_file_blocking()
                     {
                         match crate::files::write_atomic(&p, &blob) {
                             Ok(_) => self.note(LogLevel::Good, format!("Saved {}", p.display())),
@@ -686,7 +686,7 @@ impl App {
                 ui.menu_button("Backups", |ui| {
                     if ui.button("Back up this setlist...").on_hover_text("Save every preset of this setlist as files").clicked() {
                         ui.close_menu();
-                        if let Some(folder) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
+                        if let Some(folder) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder_blocking() {
                             let names = self.presets.clone();
                             self.send(Cmd::Backup { setlist: self.setlist, count: self.presets.len(), folder, names });
                         }
@@ -697,7 +697,7 @@ impl App {
                         .clicked()
                     {
                         ui.close_menu();
-                        if let Some(folder) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder() {
+                        if let Some(folder) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder_blocking() {
                             self.send(Cmd::FullBackup { folder });
                         }
                     }

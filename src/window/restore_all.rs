@@ -75,8 +75,10 @@ pub(super) fn scan_full_backup(folder: &Path, setlists: &[String]) -> (Vec<FullP
 impl App {
     /// "Restore the whole pedal": pick a backup folder and show what is in it.
     pub(super) fn open_restore_all(&mut self) {
-        let Some(folder) =
-            crate::platform::FileDialog::new().set_directory(&self.library_dir).set_title("Pick a whole-pedal backup folder").pick_folder()
+        let Some(folder) = crate::platform::FileDialog::new()
+            .set_directory(&self.library_dir)
+            .set_title("Pick a whole-pedal backup folder")
+            .pick_folder_blocking()
         else {
             return;
         };
