@@ -13,6 +13,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
         let mut paths: Vec<i64> = slots.iter().map(|s| s.path).collect();
         paths.dedup();
         let mut items: Vec<(usize, usize, Chip)> = Vec::new();
+        let mut splits: Vec<(usize, usize)> = Vec::new();
         for (pi, path) in paths.iter().enumerate() {
             let in_path: Vec<&SlotView> = slots.iter().filter(|s| s.path == *path).collect();
             let pos = |k: Kind| in_path.iter().find(|s| s.kind == k).map(|s| s.position);
@@ -34,21 +35,30 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                         && !lower.iter().any(|l| l.global == s.global)
                 })
                 .take(chain::COLS);
-            let mut add = |s: &SlotView, lane: usize| {
+            let main: Vec<&SlotView> = main.collect();
+            let split_col = in_path
+                .iter()
+                .find(|s| s.kind == Kind::Split)
+                .and_then(|s| preset.attach(s.path, s.position))
+                .map(|a| main.iter().filter(|s| (s.position as i64) < a).count());
+            if let Some(c) = split_col {
+                splits.push((pi, c));
+            }
+            let mut add = |s: &SlotView, lane: usize, col: usize| {
                 if s.model.is_some() && !matches!(s.kind, Kind::Input | Kind::Output | Kind::Split | Kind::Join | Kind::Empty) {
                     let (name, _, colour) =
                         s.model.map(|m| describe(cat, m)).unwrap_or((s.kind.label().to_owned(), String::new(), muted()));
-                    items.push((pi, lane, Chip { sel: s.global, name, colour }));
+                    items.push((pi, lane, Chip { sel: s.global, name, colour, col }));
                 }
             };
-            for s in main {
-                add(s, 0);
+            for (col, s) in main.iter().enumerate() {
+                add(s, 0, col);
             }
-            for s in lower {
-                add(s, 1);
+            for (col, s) in lower.into_iter().enumerate() {
+                add(s, 1, col);
             }
         }
-        let chips = chip_rows(items);
+        let chips = chip_rows(items, &splits);
         chip_strip(ui, &chips, selected);
         return;
     }

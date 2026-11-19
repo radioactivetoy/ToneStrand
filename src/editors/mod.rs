@@ -1055,6 +1055,8 @@ pub struct Chip {
     pub sel: usize,
     pub name: String,
     pub colour: Color32,
+    /// The block's column in the chain (empty slots count), used to place a lane's split point.
+    pub col: usize,
 }
 
 /// One line of the strip: a lane of a path ("1A" the main lane, "1B" the lower lane after a split, "2A"...).
@@ -1062,20 +1064,35 @@ pub struct Chip {
 pub struct ChipRow {
     pub label: String,
     pub chips: Vec<Chip>,
+    /// For a lower (B) row: how many chips of the path's A row come before the split point, so the row
+    /// can start under the A chip where the split happens. 0 for an A row.
+    pub split_col: usize,
 }
 
 /// Group blocks given as (path index, lane, chip) into the strip's rows: 1A, 1B, 2A, 2B in that order,
 /// leaving out lanes with no blocks. A lone 1A row gets no label. Chips keep their given order within a row.
-pub fn chip_rows(items: impl IntoIterator<Item = (usize, usize, Chip)>) -> Vec<ChipRow> {
+/// `splits` gives, per path index, the chain column where its lane splits; a B row records how many of its
+/// A row's chips sit before that column (never more than the A row has).
+pub fn chip_rows(items: impl IntoIterator<Item = (usize, usize, Chip)>, splits: &[(usize, usize)]) -> Vec<ChipRow> {
     let mut by: std::collections::BTreeMap<(usize, usize), Vec<Chip>> = std::collections::BTreeMap::new();
     for (path, lane, chip) in items {
         by.entry((path, lane)).or_default().push(chip);
     }
     let lone_plain = by.len() == 1 && by.contains_key(&(0, 0));
+    let split_cols: Vec<((usize, usize), usize)> = by
+        .keys()
+        .filter(|(_, lane)| *lane != 0)
+        .map(|&(path, lane)| {
+            let at = splits.iter().find(|(p, _)| *p == path).map_or(0, |s| s.1);
+            let n = by.get(&(path, 0)).map_or(0, |a| a.iter().filter(|c| c.col < at).count());
+            ((path, lane), n)
+        })
+        .collect();
     by.into_iter()
         .map(|((path, lane), chips)| ChipRow {
             label: if lone_plain { String::new() } else { format!("{}{}", path + 1, if lane == 0 { 'A' } else { 'B' }) },
             chips,
+            split_col: split_cols.iter().find(|(k, _)| *k == (path, lane)).map_or(0, |x| x.1),
         })
         .collect()
 }
@@ -1091,7 +1108,18 @@ pub fn chip_strip(ui: &mut egui::Ui, rows: &[ChipRow], selected: &mut Option<usi
     egui::ScrollArea::horizontal().id_salt("chip-strip").auto_shrink([false, true]).show(ui, |ui| {
         ui.vertical(|ui| {
             ui.spacing_mut().item_spacing.y = 6.0;
+            // Left x of each A row's chips (and its right end), so a B row can start under its split.
+            let mut a_xs: Vec<(char, Vec<f32>, f32)> = Vec::new();
             for row in rows {
+                let is_b = row.label.ends_with('B');
+                let key = row.label.chars().next().unwrap_or(' ');
+                let start = if is_b {
+                    a_xs.iter().find(|(k, _, _)| *k == key).map(|(_, xs, end)| xs.get(row.split_col).copied().unwrap_or(*end))
+                } else {
+                    None
+                };
+                let mut xs: Vec<f32> = Vec::new();
+                let mut end = 0.0_f32;
                 ui.horizontal(|ui| {
                     if labelled {
                         let (rect, _) = ui.allocate_exact_size(Vec2::new(26.0, 32.0), egui::Sense::hover());
@@ -1103,11 +1131,19 @@ pub fn chip_strip(ui: &mut egui::Ui, rows: &[ChipRow], selected: &mut Option<usi
                             muted(),
                         );
                     }
+                    if let Some(x) = start {
+                        let gap = x - ui.cursor().min.x;
+                        if gap > 0.0 {
+                            ui.add_space(gap);
+                        }
+                    }
                     for chip in &row.chips {
                         let font = egui::FontId::proportional(14.0);
                         let galley = ui.painter().layout_no_wrap(chip.name.clone(), font, Color32::WHITE);
                         let size = Vec2::new(galley.size().x + 24.0, 32.0_f32.max(galley.size().y + 12.0));
                         let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+                        xs.push(rect.min.x);
+                        end = rect.max.x + ui.spacing().item_spacing.x;
                         let is_sel = *selected == Some(chip.sel);
                         let p = ui.painter();
                         p.rect_filled(rect, CornerRadius::same(8), chip.colour);
@@ -1126,6 +1162,9 @@ pub fn chip_strip(ui: &mut egui::Ui, rows: &[ChipRow], selected: &mut Option<usi
                         }
                     }
                 });
+                if !is_b {
+                    a_xs.push((key, xs, end));
+                }
             }
         });
     });
@@ -1149,19 +1188,33 @@ mod part_tests {
     }
 
     fn chip(n: usize) -> Chip {
-        Chip { sel: n, name: format!("b{n}"), colour: Color32::GRAY }
+        Chip { sel: n, name: format!("b{n}"), colour: Color32::GRAY, col: n }
     }
 
     #[test]
     fn rows_follow_paths_and_lanes() {
-        let rows = chip_rows([(0, 0, chip(0)), (1, 0, chip(3)), (0, 1, chip(2)), (0, 0, chip(1))]);
+        let rows = chip_rows([(0, 0, chip(0)), (1, 0, chip(3)), (0, 1, chip(2)), (0, 0, chip(1))], &[]);
         let labels: Vec<&str> = rows.iter().map(|r| r.label.as_str()).collect();
         assert_eq!(labels, ["1A", "1B", "2A"]);
         assert_eq!(rows[0].chips.iter().map(|c| c.sel).collect::<Vec<_>>(), [0, 1]);
-        let plain = chip_rows([(0, 0, chip(0)), (0, 0, chip(1))]);
+        let plain = chip_rows([(0, 0, chip(0)), (0, 0, chip(1))], &[]);
         assert_eq!(plain.len(), 1);
         assert!(plain[0].label.is_empty());
-        assert!(chip_rows([]).is_empty());
+        assert!(chip_rows([], &[]).is_empty());
+    }
+
+    #[test]
+    fn lower_row_knows_its_split_column() {
+        let items = || [(0, 0, chip(0)), (0, 0, chip(1)), (0, 0, chip(2)), (0, 0, chip(3)), (0, 1, chip(9))];
+        // Split before column 3: three A chips come first.
+        assert_eq!(chip_rows(items(), &[(0, 3)])[1].split_col, 3);
+        // Past the last A chip: clamps to the A count.
+        assert_eq!(chip_rows(items(), &[(0, 40)])[1].split_col, 4);
+        // Empty slots count as columns: chips at columns 0, 1, 5 with a split at column 4.
+        let gap = [(0, 0, Chip { col: 5, ..chip(2) }), (0, 0, chip(0)), (0, 0, chip(1)), (0, 1, chip(9))];
+        assert_eq!(chip_rows(gap, &[(0, 4)])[1].split_col, 2);
+        assert_eq!(chip_rows(items(), &[])[1].split_col, 0);
+        assert_eq!(chip_rows(items(), &[(0, 3)])[0].split_col, 0);
     }
 }
 
