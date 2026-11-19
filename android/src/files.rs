@@ -8,7 +8,7 @@
 //! thread and only call `deliver` / `set_storage` (short locks, no JNI back into Java).
 
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use jni::objects::{GlobalRef, JClass, JObject, JObjectArray, JString, JValue};
 use jni::sys::{jboolean, jlong};
@@ -21,7 +21,8 @@ struct Host {
     activity: GlobalRef,
 }
 
-static HOST: OnceLock<Host> = OnceLock::new();
+/// The current activity; replaced by each `init` so a new activity in the same process is used.
+static HOST: Mutex<Option<Arc<Host>>> = Mutex::new(None);
 /// `<Documents>/ToneStrand`, when the Java side could tell.
 static SHARED: OnceLock<PathBuf> = OnceLock::new();
 /// The app's cache folder (picked files and files waiting to be saved).
@@ -33,7 +34,7 @@ const FOLDER: &str = "ToneStrand";
 
 /// Runs `f` on the activity with this thread attached; pending Java exceptions are cleared.
 fn with_activity<R>(f: impl FnOnce(&mut JNIEnv, &JObject) -> jni::errors::Result<R>) -> Result<R, String> {
-    let host = HOST.get().ok_or("not started")?;
+    let host = HOST.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("not started")?;
     let mut env = host.vm.attach_current_thread().map_err(|e| e.to_string())?;
     let res = env.with_local_frame(32, |env| f(env, host.activity.as_obj()));
     if res.is_err() && env.exception_check().unwrap_or(false) {
@@ -77,7 +78,7 @@ fn try_init(app: &AndroidApp, private_library: &Path) -> Result<(), String> {
         let obj = unsafe { JObject::from_raw(app.activity_as_ptr() as jni::sys::jobject) };
         env.new_global_ref(&obj).map_err(|e| e.to_string())?
     };
-    let _ = HOST.set(Host { vm, activity });
+    *HOST.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(Host { vm, activity }));
 
     let (api, cache, documents) = with_activity(|env, a| Ok((sdk_int(env)?, call_string(env, a, "cacheDir")?, call_string(env, a, "sharedDocumentsDir")?)))?;
     platform::set_android_api(api.max(0) as u32);
@@ -223,10 +224,13 @@ pub extern "system" fn Java_com_tonestrand_app_MainActivity_nativeSaved(mut env:
 
 #[no_mangle]
 pub extern "system" fn Java_com_tonestrand_app_MainActivity_nativeStorageChanged(_env: JNIEnv, _class: JClass, granted: jboolean) {
-    let storage = match SHARED.get() {
-        Some(dir) if granted != 0 && usable(dir) => Storage::Shared(dir.clone()),
-        _ => Storage::Refused,
-    };
-    log::info!("storage access: {storage:?}");
-    platform::set_storage(storage);
+    // The folder test touches the disk: not on the UI thread.
+    std::thread::spawn(move || {
+        let storage = match SHARED.get() {
+            Some(dir) if granted != 0 && usable(dir) => Storage::Shared(dir.clone()),
+            _ => Storage::Refused,
+        };
+        log::info!("storage access: {storage:?}");
+        platform::set_storage(storage);
+    });
 }

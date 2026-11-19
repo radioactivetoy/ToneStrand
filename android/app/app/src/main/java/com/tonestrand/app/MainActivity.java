@@ -9,6 +9,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.provider.DocumentsContract;
 import android.provider.OpenableColumns;
 
 import com.google.androidgamesdk.GameActivity;
@@ -19,6 +20,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -68,8 +70,16 @@ public class MainActivity extends GameActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        // Leftovers of an earlier run; nothing is writing here yet.
-        deleteRecursively(getCacheDir(), false);
+        // Leftovers of earlier runs; recent ones may still belong to a request in flight.
+        File[] old = getCacheDir().listFiles();
+        if (old != null) {
+            long cutoff = System.currentTimeMillis() - 60L * 60L * 1000L;
+            for (File f : old) {
+                if ((f.getName().startsWith("pick-") || f.getName().startsWith("save-")) && f.lastModified() < cutoff) {
+                    deleteRecursively(f, true);
+                }
+            }
+        }
         super.onCreate(savedInstanceState);
         // The library is loaded by now. A picker answer lost with the old activity must not block
         // the next one.
@@ -156,6 +166,14 @@ public class MainActivity extends GameActivity {
                 error = String.valueOf(e.getMessage());
             }
             deleteRecursively(temp.getParentFile(), true);
+            if (error != null) {
+                // CREATE_DOCUMENT left an empty document behind.
+                try {
+                    DocumentsContract.deleteDocument(getContentResolver(), target);
+                } catch (Throwable ignored) {
+                    // Best effort.
+                }
+            }
             nativeSaved(id, error);
         }, "tonestrand-save").start();
     }
@@ -263,7 +281,21 @@ public class MainActivity extends GameActivity {
         if (name.isEmpty() || name.equals(".") || name.equals("..")) {
             name = "file";
         }
-        return name;
+        return shorten(name);
+    }
+
+    /** Keeps a file name under about 200 bytes by cutting the stem, not the extension. */
+    private static String shorten(String name) {
+        if (name.getBytes(StandardCharsets.UTF_8).length <= 200) {
+            return name;
+        }
+        int dot = name.lastIndexOf('.');
+        String ext = dot > 0 && name.length() - dot <= 20 ? name.substring(dot) : "";
+        String stem = ext.isEmpty() ? name : name.substring(0, dot);
+        while (!stem.isEmpty() && (stem + ext).getBytes(StandardCharsets.UTF_8).length > 200) {
+            stem = stem.substring(0, stem.length() - 1);
+        }
+        return stem.isEmpty() ? "file" + ext : stem + ext;
     }
 
     /** Two documents with one display name in one pick: "a.hlx", "a (2).hlx", "a (3).hlx". */
