@@ -64,25 +64,25 @@ Android cloud backup must not copy it.
 
 ## Colours
 
-Checked on the emulator only: commit 7a44e96 plus the start-up log line below, release build, 2560x1600, host GPU (NVIDIA, through the emulator's OpenGL ES translator). Screenshots are in `target/android-check/t7-*.png` (not kept in git).
+Checked on the emulator only: commit 7a44e96 plus the start-up log line below, release build, 2560x1600, host GPU (NVIDIA, through the emulator's layer that runs Android graphics on the PC's graphics card). Screenshots are in `target/android-check/t7-*.png` (not kept in git).
 
 | Surface (pixel in the screenshot) | Dark: expected / read | Light: expected / read |
 |---|---|---|
-| Left preset panel (100,800) | #15161a / #15161a | |
+| Left preset panel (100,800) | #15161a / #15161a | (not read in Light) |
 | Top bar (1500,60) | #15161a / #15161a | #f6f7fa / #f6f7fa |
-| Card (50,300) | #1b1d22 / #1b1d22 | #ffffff / #ffffff |
-| Background (1280,800) | #101114 / #101114 | #eceef3 / #eceef2 (1 step off) |
+| Card (50,300) dark; (1000,300) light | #1b1d22 / #1b1d22 | #ffffff / #ffffff |
+| Background (1280,800) dark; (1900,600) light | #101114 / #101114 | #eceef3 / #eceef2 (1 step off) |
 
 So the colours are right here and no patch was needed. The earlier spike saw about #404248 for #15161a. The cause of that washed look is not established: it was either a different graphics path or sample points that were not on flat surfaces.
 
-What the emulator reports (one debug-level line at start-up in `android/src/lib.rs`; raise the logger level to `Debug` to see it): `OpenGL ES 3.1 (4.5.0 NVIDIA 621.24)`, extension `GL_EXT_sRGB_write_control` (lets a program switch the screen's automatic brightness-curve conversion on or off) not offered, `FRAMEBUFFER_SRGB` (0x8DB9, that conversion) off. egui does not turn it on when the extension named `ARB_framebuffer_sRGB` is absent, so nothing is converted twice here.
+What the emulator reports (one debug-level line at start-up in `android/src/lib.rs`; raise the logger level to `Debug` to see it): `OpenGL ES 3.1 (4.5.0 NVIDIA 621.24)`, extension `GL_EXT_sRGB_write_control` (lets a program switch the screen's automatic brightness-curve conversion on or off) not offered, `FRAMEBUFFER_SRGB` (0x8DB9, that conversion) off. From reading egui's code (not measured), egui only switches it on when the driver lists an extension ending in `ARB_framebuffer_sRGB`, which GLES drivers normally do not, so nothing should be converted twice here.
 
 ### Checking the real tablet (the graphics driver differs, so this must be done)
 
-1. Build and install: `powershell androiduild.ps1 -Abi arm64-v8a -Device <serial>` (`adb devices` shows the serial).
+1. Build and install: `androidbuild.ps1 -Abi arm64-v8a -Device <serial>` from PowerShell (`adb devices` shows the serial).
 2. Screenshot: `adb -s <serial> exec-out screencap -p > tablet-dark.png`.
-3. Read the pixel at (100,800) (inside the left preset panel, with the Editor page open and the tablet in landscape at 2560x1600; scale the point for another size). It must be #15161a within 3 per channel; the background at (1280,800) must be #101114 within 3. A value near #404248 means a second conversion is happening.
-4. Settings > Display > Light, screenshot again: top bar (1500,60) near #f6f7fa, background (1280,800) near #eceef3.
+3. Read a pixel by opening the PNG in Paint and using the colour picker, or in PowerShell: `Add-Type -AssemblyName System.Drawing; $c=[System.Drawing.Bitmap]::FromFile("C:\path\to\tablet-dark.png").GetPixel(100,800); '{0:x2}{1:x2}{2:x2}' -f $c.R,$c.G,$c.B`. Read the pixel at (100,800) (inside the left preset panel, with the Editor page open and the tablet in landscape at 2560x1600; scale the point for another size). It must be #15161a within 3 per channel; the background at (1280,800) must be #101114 within 3. A value near #404248 may mean a second conversion is happening.
+4. Settings > Display > Light, screenshot again: top bar (1500,60) within 3 of #f6f7fa, background (1280,800) within 3 of #eceef3.
 5. If off, try in this order, stopping at the first that fixes it:
    a. In `android/src/lib.rs`, before painting, turn `FRAMEBUFFER_SRGB` (0x8DB9) off through `frame.gl()` when the extension list has `GL_EXT_sRGB_write_control` (the start-up log line shows whether it does).
    b. A vendored eframe under `android/vendor/eframe`, changed only to ask for a plain (non-sRGB) window surface, wired through `[patch.crates-io]` in `android/Cargo.toml`. Never touch the root `Cargo.toml`.
