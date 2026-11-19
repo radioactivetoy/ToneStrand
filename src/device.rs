@@ -284,7 +284,6 @@ impl Cmd {
                 | Cmd::ClearBlock { .. }
                 | Cmd::Snapshot(_)
                 | Cmd::SetSetting { .. }
-                | Cmd::SetHidden { .. }
                 | Cmd::CopySnapshot { .. }
                 | Cmd::AssignController { .. }
                 | Cmd::UnassignController { .. }
@@ -631,7 +630,12 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                         doc.set_value(path, position, index as usize, value);
                     }
                     s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
-                    read_live(s, send)?;
+                    // The window already shows the change: it is handed the pedal's copy only when the pedal kept something else.
+                    let kept = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)
+                        .is_ok_and(|back| back.knob_value(block, index as usize, cab) == doc.knob_value(block, index as usize, cab));
+                    if !kept {
+                        read_live(s, send)?;
+                    }
                 }
                 Cmd::SetEnabled { block, enabled } => {
                     s.set_enabled(block, enabled).map_err(|e| e.to_string())?;

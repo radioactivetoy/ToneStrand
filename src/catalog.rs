@@ -1206,3 +1206,30 @@ mod trails_tests {
         assert_eq!(meta.map(|m| m.value_type), Some(2), "an on/off switch");
     }
 }
+
+#[cfg(test)]
+mod trails_everywhere_tests {
+    use super::*;
+
+    /// Every model HX Edit gives a Trails (delays, reverbs, loops) names the value after its listed parameters "Trails", as an
+    /// on/off switch, and every cab with a Mic names it "Mic". (The pedal was only seen storing it for a mono Simple Delay.)
+    #[test]
+    fn every_model_with_trails_or_a_mic_names_its_extra_value() {
+        let Some(cat) = find_dir(None).and_then(|p| Catalog::load(&p).ok()) else { return }; // needs HX Edit's files
+        let (mut trails, mut mics) = (0, 0);
+        for n in 0..cat.sym.len() as i64 {
+            let Some(info) = cat.symbol(n).and_then(|s| cat.info_for_symbol(s)) else { continue };
+            let extra = cat.sym[n as usize].params.len();
+            let (name, meta) = cat.param(n, extra);
+            if info.params.iter().any(|p| p.id == "@mic") {
+                assert_eq!(name, "Mic", "{}", cat.symbol(n).unwrap_or(""));
+                mics += 1;
+            } else if info.params.iter().any(|p| p.id == "@trails") {
+                assert_eq!(name, "Trails", "{}", cat.symbol(n).unwrap_or(""));
+                assert_eq!(meta.map(|m| m.value_type), Some(2), "{}", cat.symbol(n).unwrap_or(""));
+                trails += 1;
+            }
+        }
+        assert!(trails > 50 && mics > 20, "{trails} models with Trails, {mics} with a Mic");
+    }
+}
