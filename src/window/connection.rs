@@ -297,6 +297,7 @@ impl App {
                             }
                         } else {
                             self.docs.push(Doc {
+                                id: next_doc_id(),
                                 title,
                                 name,
                                 path: None,
@@ -684,7 +685,7 @@ impl App {
                             self.back_up_setlist_here();
                         } else {
                             let id = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder();
-                            self.start_pick(id, picks::Pick::BackupAllFolder);
+                            self.start_pick(id, picks::Pick::BackupAllFolder(self.setlist, self.presets.len(), self.presets.clone()));
                         }
                     }
                     if ui

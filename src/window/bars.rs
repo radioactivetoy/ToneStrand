@@ -69,6 +69,7 @@ impl App {
             title = format!("{name} ({})", crate::units::unit_name(unit));
         }
         self.docs.push(Doc {
+            id: next_doc_id(),
             title,
             name: String::new(),
             path: None,
@@ -91,6 +92,7 @@ impl App {
     pub(super) fn new_preset(&mut self) {
         let json = hlx::blank_for("New Preset", self.unit);
         self.docs.push(Doc {
+            id: next_doc_id(),
             title: "New Preset".into(),
             name: String::new(),
             path: None,

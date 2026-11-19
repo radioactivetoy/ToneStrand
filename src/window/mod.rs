@@ -66,7 +66,14 @@ enum Origin {
     File,
 }
 
+/// A tab's number that stays the same while other tabs open and close.
+fn next_doc_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 struct Doc {
+    id: u64,
     title: String,
     /// The preset's name on the pedal, for device documents.
     name: String,
@@ -96,7 +103,8 @@ impl Doc {
 
 /// What is waiting for "save your changes?" to be answered.
 enum CloseAsk {
-    Tab(usize),
+    /// A tab, by its `Doc::id`.
+    Tab(u64),
     Quit,
 }
 
@@ -390,6 +398,7 @@ impl App {
         }
         if open_sample {
             app.docs.push(Doc {
+                id: next_doc_id(),
                 title: "Sample Tone".into(),
                 name: String::new(),
                 path: None,
@@ -561,6 +570,7 @@ impl App {
             }
         };
         self.docs.push(Doc {
+            id: next_doc_id(),
             title,
             name,
             // A temporary copy (Android's picker) has no file of its own to save back to.
@@ -618,6 +628,7 @@ impl App {
     fn save_doc(&mut self, i: usize, save_as: bool) {
         let lib = self.library_dir.clone();
         let Some(doc) = self.docs.get_mut(i) else { return };
+        let doc_id = doc.id;
         let (ext, bytes) = (doc.kind.doc().file_ext(), doc.kind.doc().encode());
         let path = match doc.path.clone().filter(|_| !save_as) {
             Some(path) => path,
@@ -630,7 +641,7 @@ impl App {
                     .set_file_name(format!("{}.{ext}", device::sanitize(&base)))
                     .add_filter("Preset", &[ext])
                     .save_file();
-                return self.start_pick(id, picks::Pick::SaveAs(i, bytes));
+                return self.start_pick(id, picks::Pick::SaveAs(doc_id, bytes));
             }
         };
         match crate::files::write_atomic(&path, &bytes) {
@@ -927,8 +938,8 @@ impl App {
 
     /// Close a tab, asking first when it has changes that aren't saved.
     fn request_close_tab(&mut self, i: usize) {
-        if self.docs.get(i).is_some_and(Doc::needs_save) {
-            self.close_ask = Some(CloseAsk::Tab(i));
+        if let Some(d) = self.docs.get(i).filter(|d| d.needs_save()) {
+            self.close_ask = Some(CloseAsk::Tab(d.id));
         } else {
             self.close_tab(i);
         }
@@ -961,10 +972,11 @@ impl App {
         let Some(ask) = self.close_ask.take() else { return };
         let unsaved: Vec<usize> = (0..self.docs.len()).filter(|&i| self.docs[i].needs_save()).collect();
         let (text, title) = match &ask {
-            CloseAsk::Tab(i) => match self.docs.get(*i) {
-                Some(d) if d.needs_save() => (format!("\"{}\" has changes that aren't saved.", d.title), "Close preset"),
-                // Saved or gone since: nothing to ask.
-                _ => return self.close_tab(*i),
+            CloseAsk::Tab(id) => match picks::doc_index(&self.docs, *id).map(|i| (i, &self.docs[i])) {
+                Some((_, d)) if d.needs_save() => (format!("\"{}\" has changes that aren't saved.", d.title), "Close preset"),
+                // Saved since: nothing to ask. Gone: nothing to close.
+                Some((i, _)) => return self.close_tab(i),
+                None => return,
             },
             CloseAsk::Quit => {
                 if unsaved.is_empty() {
@@ -1000,17 +1012,22 @@ impl App {
         match (choice, ask) {
             (None, ask) => self.close_ask = Some(ask),
             (Some(2), _) => {}
-            (Some(0), CloseAsk::Tab(i)) => {
+            (Some(0), CloseAsk::Tab(id)) => {
+                let Some(i) = picks::doc_index(&self.docs, id) else { return };
                 self.save_doc(i, false);
                 if !self.docs.get(i).is_some_and(Doc::needs_save) {
                     self.close_tab(i);
-                } else if self.pending.values().any(|p| matches!(p, picks::Pick::SaveAs(t, _) if *t == i)) {
+                } else if self.pending.values().any(|p| matches!(p, picks::Pick::SaveAs(t, _) if *t == id)) {
                     // Asking where to save: the tab closes when that is done.
-                    self.after_save = Some(CloseAsk::Tab(i));
+                    self.after_save = Some(CloseAsk::Tab(id));
                 }
                 // Otherwise the save failed: keep the tab.
             }
-            (Some(_), CloseAsk::Tab(i)) => self.close_tab(i),
+            (Some(_), CloseAsk::Tab(id)) => {
+                if let Some(i) = picks::doc_index(&self.docs, id) {
+                    self.close_tab(i);
+                }
+            }
             (Some(0), CloseAsk::Quit) => self.save_unsaved_then_quit(),
             (Some(_), CloseAsk::Quit) => {
                 self.quit_ok = true;

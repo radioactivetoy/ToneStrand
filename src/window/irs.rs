@@ -478,7 +478,7 @@ impl App {
                 crate::tonelib::Action::SendToPedal(files) => self.upload_ir_files(files),
                 crate::tonelib::Action::Import => {
                     let id = crate::platform::FileDialog::new().add_filter("IRs and NAM captures", &["wav", "nam"]).open_files();
-                    self.start_pick(id, picks::Pick::ImportTones);
+                    self.start_pick(id, picks::Pick::ImportTones(self.tones.folder()));
                 }
                 crate::tonelib::Action::Note(ok, text) => self.note(if ok { LogLevel::Good } else { LogLevel::Bad }, text),
             }

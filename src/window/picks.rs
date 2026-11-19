@@ -12,16 +12,18 @@ pub(super) enum Pick {
     /// The compare window: which side (0 = A, 1 = B) the file goes to.
     ComparePick(usize),
     ImportLibrary,
-    ImportTones,
+    /// Copy the files into this folder (the library's, as it was at the click).
+    ImportTones(PathBuf),
     UploadIrs,
     NamCaptures,
     /// The captures picked first, waiting for the folder to write the .wav files in.
     NamOutFolder(Vec<PathBuf>),
-    /// Save a document (its tab number) as a file; the bytes are what to write.
-    SaveAs(usize, Vec<u8>),
+    /// Save a document (its `Doc::id`) as a file; the bytes are what to write.
+    SaveAs(u64, Vec<u8>),
     SavePedalPreset(Vec<u8>),
     SaveLog,
-    BackupAllFolder,
+    /// Back up a setlist (number, count and names as they were at the click) into the folder.
+    BackupAllFolder(i64, usize, Vec<String>),
     FullBackupFolder,
     RestoreAllFolder,
     LibraryFolder,
@@ -36,12 +38,17 @@ impl Pick {
         match self {
             Pick::SaveAs(..) | Pick::SavePedalPreset(_) => "Could not save",
             Pick::SaveLog => "Could not save the log",
-            Pick::OpenPreset | Pick::ComparePick(_) | Pick::ImportLibrary | Pick::ImportTones | Pick::UploadIrs | Pick::NamCaptures => {
+            Pick::OpenPreset | Pick::ComparePick(_) | Pick::ImportLibrary | Pick::ImportTones(_) | Pick::UploadIrs | Pick::NamCaptures => {
                 "Could not pick the file"
             }
             _ => "Could not pick the folder",
         }
     }
+}
+
+/// The tab with this `Doc::id`, if it is still open.
+pub(super) fn doc_index(docs: &[Doc], id: u64) -> Option<usize> {
+    docs.iter().position(|d| d.id == id)
 }
 
 /// Whether a path may be kept in the settings (recent files, last session's tabs): not a
@@ -153,8 +160,9 @@ impl App {
             path.file_name().and_then(|s| s.to_str()).unwrap_or("the file").to_owned()
         };
         match pick {
-            Pick::SaveAs(i, _) => {
-                if let Some(doc) = self.docs.get_mut(i) {
+            Pick::SaveAs(id, _) => {
+                let found = doc_index(&self.docs, id);
+                if let Some(doc) = found.and_then(|i| self.docs.get_mut(i)) {
                     if rememberable(&path) {
                         doc.path = Some(path.clone());
                     }
@@ -164,9 +172,9 @@ impl App {
                 self.note(LogLevel::Good, format!("Saved {shown}"));
                 self.scan_library();
                 match self.after_save.take() {
-                    Some(CloseAsk::Tab(t)) if t == i => {
-                        if !self.docs.get(t).is_some_and(Doc::needs_save) {
-                            self.close_tab(t);
+                    Some(CloseAsk::Tab(t)) if t == id => {
+                        if let Some(i) = doc_index(&self.docs, t).filter(|&i| !self.docs[i].needs_save()) {
+                            self.close_tab(i);
                         }
                     }
                     Some(CloseAsk::Quit) => self.save_unsaved_then_quit(),
@@ -198,8 +206,7 @@ impl App {
                 }
             }
             Pick::ImportLibrary => self.import_files(files),
-            Pick::ImportTones => {
-                let dir = self.tones.folder();
+            Pick::ImportTones(dir) => {
                 let _ = std::fs::create_dir_all(&dir);
                 let n = files.iter().filter(|f| crate::files::copy_into(f, &dir).is_ok()).count();
                 self.note(LogLevel::Good, format!("Imported {n} file{}", if n == 1 { "" } else { "s" }));
@@ -230,7 +237,7 @@ impl App {
                 self.settings.save();
                 self.convert_nam(files, folder);
             }
-            Pick::BackupAllFolder => self.back_up_setlist(folder),
+            Pick::BackupAllFolder(setlist, count, names) => self.send(Cmd::Backup { setlist, count, folder, names }),
             Pick::FullBackupFolder => self.send(Cmd::FullBackup { folder }),
             Pick::RestoreAllFolder => self.restore_all_from(folder),
             Pick::LibraryFolder => self.set_library_dir(Some(folder)),
@@ -252,8 +259,8 @@ impl App {
 
     /// Back up the shown setlist's presets into `folder`.
     pub(super) fn back_up_setlist(&mut self, folder: PathBuf) {
-        let names = self.presets.clone();
-        self.send(Cmd::Backup { setlist: self.setlist, count: self.presets.len(), folder, names });
+        let (names, setlist) = (self.presets.clone(), self.setlist);
+        self.send(Cmd::Backup { setlist, count: names.len(), folder, names });
     }
 
     /// Android has no folder picker: the setlist goes into a new dated folder of the backups.
@@ -317,6 +324,30 @@ mod tests {
         // One minute and an hour and a day later.
         let p = dated_backup_folder(Path::new("/lib"), "Full backup", 86_400 + 3_600 * 14 + 180);
         assert_eq!(p, Path::new("/lib").join("Pedal backups").join("Full backup 1970-01-02 1403"));
+    }
+
+    #[test]
+    fn a_tab_is_found_by_its_id_after_others_close() {
+        let doc = || Doc {
+            id: next_doc_id(),
+            title: String::new(),
+            name: String::new(),
+            path: None,
+            kind: DocKind::Hlx { json: crate::hlx::blank_for("x", 0) },
+            dirty: false,
+            selected: None,
+            example: false,
+            undo: Vec::new(),
+            redo: Vec::new(),
+            last_edit: None,
+        };
+        let mut docs = vec![doc(), doc(), doc()];
+        let (first, last) = (docs[0].id, docs[2].id);
+        assert_ne!(first, last);
+        assert_eq!(doc_index(&docs, last), Some(2));
+        docs.remove(0);
+        assert_eq!(doc_index(&docs, last), Some(1));
+        assert_eq!(doc_index(&docs, first), None);
     }
 
     #[test]
