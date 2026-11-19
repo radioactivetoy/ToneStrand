@@ -270,7 +270,7 @@ impl ToneLib {
                     return;
                 }
                 let multi = ui.input(|i| i.modifiers.ctrl || i.modifiers.command || i.modifiers.shift);
-                egui::ScrollArea::vertical().id_salt("tonelib").auto_shrink([false, false]).show(ui, |ui| {
+                egui::ScrollArea::vertical().id_salt("tonelib").auto_shrink([false, false]).drag_to_scroll(!theme::carrying(ui.ctx())).show(ui, |ui| {
                     for e in &shown {
                         let on = self.selected.contains(&e.path);
                         let r = egui::Frame::new()
@@ -307,8 +307,8 @@ impl ToneLib {
                                 });
                             })
                             .response
-                            .interact(egui::Sense::click_and_drag());
-                        r.dnd_set_drag_payload(vec![e.path.clone()]);
+                            .interact(theme::list_row_sense());
+                        theme::row_payload(&r, vec![e.path.clone()]);
                         if r.clicked() {
                             if multi {
                                 if !self.selected.remove(&e.path) {
@@ -321,6 +321,7 @@ impl ToneLib {
                                 self.selected.insert(e.path.clone());
                             }
                         }
+                        if !theme::carrying(ui.ctx()) {
                         r.context_menu(|ui| {
                             if ui.button("Show in Explorer").clicked() {
                                 folders::open_in_explorer(e.path.parent().unwrap_or(&self.root));
@@ -331,6 +332,7 @@ impl ToneLib {
                                 ui.close_menu();
                             }
                         });
+                        }
                         ui.add_space(3.0);
                     }
                     ui.add_space(4.0);

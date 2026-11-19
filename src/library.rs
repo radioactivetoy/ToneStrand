@@ -331,7 +331,7 @@ impl Library {
                     });
                     return;
                 }
-                egui::ScrollArea::vertical().id_salt("library").auto_shrink([false, false]).show(ui, |ui| {
+                egui::ScrollArea::vertical().id_salt("library").auto_shrink([false, false]).drag_to_scroll(!theme::carrying(ui.ctx())).show(ui, |ui| {
                     if self.grid {
                         // Rows of cards that fit the width (each card is 250 + 24 margin wide).
                         let per_row = ((ui.available_width() + 10.0) / (274.0 + 10.0)).floor().max(1.0) as usize;
@@ -463,7 +463,7 @@ impl Library {
                     }
                 });
             });
-        let resp = r.response.interact(egui::Sense::click_and_drag());
+        let resp = r.response.interact(theme::list_row_sense());
         crate::theme::focus_ring(ui, &resp, 10);
         resp.widget_info(|| {
             egui::WidgetInfo::labeled(
@@ -472,12 +472,14 @@ impl Library {
                 format!("{}, {}", e.name, if e.pedal_file { "pedal preset" } else { "hlx preset" }),
             )
         });
-        resp.dnd_set_drag_payload(vec![e.path.clone()]);
+        theme::row_payload(&resp, vec![e.path.clone()]);
         if resp.double_clicked() {
             actions.push(Action::Open(e.path.clone()));
         }
-        resp.on_hover_text("Double-click to open, drag onto a folder to move, right-click for more")
-            .context_menu(|ui| self.menu(ui, e, can_send, actions));
+        let resp = resp.on_hover_text("Double-click to open, drag onto a folder to move, right-click for more");
+        if !theme::carrying(ui.ctx()) {
+            resp.context_menu(|ui| self.menu(ui, e, can_send, actions));
+        }
     }
 
     fn row(&self, ui: &mut egui::Ui, e: &Entry, can_send: bool, actions: &mut Vec<Action>) {
@@ -498,7 +500,7 @@ impl Library {
                 ui.label(RichText::new(tags.join("  ")).small().color(accent()));
             }
         });
-        let resp = r.response.interact(egui::Sense::click_and_drag());
+        let resp = r.response.interact(theme::list_row_sense());
         crate::theme::focus_ring(ui, &resp, 10);
         resp.widget_info(|| {
             egui::WidgetInfo::labeled(
@@ -507,11 +509,13 @@ impl Library {
                 format!("{}, {}", e.name, if e.pedal_file { "pedal preset" } else { "hlx preset" }),
             )
         });
-        resp.dnd_set_drag_payload(vec![e.path.clone()]);
+        theme::row_payload(&resp, vec![e.path.clone()]);
         if resp.double_clicked() {
             actions.push(Action::Open(e.path.clone()));
         }
-        resp.context_menu(|ui| self.menu(ui, e, can_send, actions));
+        if !theme::carrying(ui.ctx()) {
+            resp.context_menu(|ui| self.menu(ui, e, can_send, actions));
+        }
         ui.separator();
     }
 }

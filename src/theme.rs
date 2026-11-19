@@ -14,6 +14,38 @@ pub fn set_light(on: bool) {
     LIGHT.store(on, Ordering::Relaxed);
 }
 
+/// Whether the window is driven by touch (a later setting can force it on).
+pub fn touch() -> bool {
+    cfg!(target_os = "android")
+}
+
+/// What a row inside a scrolling list senses: on touch a plain drag must reach the scroll
+/// area, so rows only click; on desktop they also drag (today's behaviour).
+pub fn list_row_sense() -> egui::Sense {
+    if touch() {
+        egui::Sense::click()
+    } else {
+        egui::Sense::click_and_drag()
+    }
+}
+
+/// Let a list row be picked up. Desktop: the usual drag payload. Touch: press and hold.
+pub fn row_payload<P: std::any::Any + Send + Sync>(resp: &egui::Response, payload: P) {
+    if touch() {
+        if resp.long_touched() {
+            egui::DragAndDrop::set_payload(&resp.ctx, payload);
+        }
+    } else {
+        resp.dnd_set_drag_payload(payload);
+    }
+}
+
+/// True on touch while a row is being carried: lists must not scroll then, and the
+/// long press must not also open a context menu.
+pub fn carrying(ctx: &egui::Context) -> bool {
+    touch() && egui::DragAndDrop::has_any_payload(ctx)
+}
+
 /// One colour of each palette: (dark, light).
 fn pick(dark: u32, light: u32) -> Color32 {
     let v = if is_light() { light } else { dark };

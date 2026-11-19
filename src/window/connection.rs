@@ -731,6 +731,7 @@ impl App {
                 .id_salt("presets")
                 .max_height((ui.available_height() - 10.0 - reserve).max(160.0))
                 .auto_shrink([false, true])
+                .drag_to_scroll(!crate::theme::carrying(ui.ctx()))
                 .show(ui, |ui| {
                     for (i, name) in presets.iter().enumerate() {
                         if !filter.is_empty() && !name.to_lowercase().contains(&filter) {
@@ -738,7 +739,7 @@ impl App {
                         }
                         let is_current = current_idx == Some(i as i64);
                         let is_chosen = self.chosen == Some(i);
-                        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), row_h), egui::Sense::click_and_drag());
+                        let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), row_h), crate::theme::list_row_sense());
                         crate::theme::focus_ring(ui, &resp, 5);
                         resp.widget_info(|| {
                             egui::WidgetInfo::labeled(
@@ -776,7 +777,7 @@ impl App {
                         );
                         // Drag a preset onto another slot to copy, swap or move it.
                         if !presets[i].trim().is_empty() {
-                            resp.dnd_set_drag_payload(PresetDrag(i));
+                            crate::theme::row_payload(&resp, PresetDrag(i));
                         }
                         if resp.dnd_hover_payload::<PresetDrag>().is_some_and(|d| d.0 != i) {
                             ui.painter().rect_stroke(rect, CornerRadius::same(5), Stroke::new(1.5_f32, accent()), egui::StrokeKind::Inside);
@@ -792,32 +793,34 @@ impl App {
                         if resp.double_clicked() {
                             self.send(Cmd::Select(sl, i as i64));
                         }
-                        resp.context_menu(|ui| {
-                            if ui.button("Load on the pedal").clicked() {
-                                self.send(Cmd::Select(sl, i as i64));
-                                ui.close_menu();
-                            }
-                            if ui.button("Open in editor").clicked() {
-                                self.send(Cmd::FetchSlot { setlist: sl, index: i as i64, purpose: Purpose::Edit });
-                                ui.close_menu();
-                            }
-                            if ui.button("Save to a file...").clicked() {
-                                self.send(Cmd::FetchSlot { setlist: sl, index: i as i64, purpose: Purpose::SaveToFile });
-                                ui.close_menu();
-                            }
-                            if ui.button("Rename...").clicked() {
-                                self.rename = Some((sl, i, name.clone()));
-                                ui.close_menu();
-                            }
-                            ui.separator();
-                            if ui.button(RichText::new("Clear slot").color(bad())).clicked() {
-                                self.confirm = Some((
-                                    format!("Clear {} \"{}\"? This empties the slot on the pedal.", slot_label(i), name),
-                                    Cmd::Clear { setlist: sl, index: i as i64 },
-                                ));
-                                ui.close_menu();
-                            }
-                        });
+                        if !crate::theme::carrying(ui.ctx()) {
+                            resp.context_menu(|ui| {
+                                if ui.button("Load on the pedal").clicked() {
+                                    self.send(Cmd::Select(sl, i as i64));
+                                    ui.close_menu();
+                                }
+                                if ui.button("Open in editor").clicked() {
+                                    self.send(Cmd::FetchSlot { setlist: sl, index: i as i64, purpose: Purpose::Edit });
+                                    ui.close_menu();
+                                }
+                                if ui.button("Save to a file...").clicked() {
+                                    self.send(Cmd::FetchSlot { setlist: sl, index: i as i64, purpose: Purpose::SaveToFile });
+                                    ui.close_menu();
+                                }
+                                if ui.button("Rename...").clicked() {
+                                    self.rename = Some((sl, i, name.clone()));
+                                    ui.close_menu();
+                                }
+                                ui.separator();
+                                if ui.button(RichText::new("Clear slot").color(bad())).clicked() {
+                                    self.confirm = Some((
+                                        format!("Clear {} \"{}\"? This empties the slot on the pedal.", slot_label(i), name),
+                                        Cmd::Clear { setlist: sl, index: i as i64 },
+                                    ));
+                                    ui.close_menu();
+                                }
+                            });
+                        }
                     }
                 });
             if let Some(i) = self.chosen {
