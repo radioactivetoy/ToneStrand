@@ -335,7 +335,7 @@ impl App {
             user_disconnected: false,
             catalog_card_hidden: false,
         };
-        app.catalog = crate::catalog::find_dir(app.settings.hx_edit.as_deref()).and_then(|d| Catalog::load(&d).ok()).map(Arc::new);
+        app.catalog = crate::catalog::load_best(app.settings.hx_edit.as_deref()).map(Arc::new);
         app.lib = Library::new(app.library_dir.clone());
         app.unit = app.settings.unit.unwrap_or(2162694);
         // Start for a given unit (used to check pictures for each pedal).
@@ -1002,7 +1002,7 @@ impl App {
 
     /// Load the effects list from HX Edit's resources (custom folder or the usual place).
     fn reload_catalog(&mut self) {
-        self.catalog = crate::catalog::find_dir(self.settings.hx_edit.as_deref()).and_then(|d| Catalog::load(&d).ok()).map(Arc::new);
+        self.catalog = crate::catalog::load_best(self.settings.hx_edit.as_deref()).map(Arc::new);
         self.scan_library();
         if self.catalog.is_some() {
             self.note(LogLevel::Good, "Effects list loaded.");

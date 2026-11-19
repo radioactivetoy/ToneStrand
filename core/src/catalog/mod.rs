@@ -197,6 +197,76 @@ pub fn find_dir(custom: Option<&str>) -> Option<PathBuf> {
     candidates.into_iter().find(|p| p.join("Helix.sym").is_file())
 }
 
+mod embedded {
+    include!(concat!(env!("OUT_DIR"), "/builtin_catalog.rs"));
+}
+
+/// The effects list built into ToneStrand: (HX Edit version it was made from, pack bytes). The newest folder in
+/// `catalogs/` at build time; `None` when there was none.
+pub fn builtin() -> Option<(&'static str, &'static [u8])> {
+    embedded::BUILTIN
+}
+
+/// Which effects list to use.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pick {
+    Local,
+    Builtin,
+    None,
+}
+
+/// HX Edit's files do not record a version, but the list of models only grows, so more models means newer.
+/// The local list wins a tie.
+pub fn choose(local_symbols: Option<usize>, builtin_symbols: Option<usize>) -> Pick {
+    match (local_symbols, builtin_symbols) {
+        (None, None) => Pick::None,
+        (Some(_), None) => Pick::Local,
+        (None, Some(_)) => Pick::Builtin,
+        (Some(l), Some(b)) => {
+            if b > l {
+                Pick::Builtin
+            } else {
+                Pick::Local
+            }
+        }
+    }
+}
+
+/// The built-in list, or `None` (logged) when it is missing or unreadable.
+fn load_builtin() -> Option<Catalog> {
+    let (version, bytes) = builtin()?;
+    match Catalog::from_pack(bytes) {
+        Ok(mut c) => {
+            c.source = CatalogSource::Builtin { hx_edit_version: version.to_owned() };
+            Some(c)
+        }
+        Err(e) => {
+            eprintln!("the built-in effects list could not be read: {e}");
+            None
+        }
+    }
+}
+
+fn best_of(local: Option<Catalog>) -> Option<Catalog> {
+    let builtin = load_builtin();
+    match choose(local.as_ref().map(|c| c.sym.len()), builtin.as_ref().map(|c| c.sym.len())) {
+        Pick::Local => {
+            eprintln!("effects list: from HX Edit");
+            local
+        }
+        Pick::Builtin => {
+            eprintln!("effects list: built into ToneStrand");
+            builtin
+        }
+        Pick::None => None,
+    }
+}
+
+/// The effects list to use: HX Edit's files when found and not older than the built-in list, else the built-in one.
+pub fn load_best(custom_hx_edit: Option<&str>) -> Option<Catalog> {
+    best_of(find_dir(custom_hx_edit).and_then(|d| Catalog::load(&d).ok()))
+}
+
 /// A colour as red, green, blue; the app turns it into its own colour type (`theme::rgb`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Rgb(pub u8, pub u8, pub u8);
@@ -1279,5 +1349,39 @@ mod colour_tests {
     fn colour_from_reads_hex() {
         assert_eq!(colour_from("0x8899aa"), Rgb(0x88, 0x99, 0xaa));
         assert_eq!(colour_from("nonsense"), colour_from("0x8899aa"));
+    }
+}
+
+#[cfg(test)]
+mod builtin_tests {
+    use super::*;
+
+    #[test]
+    fn choose_prefers_newer_builtin() {
+        assert_eq!(choose(Some(900), Some(950)), Pick::Builtin);
+        assert_eq!(choose(Some(950), Some(950)), Pick::Local);
+        assert_eq!(choose(Some(990), Some(950)), Pick::Local);
+    }
+
+    #[test]
+    fn choose_falls_back_when_folder_missing() {
+        assert_eq!(choose(None, Some(950)), Pick::Builtin);
+        assert_eq!(choose(Some(900), None), Pick::Local);
+        assert_eq!(choose(None, None), Pick::None);
+    }
+
+    #[test]
+    fn builtin_catalog_loads() {
+        let (version, bytes) = builtin().expect("catalogs/ has at least one version");
+        assert!(!version.is_empty());
+        let cat = Catalog::from_pack(bytes).unwrap();
+        assert!(cat.model_count() > 100);
+    }
+
+    #[test]
+    fn load_best_with_no_local_folder_uses_builtin_and_names_its_version() {
+        let cat = best_of(None).expect("built-in list");
+        let (version, _) = builtin().unwrap();
+        assert_eq!(cat.source(), &CatalogSource::Builtin { hx_edit_version: version.to_owned() });
     }
 }

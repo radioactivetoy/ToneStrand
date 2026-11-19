@@ -61,13 +61,13 @@ fn need<T, E: std::fmt::Display>(r: Result<T, E>, what: &str) -> Option<T> {
     }
 }
 
-/// HX Edit's catalog for the tools that need it.
+/// The effects list for the tools that need it.
 fn tool_catalog() -> Option<catalog::Catalog> {
-    let Some(dir) = catalog::find_dir(boxes::Settings::load().hx_edit.as_deref()) else {
-        eprintln!("HX Edit's files were not found; install HX Edit or set its folder in Settings");
-        return None;
-    };
-    need(catalog::Catalog::load(&dir), "HX Edit's files")
+    let cat = catalog::load_best(boxes::Settings::load().hx_edit.as_deref());
+    if cat.is_none() {
+        eprintln!("no effects list found; install HX Edit or set its folder in Settings");
+    }
+    cat
 }
 
 fn read_preset(f: &str) -> Option<devpreset::DevicePreset> {
@@ -880,7 +880,7 @@ fn probe(host: Option<String>) {
             Ok(d) => {
                 let same = d.encode() == b;
                 println!("current preset document: {} bytes, round trip identical: {same}, slots {}", b.len(), d.slots().len());
-                if let Some(cat) = catalog::find_dir(None).and_then(|p| catalog::Catalog::load(&p).ok()) {
+                if let Some(cat) = catalog::load_best(None) {
                     println!("catalog: {} models, {} picker groups", cat.sym.len(), cat.groups.len());
                     let total: f64 = d
                         .slots()

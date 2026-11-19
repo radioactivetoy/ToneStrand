@@ -92,12 +92,21 @@ impl App {
                     let mut reload = false;
                     settings_anchor(ui, "Effects");
                     theme::card(ui, |ui| {
-                        theme::section_help(ui, "Effects list", "Effect and amp names, knob ranges and colours are read from HX Edit's resource folder.");
+                        theme::section_help(ui, "Effects list", "Effect and amp names, knob ranges and colours come from HX Edit's files when it is installed and up to date, otherwise from the list built into ToneStrand.");
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
                             match &self.catalog {
                                 Some(c) => theme::pill(ui, &format!("Loaded  •  {} models", c.model_count()), good()),
                                 None => theme::pill(ui, "Not found", orange()),
+                            }
+                            if let Some(c) = &self.catalog {
+                                let used = match c.source() {
+                                    crate::catalog::CatalogSource::HxEdit(dir) => format!("From HX Edit ({})", dir.display()),
+                                    crate::catalog::CatalogSource::Builtin { hx_edit_version } => {
+                                        format!("Built into ToneStrand (HX Edit {hx_edit_version})")
+                                    }
+                                };
+                                ui.label(RichText::new(used).small().color(muted()));
                             }
                             let shown = self.settings.hx_edit.clone().unwrap_or_else(|| "Looking in the usual place".into());
                             ui.label(RichText::new(shown).small().color(muted()));
