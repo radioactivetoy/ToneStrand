@@ -59,7 +59,11 @@ impl eframe::App for AndroidShell {
                 use eframe::glow::HasContext;
                 // SAFETY: plain state queries on the current context, on the render thread.
                 let (version, srgb_ext, fb_srgb) = unsafe {
-                    (gl.get_parameter_string(eframe::glow::VERSION), gl.supported_extensions().contains("GL_EXT_sRGB_write_control"), gl.is_enabled(0x8DB9))
+                    (
+                        gl.get_parameter_string(eframe::glow::VERSION),
+                        gl.supported_extensions().contains("GL_EXT_sRGB_write_control"),
+                        gl.is_enabled(0x8DB9),
+                    )
                 };
                 log::debug!("GL {version}; EXT_sRGB_write_control {srgb_ext}; FRAMEBUFFER_SRGB enabled {fb_srgb}");
             }
