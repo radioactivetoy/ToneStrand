@@ -64,4 +64,26 @@ Android cloud backup must not copy it.
 
 ## Colours
 
-On the emulator (host GPU through the Android Emulator OpenGL ES Translator, NVIDIA) the theme colours come out exact, dark and light: `theme::panel()` #15161a reads #15161a, `card_bg()` #1b1d22 reads #1b1d22, and the light palette likewise (checked by screenshot). No eframe patch or framebuffer change was needed. The earlier spike's "too light" colours (#404248) were not reproduced. This is a GPU-path property (the sRGB write-control and EGL surface handling differ between GPU drivers), so **the real tablet must be checked too**: compare a flat panel pixel in a screenshot with #15161a. If it is lighter, the fix to try is disabling `GL_FRAMEBUFFER_SRGB_EXT` (where `EXT_sRGB_write_control` exists) before painting, or a linear EGL surface.
+Checked on the emulator only: commit 7a44e96 plus the start-up log line below, release build, 2560x1600, host GPU (NVIDIA, through the emulator's OpenGL ES translator). Screenshots are in `target/android-check/t7-*.png` (not kept in git).
+
+| Surface (pixel in the screenshot) | Dark: expected / read | Light: expected / read |
+|---|---|---|
+| Left preset panel (100,800) | #15161a / #15161a | |
+| Top bar (1500,60) | #15161a / #15161a | #f6f7fa / #f6f7fa |
+| Card (50,300) | #1b1d22 / #1b1d22 | #ffffff / #ffffff |
+| Background (1280,800) | #101114 / #101114 | #eceef3 / #eceef2 (1 step off) |
+
+So the colours are right here and no patch was needed. The earlier spike saw about #404248 for #15161a. The cause of that washed look is not established: it was either a different graphics path or sample points that were not on flat surfaces.
+
+What the emulator reports (one debug-level line at start-up in `android/src/lib.rs`; raise the logger level to `Debug` to see it): `OpenGL ES 3.1 (4.5.0 NVIDIA 621.24)`, extension `GL_EXT_sRGB_write_control` (lets a program switch the screen's automatic brightness-curve conversion on or off) not offered, `FRAMEBUFFER_SRGB` (0x8DB9, that conversion) off. egui does not turn it on when the extension named `ARB_framebuffer_sRGB` is absent, so nothing is converted twice here.
+
+### Checking the real tablet (the graphics driver differs, so this must be done)
+
+1. Build and install: `powershell androiduild.ps1 -Abi arm64-v8a -Device <serial>` (`adb devices` shows the serial).
+2. Screenshot: `adb -s <serial> exec-out screencap -p > tablet-dark.png`.
+3. Read the pixel at (100,800) (inside the left preset panel, with the Editor page open and the tablet in landscape at 2560x1600; scale the point for another size). It must be #15161a within 3 per channel; the background at (1280,800) must be #101114 within 3. A value near #404248 means a second conversion is happening.
+4. Settings > Display > Light, screenshot again: top bar (1500,60) near #f6f7fa, background (1280,800) near #eceef3.
+5. If off, try in this order, stopping at the first that fixes it:
+   a. In `android/src/lib.rs`, before painting, turn `FRAMEBUFFER_SRGB` (0x8DB9) off through `frame.gl()` when the extension list has `GL_EXT_sRGB_write_control` (the start-up log line shows whether it does).
+   b. A vendored eframe under `android/vendor/eframe`, changed only to ask for a plain (non-sRGB) window surface, wired through `[patch.crates-io]` in `android/Cargo.toml`. Never touch the root `Cargo.toml`.
+   c. eframe's `wgpu` renderer, for the Android build only.

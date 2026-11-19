@@ -28,6 +28,7 @@ fn android_main(app: AndroidApp) {
                 android: app,
                 keyboard: keyboard::Keyboard::new(),
                 last_rect: None,
+                gl_logged: false,
             }))
         }),
     );
@@ -47,10 +48,22 @@ struct AndroidShell {
     keyboard: keyboard::Keyboard,
     insets: insets::Insets,
     last_rect: Option<eframe::egui::Rect>,
+    gl_logged: bool,
 }
 
 impl eframe::App for AndroidShell {
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
+        if !self.gl_logged {
+            self.gl_logged = true;
+            if let Some(gl) = frame.gl() {
+                use eframe::glow::HasContext;
+                // SAFETY: plain state queries on the current context, on the render thread.
+                let (version, srgb_ext, fb_srgb) = unsafe {
+                    (gl.get_parameter_string(eframe::glow::VERSION), gl.supported_extensions().contains("GL_EXT_sRGB_write_control"), gl.is_enabled(0x8DB9))
+                };
+                log::debug!("GL {version}; EXT_sRGB_write_control {srgb_ext}; FRAMEBUFFER_SRGB enabled {fb_srgb}");
+            }
+        }
         self.inner.update(ctx, frame);
         let tapped = ctx.input(|i| i.pointer.primary_pressed());
         self.keyboard.after_update(&self.android, ctx.wants_keyboard_input(), tapped);
