@@ -144,7 +144,7 @@ impl App {
                     if ui.button("Look again").clicked() {
                         rescan = true;
                     }
-                    if ui.button("Show folder").clicked() {
+                    if !cfg!(target_os = "android") && ui.button("Show folder").clicked() {
                         crate::folders::open_in_explorer(&dir);
                     }
                 });

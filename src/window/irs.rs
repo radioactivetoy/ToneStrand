@@ -3,21 +3,15 @@
 use super::*;
 
 impl App {
-    /// Pick .nam captures and a folder, write a User IR .wav for each, and show what happened.
+    /// Pick .nam captures (then a folder, except on Android), write a User IR .wav for each,
+    /// and show what happened.
     pub(super) fn convert_nam_files(&mut self) {
-        let Some(files) =
-            crate::platform::FileDialog::new().set_title("Pick NAM captures").add_filter("NAM captures", &["nam"]).pick_files()
-        else {
-            return;
-        };
-        let start = self.settings.nam_out_dir.clone().map(PathBuf::from).unwrap_or_else(|| self.library_dir.clone());
-        let Some(out) =
-            crate::platform::FileDialog::new().set_title("Where to save the .wav files").set_directory(&start).pick_folder_blocking()
-        else {
-            return;
-        };
-        self.settings.nam_out_dir = Some(out.to_string_lossy().into_owned());
-        self.settings.save();
+        let id = crate::platform::FileDialog::new().set_title("Pick NAM captures").add_filter("NAM captures", &["nam"]).open_files();
+        self.start_pick(id, picks::Pick::NamCaptures);
+    }
+
+    /// Write a User IR .wav into `out` for each capture, and show what happened.
+    pub(super) fn convert_nam(&mut self, files: Vec<PathBuf>, out: PathBuf) {
         let opts = crate::nam::Options { use_level: self.settings.nam_use_level, use_loudness: self.settings.nam_use_loudness };
         let mut lines = Vec::new();
         let mut failed = 0;
@@ -43,15 +37,12 @@ impl App {
     /// Pick .wav IRs or .nam captures and ask before writing them into slots: the
     /// selected slots when there are as many, otherwise empty slots from the first selected one.
     pub(super) fn upload_irs(&mut self) {
-        let Some(files) = crate::platform::FileDialog::new()
+        let id = crate::platform::FileDialog::new()
             .set_title("Pick IRs or NAM captures to send to the pedal")
             .set_directory(self.tone_dir())
             .add_filter("IRs and NAM captures", &["wav", "nam"])
-            .pick_files()
-        else {
-            return;
-        };
-        self.upload_ir_files(files);
+            .open_files();
+        self.start_pick(id, picks::Pick::UploadIrs);
     }
 
     /// Ask before writing these .wav / .nam files into the pedal's IR slots.
@@ -485,6 +476,10 @@ impl App {
         for a in actions {
             match a {
                 crate::tonelib::Action::SendToPedal(files) => self.upload_ir_files(files),
+                crate::tonelib::Action::Import => {
+                    let id = crate::platform::FileDialog::new().add_filter("IRs and NAM captures", &["wav", "nam"]).open_files();
+                    self.start_pick(id, picks::Pick::ImportTones);
+                }
                 crate::tonelib::Action::Note(ok, text) => self.note(if ok { LogLevel::Good } else { LogLevel::Bad }, text),
             }
         }

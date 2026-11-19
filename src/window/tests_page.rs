@@ -92,9 +92,8 @@ impl App {
                         ui.horizontal(|ui| {
                             ui.label(RichText::new(format!("Backups go to {}", folder.display())).small().color(muted()));
                             if ui.small_button("Change...").clicked() {
-                                if let Some(d) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder_blocking() {
-                                    self.tests.folder = Some(d);
-                                }
+                                let id = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder();
+                                self.start_pick(id, picks::Pick::TestsFolder);
                             }
                         });
                         ui.add_space(6.0);

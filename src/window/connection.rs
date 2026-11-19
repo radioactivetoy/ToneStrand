@@ -267,18 +267,12 @@ impl App {
                 if purpose == Purpose::SaveToFile {
                     let _ = std::fs::create_dir_all(&self.library_dir);
                     let default = format!("{} {}.hxpreset", slot_label(slot), device::sanitize(&name));
-                    if let Some(p) = crate::platform::FileDialog::new()
+                    let id = crate::platform::FileDialog::new()
                         .set_directory(&self.library_dir)
                         .set_file_name(&default)
                         .add_filter("Pedal preset", &["hxpreset"])
-                        .save_file_blocking()
-                    {
-                        match crate::files::write_atomic(&p, &blob) {
-                            Ok(_) => self.note(LogLevel::Good, format!("Saved {}", p.display())),
-                            Err(e) => self.note(LogLevel::Bad, format!("Could not save: {e}")),
-                        }
-                        self.scan_library();
-                    }
+                        .save_file();
+                    self.start_pick(id, picks::Pick::SavePedalPreset(blob));
                     return;
                 }
                 match DevicePreset::parse(&blob) {
@@ -686,9 +680,11 @@ impl App {
                 ui.menu_button("Backups", |ui| {
                     if ui.button("Back up this setlist...").on_hover_text("Save every preset of this setlist as files").clicked() {
                         ui.close_menu();
-                        if let Some(folder) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder_blocking() {
-                            let names = self.presets.clone();
-                            self.send(Cmd::Backup { setlist: self.setlist, count: self.presets.len(), folder, names });
+                        if cfg!(target_os = "android") {
+                            self.back_up_setlist_here();
+                        } else {
+                            let id = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder();
+                            self.start_pick(id, picks::Pick::BackupAllFolder);
                         }
                     }
                     if ui
@@ -697,8 +693,11 @@ impl App {
                         .clicked()
                     {
                         ui.close_menu();
-                        if let Some(folder) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder_blocking() {
-                            self.send(Cmd::FullBackup { folder });
+                        if cfg!(target_os = "android") {
+                            self.back_up_pedal_here();
+                        } else {
+                            let id = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder();
+                            self.start_pick(id, picks::Pick::FullBackupFolder);
                         }
                     }
                     ui.separator();

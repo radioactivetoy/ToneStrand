@@ -32,11 +32,14 @@ impl App {
                             ui.label(RichText::new(self.library_dir.to_string_lossy()).monospace());
                         });
                         ui.add_space(4.0);
+                        // Android's picker cannot give a folder path: the folder is fixed there.
                         ui.horizontal(|ui| {
+                            if cfg!(target_os = "android") {
+                                return;
+                            }
                             if theme::primary_button(ui, "Choose folder...").clicked() {
-                                if let Some(d) = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder_blocking() {
-                                    new_dir = Some(Some(d));
-                                }
+                                let id = crate::platform::FileDialog::new().set_directory(&self.library_dir).pick_folder();
+                                self.start_pick(id, picks::Pick::LibraryFolder);
                             }
                             if ui.button("Show in Explorer").clicked() {
                                 let _ = std::fs::create_dir_all(&self.library_dir);
@@ -67,10 +70,12 @@ impl App {
                             ui.label(RichText::new(self.tone_dir().to_string_lossy()).monospace());
                         });
                         ui.horizontal(|ui| {
+                            if cfg!(target_os = "android") {
+                                return;
+                            }
                             if ui.button("Choose folder...").clicked() {
-                                if let Some(d) = crate::platform::FileDialog::new().set_directory(self.tone_dir()).pick_folder_blocking() {
-                                    tone_change = Some(Some(d.to_string_lossy().into_owned()));
-                                }
+                                let id = crate::platform::FileDialog::new().set_directory(self.tone_dir()).pick_folder();
+                                self.start_pick(id, picks::Pick::ToneFolder);
                             }
                             if ui.button("Show in Explorer").clicked() {
                                 crate::folders::open_in_explorer(&self.tone_dir());
@@ -117,17 +122,17 @@ impl App {
                             ui.label(RichText::new(text).small().color(muted()));
                         });
                         ui.horizontal(|ui| {
-                            if ui.button("Choose folder...").clicked() {
-                                if let Some(d) = crate::platform::FileDialog::new().pick_folder_blocking() {
-                                    self.settings.hx_edit = Some(d.to_string_lossy().into_owned());
+                            // Android has no HX Edit: the built-in list is used.
+                            if !cfg!(target_os = "android") {
+                                if ui.button("Choose folder...").clicked() {
+                                    let id = crate::platform::FileDialog::new().pick_folder();
+                                    self.start_pick(id, picks::Pick::HxEditFolder);
+                                }
+                                if ui.add_enabled(self.settings.hx_edit.is_some(), egui::Button::new("Use the usual place")).clicked() {
+                                    self.settings.hx_edit = None;
                                     self.settings.save();
                                     reload = true;
                                 }
-                            }
-                            if ui.add_enabled(self.settings.hx_edit.is_some(), egui::Button::new("Use the usual place")).clicked() {
-                                self.settings.hx_edit = None;
-                                self.settings.save();
-                                reload = true;
                             }
                             if ui.button("Load again").clicked() {
                                 reload = true;

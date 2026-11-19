@@ -128,6 +128,20 @@ pub fn commit_save(id: u64, written: &Path) {
     }
 }
 
+static CACHE_DIR: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+/// Where the picker keeps its temporary copies (Android); set at start-up by the android crate.
+pub fn set_cache_dir(dir: PathBuf) {
+    *CACHE_DIR.lock().unwrap_or_else(|e| e.into_inner()) = Some(dir);
+}
+
+/// Whether a path is inside the app's cache folder: such files are temporary copies, so they are
+/// never remembered (recent files, last session's tabs). Always false when no cache folder is set
+/// (the desktop).
+pub fn is_cache_path(p: &Path) -> bool {
+    CACHE_DIR.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_some_and(|c| p.starts_with(c))
+}
+
 #[cfg(test)]
 fn reset_for_tests() {
     *state() = State::new();
@@ -231,40 +245,6 @@ impl FileDialog {
             d = d.set_file_name(n);
         }
         d
-    }
-
-    // Synchronous dialogs, kept only until the call sites move to the asynchronous API.
-    #[cfg(not(target_os = "android"))]
-    pub fn pick_file(self) -> Option<PathBuf> {
-        self.to_rfd().pick_file()
-    }
-    #[cfg(not(target_os = "android"))]
-    pub fn pick_files(self) -> Option<Vec<PathBuf>> {
-        self.to_rfd().pick_files()
-    }
-    #[cfg(not(target_os = "android"))]
-    pub fn pick_folder_blocking(self) -> Option<PathBuf> {
-        self.to_rfd().pick_folder()
-    }
-    #[cfg(not(target_os = "android"))]
-    pub fn save_file_blocking(self) -> Option<PathBuf> {
-        self.to_rfd().save_file()
-    }
-    #[cfg(target_os = "android")]
-    pub fn pick_file(self) -> Option<PathBuf> {
-        None
-    }
-    #[cfg(target_os = "android")]
-    pub fn pick_files(self) -> Option<Vec<PathBuf>> {
-        None
-    }
-    #[cfg(target_os = "android")]
-    pub fn pick_folder_blocking(self) -> Option<PathBuf> {
-        None
-    }
-    #[cfg(target_os = "android")]
-    pub fn save_file_blocking(self) -> Option<PathBuf> {
-        None
     }
 }
 

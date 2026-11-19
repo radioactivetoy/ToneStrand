@@ -26,6 +26,7 @@ mod compare_window;
 mod connection;
 mod irs;
 mod library_page;
+mod picks;
 mod refresh;
 mod restore_all;
 mod settings;
@@ -235,6 +236,16 @@ pub struct App {
     user_disconnected: bool,
     /// "Not now" was clicked on the card that explains HX Edit is missing.
     catalog_card_hidden: bool,
+    /// File dialogs in progress, by request id (`platform::FileDialog`), and what each is for.
+    pending: std::collections::HashMap<u64, picks::Pick>,
+    /// Where a save dialog said to write, until the platform has delivered the file.
+    saved_to: std::collections::HashMap<u64, PathBuf>,
+    /// A close or quit waiting for a save dialog to finish.
+    after_save: Option<CloseAsk>,
+    /// Ask the window to close at the end of this frame (after a save that was needed to quit).
+    close_requested: bool,
+    /// Android: the whole-pedal backups to choose from, when that list is open.
+    restore_all_folders: Option<Vec<PathBuf>>,
 }
 
 /// The hidden Tests page (Ctrl+Shift+T).
@@ -350,6 +361,11 @@ impl App {
             reconnect: None,
             user_disconnected: false,
             catalog_card_hidden: false,
+            pending: std::collections::HashMap::new(),
+            saved_to: std::collections::HashMap::new(),
+            after_save: None,
+            close_requested: false,
+            restore_all_folders: None,
         };
         app.catalog = crate::catalog::load_best(app.settings.hx_edit.as_deref()).map(Arc::new);
         app.catalog_why = catalog_why(app.catalog.as_deref(), app.settings.hx_edit.as_deref());
@@ -401,7 +417,7 @@ impl App {
                 app.irs_local = true;
                 app.scan_tones();
             }
-            Ok("tests") => app.view = View::Tests,
+            Ok("tests") if !cfg!(target_os = "android") => app.view = View::Tests,
             Ok("open") => {
                 // For checks: open a preset file at start (TONESTRAND_OPEN).
                 if let Some(p) = std::env::var_os("TONESTRAND_OPEN") {
@@ -547,7 +563,8 @@ impl App {
         self.docs.push(Doc {
             title,
             name,
-            path: Some(path.to_owned()),
+            // A temporary copy (Android's picker) has no file of its own to save back to.
+            path: Some(path.to_owned()).filter(|p| picks::rememberable(p)),
             kind,
             dirty: false,
             selected: None,
@@ -577,7 +594,7 @@ impl App {
 
     /// Put a file at the top of the recent list (at most 10, no repeats).
     fn remember_recent(&mut self, path: &Path) {
-        if self.screenshot.is_some() {
+        if self.screenshot.is_some() || !picks::rememberable(path) {
             return;
         }
         let p = path.to_string_lossy().into_owned();
@@ -590,25 +607,32 @@ impl App {
     /// The saved preset files that are open now, for "reopen last session's tabs". Live and
     /// pedal-slot documents have no file and are left out.
     fn open_file_paths(&self) -> Vec<String> {
-        self.docs.iter().filter_map(|d| d.path.as_ref()).map(|p| p.to_string_lossy().into_owned()).collect()
+        self.docs
+            .iter()
+            .filter_map(|d| d.path.as_ref())
+            .filter(|p| picks::rememberable(p))
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect()
     }
 
     fn save_doc(&mut self, i: usize, save_as: bool) {
         let lib = self.library_dir.clone();
         let Some(doc) = self.docs.get_mut(i) else { return };
         let (ext, bytes) = (doc.kind.doc().file_ext(), doc.kind.doc().encode());
-        let path = if save_as || doc.path.is_none() {
-            let _ = std::fs::create_dir_all(&lib);
-            let base = if doc.name.is_empty() { doc.title.clone() } else { doc.name.clone() };
-            crate::platform::FileDialog::new()
-                .set_directory(&lib)
-                .set_file_name(format!("{}.{ext}", device::sanitize(&base)))
-                .add_filter("Preset", &[ext])
-                .save_file_blocking()
-        } else {
-            doc.path.clone()
+        let path = match doc.path.clone().filter(|_| !save_as) {
+            Some(path) => path,
+            None => {
+                // Where to save is asked first; the file is written when the answer comes (picks.rs).
+                let _ = std::fs::create_dir_all(&lib);
+                let base = if doc.name.is_empty() { doc.title.clone() } else { doc.name.clone() };
+                let id = crate::platform::FileDialog::new()
+                    .set_directory(&lib)
+                    .set_file_name(format!("{}.{ext}", device::sanitize(&base)))
+                    .add_filter("Preset", &[ext])
+                    .save_file();
+                return self.start_pick(id, picks::Pick::SaveAs(i, bytes));
+            }
         };
-        let Some(path) = path else { return };
         match crate::files::write_atomic(&path, &bytes) {
             Ok(_) => {
                 doc.path = Some(path.clone());
@@ -978,21 +1002,16 @@ impl App {
             (Some(2), _) => {}
             (Some(0), CloseAsk::Tab(i)) => {
                 self.save_doc(i, false);
-                // Still unsaved means the save was cancelled or failed: keep the tab.
                 if !self.docs.get(i).is_some_and(Doc::needs_save) {
                     self.close_tab(i);
+                } else if self.pending.values().any(|p| matches!(p, picks::Pick::SaveAs(t, _) if *t == i)) {
+                    // Asking where to save: the tab closes when that is done.
+                    self.after_save = Some(CloseAsk::Tab(i));
                 }
+                // Otherwise the save failed: keep the tab.
             }
             (Some(_), CloseAsk::Tab(i)) => self.close_tab(i),
-            (Some(0), CloseAsk::Quit) => {
-                for &i in &unsaved {
-                    self.save_doc(i, false);
-                }
-                if !self.docs.iter().any(Doc::needs_save) {
-                    self.quit_ok = true;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                }
-            }
+            (Some(0), CloseAsk::Quit) => self.save_unsaved_then_quit(),
             (Some(_), CloseAsk::Quit) => {
                 self.quit_ok = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1323,7 +1342,8 @@ impl App {
                     );
                     ui.add_space(4.0);
                     ui.horizontal_wrapped(|ui| {
-                        if theme::primary_button(ui, "Choose HX Edit folder...").clicked() {
+                        // Android's picker cannot give a folder path: the built-in list is used there.
+                        if !cfg!(target_os = "android") && theme::primary_button(ui, "Choose HX Edit folder...").clicked() {
                             choose = true;
                         }
                         if ui.button("Look again").on_hover_text("Search the usual places again").clicked() {
@@ -1340,11 +1360,8 @@ impl App {
                 });
             });
         if choose {
-            if let Some(d) = crate::platform::FileDialog::new().pick_folder_blocking() {
-                self.settings.hx_edit = Some(d.to_string_lossy().into_owned());
-                self.settings.save();
-                self.reload_catalog();
-            }
+            let id = crate::platform::FileDialog::new().pick_folder();
+            self.start_pick(id, picks::Pick::HxEditFolder);
         }
         if again {
             self.reload_catalog();
@@ -1922,6 +1939,7 @@ Drag an effect to move it; right-click for more.",
         self.ir_plan_window(ctx);
         self.restore_window(ctx);
         self.restore_all_window(ctx);
+        self.restore_all_list_window(ctx);
         self.compare_window(ctx);
         if let Some((text, cmd)) = self.confirm.take() {
             let mut result = None;
@@ -2049,6 +2067,11 @@ impl eframe::App for App {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         theme::track_keyboard_nav(ctx);
+        // Answers of the file dialogs, before anything is drawn.
+        self.poll_picks();
+        if std::mem::take(&mut self.close_requested) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         // Fill the monitor on start (asking at window creation isn't always honoured on Windows),
         // unless the window was left smaller last time: then it comes back as it was.
         let fill = self.settings.window.is_none() || self.settings.window_maximized;
@@ -2095,7 +2118,7 @@ impl eframe::App for App {
         self.poll(ctx);
         self.auto_pick();
         // The hidden Tests page.
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::T)) {
+        if !cfg!(target_os = "android") && ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::T)) {
             self.view = if self.view == View::Tests { View::Editor } else { View::Tests };
         }
         self.studio_top_bar(ctx);
@@ -2111,6 +2134,10 @@ impl eframe::App for App {
             if let Some((st, model, cab)) = editors::picker_window(ctx, &mut self.picker, &cat) {
                 self.apply_pick(&cat, st, model, cab);
             }
+        }
+        // A dialog still open (or one just started) is looked at again soon.
+        if !self.pending.is_empty() {
+            ctx.request_repaint_after(Duration::from_millis(100));
         }
         self.screenshot_step(ctx);
     }

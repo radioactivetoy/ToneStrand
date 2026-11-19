@@ -297,7 +297,7 @@ impl Library {
                 }
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
-                    if ui.small_button("Show library folder").clicked() {
+                    if !cfg!(target_os = "android") && ui.small_button("Show library folder").clicked() {
                         crate::folders::open_in_explorer(&self.root);
                     }
                     theme::help(ui, &format!("{}\n\nChange it in Settings.", self.root.to_string_lossy()));
