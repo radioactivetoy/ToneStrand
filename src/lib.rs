@@ -10,6 +10,7 @@ pub mod modelinfo;
 pub mod platform;
 pub mod theme;
 pub mod tonelib;
+pub mod touch_text;
 pub mod window;
 
 pub use tonestrand_core::{

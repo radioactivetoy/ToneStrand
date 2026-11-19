@@ -21,30 +21,33 @@ fn android_main(app: AndroidApp) {
     let run = eframe::run_native(
         "ToneStrand",
         options,
-        Box::new(move |cc| Ok(Box::new(AndroidShell { inner: App::new(cc, None), android: app }))),
+        Box::new(move |cc| Ok(Box::new(AndroidShell { inner: App::new(cc, None), android: app, keyboard: keyboard::Keyboard::new() }))),
     );
     if let Err(e) = run {
         log::error!("run_native: {e}");
     }
     log::info!("window closed; exiting");
-    // Back destroys the activity and ends the window; winit cannot start a second event loop in
-    // this process, so end it and let the next launch start a fresh one.
+    // When the window closes (the activity is destroyed), exit so the next launch starts a fresh
+    // process: winit cannot start a second event loop in this one.
     std::process::exit(0);
 }
 
-/// The desktop window plus what only Android needs (keyboard, insets: added later).
+/// The desktop window plus what only Android needs (insets: added later).
 struct AndroidShell {
     inner: App,
-    #[allow(dead_code)]
     android: AndroidApp,
+    keyboard: keyboard::Keyboard,
 }
 
 impl eframe::App for AndroidShell {
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
         self.inner.update(ctx, frame);
+        self.keyboard.after_update(&self.android, ctx.wants_keyboard_input());
     }
 
-    fn raw_input_hook(&mut self, _ctx: &eframe::egui::Context, _raw: &mut eframe::egui::RawInput) {}
+    fn raw_input_hook(&mut self, _ctx: &eframe::egui::Context, raw: &mut eframe::egui::RawInput) {
+        self.keyboard.input_hook(&self.android, raw);
+    }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         self.inner.save(storage);
