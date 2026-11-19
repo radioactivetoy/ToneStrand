@@ -43,6 +43,8 @@ type CommitBackend = Arc<dyn Fn(u64, PathBuf) + Send + Sync>;
 
 struct State {
     pending: Option<u64>,
+    /// The pending request already has its final result queued (it stays pending until polled).
+    answered: bool,
     next_id: u64,
     queue: Vec<(u64, PickResult)>,
     backend: Option<Backend>,
@@ -51,7 +53,7 @@ struct State {
 
 impl State {
     const fn new() -> Self {
-        Self { pending: None, next_id: 1, queue: Vec::new(), backend: None, commit_backend: None }
+        Self { pending: None, answered: false, next_id: 1, queue: Vec::new(), backend: None, commit_backend: None }
     }
 }
 
@@ -75,7 +77,8 @@ pub fn set_commit_backend(f: Box<dyn Fn(u64, PathBuf) + Send + Sync>) {
 /// Results for a request that is not the pending one (stale answers) are dropped.
 pub fn deliver(id: u64, result: PickResult) {
     let mut s = state();
-    if s.pending == Some(id) {
+    if s.pending == Some(id) && !s.answered {
+        s.answered = result.is_final();
         s.queue.push((id, result));
     }
 }
@@ -83,7 +86,8 @@ pub fn deliver(id: u64, result: PickResult) {
 /// Escape hatch for a stuck request: clears the pending one and queues `Cancelled` for it.
 pub fn cancel_pending() {
     let mut s = state();
-    if let Some(id) = s.pending.take() {
+    if let (Some(id), false) = (s.pending, s.answered) {
+        s.answered = true;
         s.queue.push((id, PickResult::Cancelled));
     }
 }
@@ -100,6 +104,7 @@ pub fn poll() -> Vec<(u64, PickResult)> {
     for (id, r) in &out {
         if r.is_final() && s.pending == Some(*id) {
             s.pending = None;
+            s.answered = false;
         }
     }
     out
@@ -109,7 +114,7 @@ pub fn poll() -> Vec<(u64, PickResult)> {
 pub fn commit_save(id: u64, written: &Path) {
     let commit = {
         let s = state();
-        if s.pending != Some(id) {
+        if s.pending != Some(id) || s.answered {
             return;
         }
         s.commit_backend.clone()
@@ -164,7 +169,7 @@ impl FileDialog {
         self.request(PickKind::Open { multiple: true })
     }
     pub fn save_file(self) -> Option<u64> {
-        let suggested = self.file_name.clone().unwrap_or_else(|| "Untitled".into());
+        let suggested = self.file_name.clone().filter(|n| !n.is_empty()).unwrap_or_else(|| "Untitled".into());
         self.request(PickKind::Save { suggested })
     }
     pub fn pick_folder(self) -> Option<u64> {
@@ -181,6 +186,7 @@ impl FileDialog {
             let id = s.next_id;
             s.next_id += 1;
             s.pending = Some(id);
+            s.answered = false;
             (id, s.backend.clone())
         };
         match backend {
@@ -349,8 +355,34 @@ mod tests {
     }
 
     #[test]
+    fn double_final_answer_queues_only_one() {
+        let _g = setup();
+        let id = FileDialog::new().open_file().unwrap();
+        deliver(id, PickResult::Cancelled);
+        cancel_pending();
+        abort_save(id, "x".into());
+        deliver(id, PickResult::Files(vec![]));
+        assert_eq!(poll(), vec![(id, PickResult::Cancelled)]);
+        assert!(FileDialog::new().open_file().is_some());
+    }
+
+    #[test]
+    fn abort_save_with_stale_id_is_ignored() {
+        let _g = setup();
+        let id = FileDialog::new().save_file().unwrap();
+        abort_save(id + 1, "x".into());
+        assert!(poll().is_empty());
+        assert!(FileDialog::new().open_file().is_none());
+    }
+
+    #[test]
     fn save_suggests_untitled() {
         let _g = setup();
+        FileDialog::new().set_file_name("").save_file().unwrap();
+        assert!(matches!(&LAST.lock().unwrap().as_ref().unwrap().kind, PickKind::Save { suggested } if suggested == "Untitled"));
+        poll();
+        cancel_pending();
+        poll();
         FileDialog::new().save_file().unwrap();
         assert!(matches!(&LAST.lock().unwrap().as_ref().unwrap().kind, PickKind::Save { suggested } if suggested == "Untitled"));
     }
