@@ -77,8 +77,7 @@ impl App {
     /// cannot give a folder, so there the backups folders are listed in the app instead.
     pub(super) fn open_restore_all(&mut self) {
         if cfg!(target_os = "android") {
-            // (The private backups folder is added to these by the code that keeps backups there.)
-            self.restore_all_folders = Some(picks::backup_folders(&[self.backup_dir()]));
+            self.restore_all_folders = Some(picks::backup_folders(&self.backup_dirs()));
             return;
         }
         let id =

@@ -142,6 +142,51 @@ pub fn is_cache_path(p: &Path) -> bool {
     CACHE_DIR.lock().unwrap_or_else(|e| e.into_inner()).as_ref().is_some_and(|c| p.starts_with(c))
 }
 
+/// Where the app may keep its library on Android (set by the android crate, from any thread).
+#[derive(Clone, Debug, PartialEq)]
+pub enum Storage {
+    /// Only the app's private folder (no shared folder yet).
+    Private,
+    /// The shared Documents/ToneStrand folder is usable.
+    Shared(PathBuf),
+    /// The person refused storage access.
+    Refused,
+}
+
+static STORAGE: Mutex<Storage> = Mutex::new(Storage::Private);
+static PERMISSION_BACKEND: Mutex<Option<Arc<dyn Fn() + Send + Sync>>> = Mutex::new(None);
+static ANDROID_API: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub fn set_storage(s: Storage) {
+    *STORAGE.lock().unwrap_or_else(|e| e.into_inner()) = s;
+}
+
+pub fn storage() -> Storage {
+    STORAGE.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
+/// Install what `request_storage_permission` calls (the android crate).
+pub fn set_permission_backend(f: Box<dyn Fn() + Send + Sync>) {
+    *PERMISSION_BACKEND.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::from(f));
+}
+
+/// Ask for storage access (a no-op without a backend, as on the desktop).
+pub fn request_storage_permission() {
+    let f = PERMISSION_BACKEND.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    if let Some(f) = f {
+        f();
+    }
+}
+
+pub fn set_android_api(v: u32) {
+    ANDROID_API.store(v, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The Android API level (0 on the desktop).
+pub fn android_api() -> u32 {
+    ANDROID_API.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 #[cfg(test)]
 fn reset_for_tests() {
     *state() = State::new();

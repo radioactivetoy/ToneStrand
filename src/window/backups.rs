@@ -86,9 +86,23 @@ pub(super) fn scan_backups(dir: &Path) -> Vec<BackupFile> {
     out
 }
 
+/// The backups of several folders, each file name once (the first folder's copy wins), newest first.
+pub(super) fn scan_backup_dirs(dirs: &[PathBuf]) -> Vec<BackupFile> {
+    let mut out: Vec<BackupFile> = Vec::new();
+    for d in dirs {
+        for f in scan_backups(d) {
+            if !out.iter().any(|o| o.path.file_name() == f.path.file_name()) {
+                out.push(f);
+            }
+        }
+    }
+    out.sort_by(|a, b| b.when.cmp(&a.when).then_with(|| a.path.cmp(&b.path)));
+    out
+}
+
 impl App {
     pub(super) fn open_restore(&mut self) {
-        self.restore = Some(RestoreState { files: scan_backups(&self.backup_dir()), asked: Default::default() });
+        self.restore = Some(RestoreState { files: scan_backup_dirs(&self.backup_dirs()), asked: Default::default() });
     }
 
     /// Ask to write a backup back into a slot of the shown setlist. The write itself keeps
@@ -124,12 +138,17 @@ impl App {
         let slots = self.presets.len();
         let connected = self.connected.is_some();
         let dir = self.backup_dir();
+        let dirs = self.backup_dirs();
+        let warn = self.storage_warning();
         egui::Window::new("Restore from a backup")
             .open(&mut open)
             .collapsible(false)
             .default_width(560.0)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
+                if warn {
+                    self.storage_card(ui);
+                }
                 ui.horizontal(|ui| {
                     ui.label(RichText::new("Presets kept before a write, and from \"Back up this setlist\"").color(muted()));
                     theme::help(
@@ -194,7 +213,7 @@ impl App {
                 });
             });
         if rescan {
-            st.files = scan_backups(&dir);
+            st.files = scan_backup_dirs(&dirs);
         }
         if let Some((f, slot)) = pick {
             self.restore_to(&f, slot);
@@ -228,6 +247,32 @@ mod tests {
         assert_eq!((slot, name.as_str(), when, before), (Some(0), "Lead (2)", None, false));
         let (slot, name, _, _) = parse_backup_name("My preset.hxpreset");
         assert_eq!((slot, name.as_str()), (None, "My preset"));
+    }
+
+    #[test]
+    fn backups_listed_from_both_folders_once() {
+        let d = std::env::temp_dir().join(format!("tonestrand-backups-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let (a, b) = (d.join("a"), d.join("b"));
+        std::fs::create_dir_all(&a).unwrap();
+        std::fs::create_dir_all(&b).unwrap();
+        std::fs::write(a.join("01A One - before overwrite 200.hxpreset"), "a").unwrap();
+        std::fs::write(b.join("01A One - before overwrite 200.hxpreset"), "b").unwrap();
+        std::fs::write(b.join("02A Two - before overwrite 300.hxpreset"), "b").unwrap();
+        let list = scan_backup_dirs(&[a.clone(), b]);
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].name, "Two");
+        assert_eq!(list[1].path, a.join("01A One - before overwrite 200.hxpreset"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn library_follows_storage() {
+        use crate::platform::Storage;
+        let private = Path::new("/p");
+        assert_eq!(library_for(&Storage::Shared("/s".into()), private), (PathBuf::from("/s"), false));
+        assert_eq!(library_for(&Storage::Private, private), (PathBuf::from("/p"), true));
+        assert_eq!(library_for(&Storage::Refused, private), (PathBuf::from("/p"), true));
     }
 
     #[test]

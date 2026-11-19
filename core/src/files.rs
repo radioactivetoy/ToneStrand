@@ -47,6 +47,34 @@ pub fn copy_into(from: &Path, dir: &Path) -> std::io::Result<PathBuf> {
     Ok(to)
 }
 
+/// Copy every file under `from` whose relative path does not exist under `to`, creating folders;
+/// never overwrites. Returns how many files were copied.
+pub fn copy_missing(from: &Path, to: &Path) -> std::io::Result<usize> {
+    copy_missing_skipping(from, to, &|_| false)
+}
+
+/// `copy_missing`, leaving out every path for which `skip` is true (files and folders).
+pub fn copy_missing_skipping(from: &Path, to: &Path, skip: &dyn Fn(&Path) -> bool) -> std::io::Result<usize> {
+    let mut copied = 0;
+    for e in std::fs::read_dir(from)? {
+        let e = e?;
+        let src = e.path();
+        if skip(&src) {
+            continue;
+        }
+        let dst = to.join(e.file_name());
+        let kind = e.file_type()?;
+        if kind.is_dir() {
+            copied += copy_missing_skipping(&src, &dst, skip)?;
+        } else if kind.is_file() && !dst.exists() {
+            std::fs::create_dir_all(to)?;
+            std::fs::copy(&src, &dst)?;
+            copied += 1;
+        }
+    }
+    Ok(copied)
+}
+
 /// Unix seconds as (year, month, day, hour, minute) in UTC.
 pub fn civil(secs: u64) -> (i64, u32, u32, u32, u32) {
     let days = (secs / 86_400) as i64;
@@ -159,6 +187,45 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn copy_missing_never_overwrites() {
+        let d = scratch("copy-a");
+        let (from, to) = (d.join("from"), d.join("to"));
+        std::fs::create_dir_all(from.join("sub")).unwrap();
+        std::fs::create_dir_all(&to).unwrap();
+        std::fs::write(from.join("a.txt"), "new").unwrap();
+        std::fs::write(from.join("sub/b.txt"), "b").unwrap();
+        std::fs::write(to.join("a.txt"), "old").unwrap();
+        assert_eq!(copy_missing(&from, &to).unwrap(), 1);
+        assert_eq!(std::fs::read_to_string(to.join("a.txt")).unwrap(), "old");
+        assert!(to.join("sub/b.txt").exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn copy_missing_twice_copies_nothing_more() {
+        let d = scratch("copy-b");
+        let (from, to) = (d.join("from"), d.join("to"));
+        std::fs::create_dir_all(from.join("sub")).unwrap();
+        std::fs::write(from.join("a.txt"), "a").unwrap();
+        std::fs::write(from.join("sub/b.txt"), "b").unwrap();
+        assert_eq!(copy_missing(&from, &to).unwrap(), 2);
+        assert_eq!(copy_missing(&from, &to).unwrap(), 0);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn copy_missing_skips_what_it_is_told() {
+        let d = scratch("copy-c");
+        let (from, to) = (d.join("from"), d.join("to"));
+        std::fs::create_dir_all(from.join("cache")).unwrap();
+        std::fs::write(from.join("cache/x.txt"), "x").unwrap();
+        std::fs::write(from.join("a.txt"), "a").unwrap();
+        assert_eq!(copy_missing_skipping(&from, &to, &|p| p.ends_with("cache")).unwrap(), 1);
+        assert!(!to.join("cache").exists());
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

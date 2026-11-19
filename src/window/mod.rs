@@ -254,6 +254,17 @@ pub struct App {
     close_requested: bool,
     /// Android: the whole-pedal backups to choose from, when that list is open.
     restore_all_folders: Option<Vec<PathBuf>>,
+    /// Android: the app's private library folder (None on the desktop).
+    private_library: Option<PathBuf>,
+}
+
+/// Which library folder to use for the storage state, and whether to warn that backups are only
+/// kept inside the app.
+pub(super) fn library_for(storage: &crate::platform::Storage, private: &Path) -> (PathBuf, bool) {
+    match storage {
+        crate::platform::Storage::Shared(d) => (d.clone(), false),
+        _ => (private.to_path_buf(), true),
+    }
 }
 
 /// The hidden Tests page (Ctrl+Shift+T).
@@ -374,6 +385,7 @@ impl App {
             after_save: None,
             close_requested: false,
             restore_all_folders: None,
+            private_library: std::env::var_os("TONESTRAND_LIBRARY_PRIVATE").map(PathBuf::from),
         };
         app.catalog = crate::catalog::load_best(app.settings.hx_edit.as_deref()).map(Arc::new);
         app.catalog_why = catalog_why(app.catalog.as_deref(), app.settings.hx_edit.as_deref());
@@ -517,6 +529,57 @@ impl App {
     /// Where a slot or IR is kept before the pedal writes over it (sent with each write).
     fn backup_dir(&self) -> PathBuf {
         self.library_dir.join("Pedal backups")
+    }
+
+    /// The folders holding pedal backups: the library's first, then the private one on Android
+    /// when it is a different folder that exists.
+    pub(super) fn backup_dirs(&self) -> Vec<PathBuf> {
+        let mut dirs = vec![self.backup_dir()];
+        if let Some(p) = &self.private_library {
+            let private = p.join("Pedal backups");
+            if !dirs.contains(&private) && private.is_dir() {
+                dirs.push(private);
+            }
+        }
+        dirs
+    }
+
+    /// Android: whether backups are only kept inside the app (no shared folder).
+    pub(super) fn storage_warning(&self) -> bool {
+        cfg!(target_os = "android") && self.private_library.as_ref().is_some_and(|p| library_for(&crate::platform::storage(), p).1)
+    }
+
+    /// Android, at the start of a frame: follow the storage state. When the shared folder becomes
+    /// usable, switch to it and copy across what it lacks; when it goes away, back to the private one.
+    fn follow_storage(&mut self) {
+        let Some(private) = self.private_library.clone() else { return };
+        let (dir, _) = library_for(&crate::platform::storage(), &private);
+        if dir == self.library_dir {
+            return;
+        }
+        let _ = std::fs::create_dir_all(&dir);
+        let copied =
+            if dir != private { crate::files::copy_missing_skipping(&private, &dir, &crate::platform::is_cache_path) } else { Ok(0) };
+        self.library_dir = dir.clone();
+        self.lib = Library::new(dir.clone());
+        self.scan_library();
+        self.scan_tones();
+        match copied {
+            Ok(n) if n > 0 => self.note(LogLevel::Good, format!("Copied {n} files into Documents/ToneStrand")),
+            Ok(_) => {}
+            Err(e) => self.note(LogLevel::Bad, format!("Could not copy the files into {}: {e}", dir.display())),
+        }
+    }
+
+    /// The warning card with its button (Android, no shared folder).
+    pub(super) fn storage_card(&self, ui: &mut egui::Ui) {
+        theme::card(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label("Backups are only kept inside the app and are lost if it is uninstalled. Allow storage access to keep them in Documents/ToneStrand.");
+            if ui.add(egui::Button::new("Allow storage access").min_size(egui::vec2(0.0, 32.0))).clicked() {
+                crate::platform::request_storage_permission();
+            }
+        });
     }
 
     fn scan_library(&mut self) {
@@ -1248,6 +1311,12 @@ impl App {
             return self.tests_page(ctx);
         }
 
+        if self.storage_warning() {
+            egui::TopBottomPanel::top("storage-warning")
+                .show_separator_line(false)
+                .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin { left: 14, right: 14, top: 10, bottom: 0 }))
+                .show(ctx, |ui| self.storage_card(ui));
+        }
         self.catalog_card(ctx);
         self.getting_started_card(ctx);
         if !self.docs.is_empty() {
@@ -2084,6 +2153,9 @@ impl eframe::App for App {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         theme::track_keyboard_nav(ctx);
+        if cfg!(target_os = "android") {
+            self.follow_storage();
+        }
         // Answers of the file dialogs, before anything is drawn.
         self.poll_picks();
         if std::mem::take(&mut self.close_requested) {
