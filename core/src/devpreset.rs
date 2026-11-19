@@ -1893,10 +1893,10 @@ mod editing_tests {
     }
 }
 
-#[cfg(test)]
 impl DevicePreset {
-    /// A tiny made-up document for tests in other modules.
-    pub(crate) fn tiny_for_tests() -> DevicePreset {
+    /// A tiny made-up document for tests in other modules (and other crates, so not `cfg(test)`).
+    #[doc(hidden)]
+    pub fn tiny_for_tests() -> DevicePreset {
         let pairs = [0i64, 1, 2].iter().map(|k| (Value::int(*k), Value::map(vec![(1, Value::int(*k))]))).collect();
         DevicePreset {
             magic: Value::str("l6-helix\0"),

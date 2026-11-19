@@ -535,7 +535,7 @@ mod tests {
     /// nam2ir.py writes (references made with it), with and without level/loudness.
     #[test]
     fn matches_nam2ir_py_byte_for_byte() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("data");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("tests").join("data");
         let Ok(text) = std::fs::read_to_string(dir.join("MES DRECF RD Gain2 BAL O808 CAB.nam")) else { return };
         for (file, opts) in [
             ("reference-nam2ir.wav", Options::default()),

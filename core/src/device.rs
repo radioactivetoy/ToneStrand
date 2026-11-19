@@ -383,7 +383,7 @@ fn write_command_center(s: &mut Session, send: &dyn Fn(Event), doc: &crate::devp
 }
 
 /// A Command Center edit to reach the pedal.
-pub(crate) enum CcChange {
+pub enum CcChange {
     /// A slot's new command type, with the values the window gave it.
     Type { slot: usize, id: i64, args: Vec<i64> },
     /// A command's values in one snapshot.
@@ -396,7 +396,7 @@ pub(crate) enum CcChange {
 /// thing and leave a knob turned on the pedal alone); the pedal's document is then read back, and if it isn't
 /// what the edit should have made (a change for a snapshot the pedal hasn't selected, which would recall that
 /// snapshot, or anything the pedal did differently) the whole edit buffer is written instead.
-pub(crate) fn change_command_center(s: &mut Session, send: &dyn Fn(Event), change: CcChange) -> Result<bool, String> {
+pub fn change_command_center(s: &mut Session, send: &dyn Fn(Event), change: CcChange) -> Result<bool, String> {
     use crate::devpreset::DevicePreset;
     let before = DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;
     let mut expected = before.clone();

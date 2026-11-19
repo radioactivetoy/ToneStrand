@@ -18,25 +18,25 @@ pub struct CmdSlot {
     pub kind: SlotKind,
 }
 
-pub(crate) enum FieldSpec {
+pub enum FieldSpec {
     Range { key: &'static str, label: &'static str, min: i64, max: i64 },
     Choice { key: &'static str, label: &'static str, options: Vec<(i64, String)> },
 }
 
-pub(crate) struct CmdSpec {
-    pub(crate) id: i64,
-    pub(crate) name: &'static str,
-    pub(crate) switch_label: &'static str,
-    pub(crate) momentary: bool,
-    pub(crate) fields: Vec<FieldSpec>,
+pub struct CmdSpec {
+    pub id: i64,
+    pub name: &'static str,
+    pub switch_label: &'static str,
+    pub momentary: bool,
+    pub fields: Vec<FieldSpec>,
 }
 
 /// Longest footswitch label the pedal shows.
-pub(crate) const FS_LABEL_MAX: usize = 16;
+pub const FS_LABEL_MAX: usize = 16;
 
-pub(crate) const MMC_MSGS: [&str; 8] = ["Stop", "Play", "Forward", "Rewind", "Pause", "Record", "Punch In", "Punch Out"];
-pub(crate) const MODIFIERS: [&str; 5] = ["None", "Shift", "Alt", "Ctrl", "Win/Cmd"];
-pub(crate) const LOOPER_FNS: [&str; 14] = [
+pub const MMC_MSGS: [&str; 8] = ["Stop", "Play", "Forward", "Rewind", "Pause", "Record", "Punch In", "Punch Out"];
+pub const MODIFIERS: [&str; 5] = ["None", "Shift", "Alt", "Ctrl", "Win/Cmd"];
+pub const LOOPER_FNS: [&str; 14] = [
     "Play",
     "Stop",
     "Play/Stop",
@@ -52,9 +52,9 @@ pub(crate) const LOOPER_FNS: [&str; 14] = [
     "Half/Full Speed",
     "Undo",
 ];
-pub(crate) const BEHAVIORS: [&str; 2] = ["Press/Release", "Press/Hold"];
+pub const BEHAVIORS: [&str; 2] = ["Press/Release", "Press/Hold"];
 
-pub(crate) fn channel_options() -> Vec<(i64, String)> {
+pub fn channel_options() -> Vec<(i64, String)> {
     // HX Edit lists 0 as "Base" and 1 to 16 as the numbers (HelixControls.json, midi_channel).
     let mut out = vec![(0, "Base".into())];
     for ch in 1..=16 {
@@ -63,11 +63,11 @@ pub(crate) fn channel_options() -> Vec<(i64, String)> {
     out
 }
 
-pub(crate) fn enum_options(names: &[&str]) -> Vec<(i64, String)> {
+pub fn enum_options(names: &[&str]) -> Vec<(i64, String)> {
     names.iter().enumerate().map(|(i, n)| (i as i64, (*n).to_owned())).collect()
 }
 
-pub(crate) fn note_options() -> Vec<(i64, String)> {
+pub fn note_options() -> Vec<(i64, String)> {
     const NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
     (0..=127)
         .map(|n| {
@@ -78,7 +78,7 @@ pub(crate) fn note_options() -> Vec<(i64, String)> {
         .collect()
 }
 
-pub(crate) fn key_options() -> Vec<(i64, String)> {
+pub fn key_options() -> Vec<(i64, String)> {
     let mut out = vec![(0, "None".into())];
     for (i, c) in ('A'..='Z').enumerate() {
         out.push(((i + 1) as i64, c.to_string()));
@@ -95,7 +95,7 @@ pub(crate) fn key_options() -> Vec<(i64, String)> {
     out
 }
 
-pub(crate) fn preset_options() -> Vec<(i64, String)> {
+pub fn preset_options() -> Vec<(i64, String)> {
     let mut out = vec![(0, "Next".into()), (1, "Previous".into())];
     for i in 0..126 {
         out.push(((i + 2) as i64, crate::proto::slot_label(i)));
@@ -103,7 +103,7 @@ pub(crate) fn preset_options() -> Vec<(i64, String)> {
     out
 }
 
-pub(crate) fn snapshot_press_options(snap_count: usize) -> Vec<(i64, String)> {
+pub fn snapshot_press_options(snap_count: usize) -> Vec<(i64, String)> {
     let mut out = vec![(0, "None".into()), (1, "Next".into()), (2, "Prev".into())];
     for i in 1..=snap_count.max(3) {
         out.push(((i + 2) as i64, format!("SNAPSHOT {i}")));
@@ -111,7 +111,7 @@ pub(crate) fn snapshot_press_options(snap_count: usize) -> Vec<(i64, String)> {
     out
 }
 
-pub(crate) fn looper_press_options() -> Vec<(i64, String)> {
+pub fn looper_press_options() -> Vec<(i64, String)> {
     let mut out = vec![(0, "None".into())];
     for (i, f) in LOOPER_FNS.iter().enumerate() {
         out.push(((i + 1) as i64, (*f).to_owned()));
@@ -119,7 +119,7 @@ pub(crate) fn looper_press_options() -> Vec<(i64, String)> {
     out
 }
 
-pub(crate) fn specs_for(kind: SlotKind, device: i64, snap_count: usize) -> Vec<CmdSpec> {
+pub fn specs_for(kind: SlotKind, device: i64, snap_count: usize) -> Vec<CmdSpec> {
     // The HX Stomp and Stomp XL have no Ext Amp jack (the HX Effects and the Helix units do).
     let is_stomp = snapshots::family_of_device(device).name.starts_with("HX Stomp");
     let ch = || FieldSpec::Choice { key: "@channel", label: "Channel", options: channel_options() };
@@ -333,7 +333,7 @@ pub fn command_name(kind: SlotKind, id: i64) -> Option<String> {
 }
 
 /// The expression pedal's own slots: the toe switch under the pedal and what the pedals send.
-pub(crate) fn in_pedal_group(key: &str) -> bool {
+pub fn in_pedal_group(key: &str) -> bool {
     key == "commandExpSwitch" || key.starts_with("commandExpPedal")
 }
 
@@ -403,7 +403,7 @@ pub fn active_commands(doc: &serde_json::Value) -> Vec<(String, i64)> {
     out
 }
 
-pub(crate) fn read_slot_cmd(doc: &serde_json::Value, slot_key: &str, snap: usize) -> Option<serde_json::Map<String, serde_json::Value>> {
+pub fn read_slot_cmd(doc: &serde_json::Value, slot_key: &str, snap: usize) -> Option<serde_json::Map<String, serde_json::Value>> {
     let mut base = doc.pointer(&format!("/data/tone/{slot_key}"))?.as_object()?.clone();
     let id = base.get("@command").and_then(serde_json::Value::as_i64)?;
     if id <= 0 {
@@ -417,7 +417,7 @@ pub(crate) fn read_slot_cmd(doc: &serde_json::Value, slot_key: &str, snap: usize
     Some(base)
 }
 
-pub(crate) fn set_slot_cmd_type(doc: &mut serde_json::Value, slot: &CmdSlot, spec: Option<&CmdSpec>) {
+pub fn set_slot_cmd_type(doc: &mut serde_json::Value, slot: &CmdSlot, spec: Option<&CmdSpec>) {
     let Some(tone) = doc.pointer_mut("/data/tone").and_then(serde_json::Value::as_object_mut) else { return };
     match spec {
         None => {
@@ -474,7 +474,7 @@ pub(crate) fn set_slot_cmd_type(doc: &mut serde_json::Value, slot: &CmdSlot, spe
     }
 }
 
-pub(crate) fn set_slot_field(doc: &mut serde_json::Value, slot_key: &str, snap: usize, field: &str, value: serde_json::Value) {
+pub fn set_slot_field(doc: &mut serde_json::Value, slot_key: &str, snap: usize, field: &str, value: serde_json::Value) {
     if let Some(base) = doc.pointer_mut(&format!("/data/tone/{slot_key}")).and_then(serde_json::Value::as_object_mut) {
         base.insert(field.into(), value.clone());
     }
@@ -491,8 +491,6 @@ pub(crate) fn set_slot_field(doc: &mut serde_json::Value, slot_key: &str, snap: 
     }
 }
 
-/// The HX Stomp's Command Center slots in the order of the pedal document, as the pedal numbers them
-/// (confirmed from another editor's live traffic): Instant 1 to 6, FS 1 to 5, EXP 1 and EXP 2.
 /// A unit's Command Center slots in the order of the pedal document. Confirmed on an HX Stomp from another
 /// editor's live traffic (Instant 1 to 6, FS 1 to 5, EXP 1 and 2, slots 0 to 12). The other units follow the same
 /// rule from the documentation (6 instants, then the footswitches, then the pedals) and are not checked on a unit:
@@ -555,11 +553,11 @@ pub fn layout_verified(fam: snapshots::Family) -> bool {
 /// Command types whose arguments have not been seen on a pedal: the switch versions of Bank/Program, MMC,
 /// Hotkey and HX Looper. They follow the same layout as their instant versions in the notes, but
 /// are shown with a mark.
-pub(crate) const UNVERIFIED: [i64; 0] = [];
+pub const UNVERIFIED: [i64; 0] = [];
 
 /// What the pedal puts in a command's arguments when its type is set (seen in its change events); the
 /// rest start at 0. Hotkey (switch) keeps a constant 1 in its fifth argument.
-pub(crate) fn device_defaults(id: i64) -> Vec<i64> {
+pub fn device_defaults(id: i64) -> Vec<i64> {
     match id {
         2 | 3 => vec![0, 0, 0, 127],
         5 => vec![0, 48, 100, 1],

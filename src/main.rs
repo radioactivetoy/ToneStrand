@@ -1,41 +1,22 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod backup;
-mod boxes;
 mod boxproxy;
-mod catalog;
 mod chain;
 mod cli;
-mod cmdslots;
-mod cmdtool;
-mod compare;
 mod controllers;
-mod device;
-mod devpreset;
 mod editors;
-#[cfg(test)]
-mod fakepedal;
-mod files;
 mod folders;
-mod hlx;
 mod icons;
-mod irs;
 mod library;
 mod modelinfo;
-mod msgpack;
-mod nam;
-mod proto;
-mod realnames;
-mod routes;
-mod selftest;
-mod session;
-mod snapshots;
-mod support;
 mod theme;
 mod tonelib;
-mod units;
 mod window;
-mod wire;
+
+pub use tonestrand_core::{
+    backup, boxes, catalog, cmdslots, cmdtool, compare, device, devpreset, files, hlx, irs, msgpack, nam, proto, realnames, routes,
+    selftest, session, snapshots, support, units, wire,
+};
 
 use eframe::egui;
 

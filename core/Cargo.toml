@@ -1,0 +1,17 @@
+[package]
+name = "tonestrand-core"
+version = "1.0.0-beta.5"
+edition = "2021"
+description = "ToneStrand core: pedal protocol, documents and catalog, with no UI dependency"
+license = "GPL-3.0-or-later"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
+mdns-sd = "0.13"
+nusb = "0.1"
+ureq = { version = "2", default-features = false, features = ["json"] }
+dirs = "5"
+flate2 = "1.1"

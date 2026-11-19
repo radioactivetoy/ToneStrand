@@ -2939,6 +2939,21 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "tonestrand-core",
+ "tungstenite",
+ "ureq",
+]
+
+[[package]]
+name = "tonestrand-core"
+version = "1.0.0-beta.5"
+dependencies = [
+ "dirs",
+ "flate2",
+ "mdns-sd",
+ "nusb",
+ "serde",
+ "serde_json",
  "tungstenite",
  "ureq",
 ]

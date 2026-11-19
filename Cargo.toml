@@ -5,7 +5,11 @@ edition = "2021"
 description = "ToneStrand: preset editor for Helix-family pedals, over USB or through a Helrig Box"
 license = "GPL-3.0-or-later"
 
+[workspace]
+members = [".", "core"]
+
 [dependencies]
+tonestrand-core = { path = "core" }
 eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "accesskit"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }

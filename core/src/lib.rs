@@ -1,0 +1,24 @@
+pub mod backup;
+pub mod boxes;
+pub mod catalog;
+pub mod cmdslots;
+pub mod cmdtool;
+pub mod compare;
+pub mod device;
+pub mod devpreset;
+#[cfg(test)]
+mod fakepedal;
+pub mod files;
+pub mod hlx;
+pub mod irs;
+pub mod msgpack;
+pub mod nam;
+pub mod proto;
+pub mod realnames;
+pub mod routes;
+pub mod selftest;
+pub mod session;
+pub mod snapshots;
+pub mod support;
+pub mod units;
+pub mod wire;
