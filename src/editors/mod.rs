@@ -1097,6 +1097,34 @@ pub fn chip_rows(items: impl IntoIterator<Item = (usize, usize, Chip)>, splits: 
         .collect()
 }
 
+const CHIP_TEXT: f32 = 12.0;
+/// Side padding inside a chip, and the gap between chips.
+const CHIP_PAD: f32 = 6.0;
+const CHIP_GAP: f32 = 4.0;
+/// A chip is at most this wide; a longer name is cut short with an ellipsis.
+const CHIP_MAX_W: f32 = 100.0;
+
+fn chip_font() -> egui::FontId {
+    egui::FontId::proportional(CHIP_TEXT)
+}
+
+/// The name as it fits a chip: whole if it fits `CHIP_MAX_W`, else cut short with "…".
+fn fit_chip_name(ui: &egui::Ui, name: &str) -> String {
+    let max_text = CHIP_MAX_W - 2.0 * CHIP_PAD;
+    let width = |s: &str| ui.fonts(|f| f.layout_no_wrap(s.to_owned(), chip_font(), Color32::WHITE).size().x);
+    if width(name) <= max_text {
+        return name.to_owned();
+    }
+    let chars: Vec<char> = name.chars().collect();
+    for keep in (0..chars.len()).rev() {
+        let cand = format!("{}…", chars[..keep].iter().collect::<String>().trim_end());
+        if width(&cand) <= max_text {
+            return cand;
+        }
+    }
+    "…".to_owned()
+}
+
 /// The rows of block chips, sideways-scrolling together as one. True when a chip was tapped.
 pub fn chip_strip(ui: &mut egui::Ui, rows: &[ChipRow], selected: &mut Option<usize>) -> bool {
     if rows.is_empty() {
@@ -1137,11 +1165,13 @@ pub fn chip_strip(ui: &mut egui::Ui, rows: &[ChipRow], selected: &mut Option<usi
                             ui.add_space(gap);
                         }
                     }
+                    ui.spacing_mut().item_spacing.x = CHIP_GAP;
                     for chip in &row.chips {
-                        let font = egui::FontId::proportional(14.0);
-                        let galley = ui.painter().layout_no_wrap(chip.name.clone(), font, Color32::WHITE);
-                        let size = Vec2::new(galley.size().x + 24.0, 32.0_f32.max(galley.size().y + 12.0));
+                        let shown = fit_chip_name(ui, &chip.name);
+                        let text_w = ui.fonts(|f| f.layout_no_wrap(shown.clone(), chip_font(), Color32::WHITE).size().x);
+                        let size = Vec2::new(text_w + 2.0 * CHIP_PAD, 32.0);
                         let (rect, resp) = ui.allocate_exact_size(size, egui::Sense::click());
+                        let resp = resp.on_hover_text(chip.name.as_str());
                         xs.push(rect.min.x);
                         end = rect.max.x + ui.spacing().item_spacing.x;
                         let is_sel = *selected == Some(chip.sel);
@@ -1155,7 +1185,7 @@ pub fn chip_strip(ui: &mut egui::Ui, rows: &[ChipRow], selected: &mut Option<usi
                         let bright = theme::is_light()
                             && (0.299 * chip.colour.r() as f32 + 0.587 * chip.colour.g() as f32 + 0.114 * chip.colour.b() as f32) > 140.0;
                         let tc = if bright { Color32::from_rgb(0x14, 0x17, 0x1c) } else { Color32::WHITE };
-                        p.text(rect.center(), egui::Align2::CENTER_CENTER, &chip.name, egui::FontId::proportional(14.0), tc);
+                        p.text(rect.center(), egui::Align2::CENTER_CENTER, &shown, chip_font(), tc);
                         if resp.clicked() {
                             *selected = Some(chip.sel);
                             tapped = true;
