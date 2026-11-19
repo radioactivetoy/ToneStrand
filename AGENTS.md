@@ -35,11 +35,13 @@ synced (OneDrive) or the exe is still running: close `tonestrand.exe` and build 
 2. **Documents must round-trip byte for byte.** Don't re-encode values with a different
    MessagePack format; extend `msgpack.rs` rather than bypassing it. Run `--ctl-check` /
    the round-trip tests on real backups when touching `devpreset.rs`.
-3. **Don't add Line 6 files.** Effect names, parameters and ranges come from the person's HX
-   Edit installation at run time (`catalog.rs`). The only Line 6 material kept in the repo is
-   the effect photos and descriptions (`assets/models/`) and the type icons
-   (`assets/block Images/`), by the owner's decision, under the README's "Third-party material
-   and trademarks" notice (removed on request via an issue). Don't add more.
+3. **Don't add Line 6 files.** Effect names, parameters and ranges come from an HX Edit
+   installation when there is one, else from the built-in list (`catalogs/`, see `catalog.rs`).
+   The only Line 6 material kept in the repo is the effect photos and descriptions
+   (`assets/models/`), the type icons (`assets/block Images/`) and the effects lists converted
+   from HX Edit (`catalogs/`), by the owner's decision, under the README's "Third-party material
+   and trademarks" notice (removed on request via an issue). New lists are made only with
+   `--export-catalog` from an HX Edit install. Nothing else from HX Edit is added.
 4. **Keep the UI plain-spoken.** Labels and messages are short, everyday words. Tips go behind
    a `theme::help` "?" icon, not as visible small text.
 5. **Font gaps:** egui's default fonts lack `●`, `→`, `▾`, `↶`, `↷` (they draw as squares). Paint

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### New
+- **A built-in effects list.** The effect names, knob names, ranges and categories made from HX Edit 3.82 are kept in `catalogs/`.
+  `tonestrand --export-catalog <HX Edit res folder> <catalogs folder> <version>` makes a list for another HX Edit version.
+
 ## 1.0.0-beta.5 - 2026-11-18
 
 ### New

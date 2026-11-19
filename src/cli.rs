@@ -5,7 +5,8 @@ use crate::msgpack::Value;
 use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnames, session, wire};
 
 /// The command-line tools (everything else opens the window).
-pub const CLI_FLAGS: [&str; 24] = [
+pub const CLI_FLAGS: [&str; 25] = [
+    "--export-catalog",
     "--to-hlx",
     "--cc-live",
     "--put-slot",
@@ -395,6 +396,38 @@ fn box_proxy_tool(rest: &[String]) {
     }
 }
 
+/// Convert an HX Edit resource folder into `<out>/<version>/catalog.json.gz` and `meta.json`.
+/// Refuses if that version's folder already exists.
+pub fn export_catalog(res: &std::path::Path, out: &std::path::Path, version: &str) -> Result<std::path::PathBuf, String> {
+    if version.is_empty() || version.contains(['/', '\\', ':']) || version.starts_with('.') {
+        return Err(format!("\"{version}\" is not a usable version name"));
+    }
+    let dir = out.join(version);
+    if dir.exists() {
+        return Err(format!("{} already exists; nothing was changed", dir.display()));
+    }
+    let cat = catalog::Catalog::load(res)?;
+    let pack = cat.to_pack()?;
+    let mut sources = Vec::new();
+    for e in std::fs::read_dir(res).map_err(|e| format!("{}: {e}", res.display()))?.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let wanted = matches!(name.as_str(), "Helix.sym" | "HelixControls.json" | "HX_ModelCatalog.json") || name.ends_with(".models");
+        if wanted {
+            if let Ok(m) = e.metadata() {
+                sources.push((name, m.len()));
+            }
+        }
+    }
+    sources.sort();
+    let created = crate::support::stamp(std::time::SystemTime::now()).chars().take(10).collect();
+    let meta = catalog::PackMeta { format: catalog::PACK_FORMAT, hx_edit_version: version.to_owned(), created, sources };
+    let meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    crate::files::write_atomic(&dir.join("catalog.json.gz"), &pack).map_err(|e| format!("catalog.json.gz: {e}"))?;
+    crate::files::write_atomic(&dir.join("meta.json"), meta_json.as_bytes()).map_err(|e| format!("meta.json: {e}"))?;
+    Ok(dir)
+}
+
 const HELP: &str = "\
 ToneStrand command-line tools. The first group only reads; the second WRITES to the pedal and is for testing.
 
@@ -415,6 +448,7 @@ Read and convert (nothing is written to a pedal):
   --hlx-check <template.hxpreset> [file.hlx]  try the .hlx -> pedal conversion offline
   --fmt-check                       how a dual cab's knobs read at their edges
   --list-models                     every effect in the picker, with real-gear names
+  --export-catalog <hx edit res folder> <catalogs folder> <version>  convert HX Edit's effects list into catalogs/<version>/ (writes files on this computer)
   --find-boxes                      look for ToneStrand Boxes for 6 seconds
   --screenshot <file.png>           open the window, save a picture of it and quit
 
@@ -437,6 +471,21 @@ pub fn run(args: &[String]) -> bool {
     attach_console();
     if wants_help {
         print!("{HELP}");
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--export-catalog") {
+        let rest = &args[i + 1..];
+        let (Some(res), Some(out), Some(version)) = (rest.first(), rest.get(1), rest.get(2)) else {
+            eprintln!("usage: --export-catalog <hx edit res folder> <catalogs folder> <hx edit version, e.g. 3.82>");
+            std::process::exit(1);
+        };
+        match export_catalog(std::path::Path::new(res), std::path::Path::new(out), version) {
+            Ok(dir) => println!("wrote {}", dir.display()),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
         return true;
     }
     if let Some(i) = args.iter().position(|a| a == "--box-proxy") {
@@ -930,5 +979,27 @@ fn op_raw_tool(rest: &[String]) {
     match s.request(op, Value::map(pairs)) {
         Ok((status, result)) => println!("status {status}, result {}", result.summary()),
         Err(e) => println!("error: {e}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::catalog::{read_pack_meta, Catalog, PACK_FORMAT};
+
+    #[test]
+    fn export_catalog_writes_pack_and_meta_and_refuses_overwrite() {
+        let res = tonestrand_core::catalog::test_support::mini_hx_edit_dir();
+        let out = std::env::temp_dir().join(format!("tonestrand-export-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&out);
+        let dir = export_catalog(&res, &out, "9.99").unwrap();
+        let meta = read_pack_meta(&std::fs::read_to_string(dir.join("meta.json")).unwrap()).unwrap();
+        assert_eq!(meta.hx_edit_version, "9.99");
+        assert_eq!(meta.format, PACK_FORMAT);
+        assert!(meta.sources.iter().any(|(n, _)| n == "Helix.sym"));
+        assert!(Catalog::from_pack(&std::fs::read(dir.join("catalog.json.gz")).unwrap()).is_ok());
+        assert!(export_catalog(&res, &out, "9.99").is_err());
+        assert!(export_catalog(&res, &out, "../x").is_err());
+        let _ = std::fs::remove_dir_all(&out);
     }
 }

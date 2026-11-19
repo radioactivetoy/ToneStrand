@@ -6,11 +6,10 @@ Helix Floor / LT / Rack), connected over **USB** or wirelessly through a [**Tone
 Written in Rust with [egui](https://github.com/emilk/egui) / eframe. One self-contained
 program; no account, no cloud, nothing leaves your computer.
 
-> **Requires Line 6's HX Edit.** ToneStrand needs [HX Edit](https://line6.com/software/)
-> installed on the same computer, with no exceptions. It reads the effect names, knob names and
-> ranges, and categories from HX Edit's own files; the pedal itself only stores numbers.
-> Without HX Edit the editor is mostly empty. Nothing from HX Edit is copied into this
-> repository.
+> **HX Edit is optional.** If Line 6's [HX Edit](https://line6.com/software/) is installed on
+> the same computer and newer than the built-in list, ToneStrand reads the effect names, knob
+> names and ranges, and categories from HX Edit's own files. If not, it uses the list built
+> into the program, made from HX Edit 3.82 (see "Third-party material and trademarks").
 
 ![The ToneStrand editor connected to an HX Stomp: the pedal's presets on the left, the loaded preset's signal chain on top, the selected amp's knobs below](docs/images/editor.png)
 
@@ -77,10 +76,10 @@ The effect pictures and names come from Line 6; see "Third-party material" below
 
 ## Requirements
 
-- **HX Edit installed** on the same computer (required). ToneStrand reads effect names, knob names and
-  ranges from HX Edit's resource files at start-up (`Helix.sym`, `*.models`,
-  `HelixControls.json`, ...). Nothing from HX Edit is copied into this repository. If HX Edit
-  is in an unusual place, set its folder in Settings.
+- **HX Edit** is optional. ToneStrand has a built-in effects list (from HX Edit 3.82). If HX Edit is
+  installed and newer, ToneStrand reads effect names, knob names and ranges from its resource files
+  at start-up (`Helix.sym`, `*.models`, `HelixControls.json`, ...) instead. If HX Edit is in an
+  unusual place, set its folder in Settings.
 - A Helix-family pedal on USB, or a paired ToneStrand Box with the pedal plugged into it.
 - To build: Rust (stable). See [docs/BUILDING.md](docs/BUILDING.md).
 
@@ -93,9 +92,9 @@ page, in either form:
   administrator rights), adds a Start menu entry and an uninstaller.
 - **`ToneStrand-<version>-windows.zip`**: portable. Unzip anywhere and run `tonestrand.exe`.
 
-You also need [HX Edit](https://line6.com/software/) installed (see above). The program isn't
+HX Edit is not needed (see above). The program isn't
 code-signed, so Windows SmartScreen may warn the first time: choose **More info**, then
-**Run anyway**. Only Windows has been tried. On a Mac you can build from source (CI builds it; nobody has run it). Linux is not supported: the effect list comes from HX Edit's files, and there is no HX Edit for Linux.
+**Run anyway**. Only Windows has been tried. On a Mac you can build from source (CI builds it; nobody has run it). Linux is not supported.
 
 ## Quick start (build from source)
 
@@ -161,6 +160,8 @@ supported by Line 6, Yamaha Guitar Group, or the makers of the Helrig Box.
 
 - **Effect photos and descriptions** (`assets/models/`) are taken from Line 6's firmware
   release notes.
+- **Effects lists** (`catalogs/`): effect names, knob names and ranges, and categories, converted
+  from HX Edit's resource files into one compressed file per HX Edit version.
 - **Effect-type icons** (`assets/block Images/`) are Line 6 artwork from HX Edit / Helix Stadium.
 
 This material is © Yamaha Guitar Group, Inc. (Line 6) and remains theirs. It is included free of
@@ -200,5 +201,5 @@ GNU General Public License as published by the Free Software Foundation, either 
 the License, or (at your option) any later version. See [LICENSE](LICENSE).
 
 The licence covers this project's own code and documentation. It does not cover the Line 6
-material listed under "Third-party material and trademarks" (effect icons, photos and
-descriptions), which belongs to Line 6.
+material listed under "Third-party material and trademarks" (effect icons, photos,
+descriptions and effects lists), which belongs to Line 6.
