@@ -646,7 +646,12 @@ impl App {
                 self.scan_tones();
             }
             Err(TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(300)),
-            Err(TryRecvError::Disconnected) => self.copy_job = None,
+            Err(TryRecvError::Disconnected) => {
+                self.copy_job = None;
+                self.note(LogLevel::Bad, "Copying into Documents/ToneStrand stopped unexpectedly");
+                self.scan_library();
+                self.scan_tones();
+            }
         }
     }
 

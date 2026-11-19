@@ -54,10 +54,10 @@ pub struct CopyReport {
     pub failed: Vec<(PathBuf, String)>,
 }
 
-/// Temporary names used while copying: `.<name>.tstmp`.
+/// Temporary names used while copying: `.<name>.tonestrand-copy`.
 fn is_copy_temp(name: &std::ffi::OsStr) -> bool {
     let n = name.to_string_lossy();
-    n.starts_with('.') && n.ends_with(".tstmp")
+    n.starts_with('.') && n.ends_with(".tonestrand-copy")
 }
 
 /// Copy every file under `from` whose relative path does not exist under `to`, creating folders;
@@ -113,15 +113,27 @@ fn copy_one(src: &Path, dst: &Path) -> std::io::Result<bool> {
     let dir = dst.parent().unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir)?;
     let name = dst.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let tmp = dir.join(format!(".{name}.tstmp"));
+    let tmp = dir.join(format!(".{name}.tonestrand-copy"));
     let _ = std::fs::remove_file(&tmp);
     let result = (|| {
         std::fs::copy(src, &tmp)?;
-        if dst.exists() {
-            return Ok(false);
+        // A hard link fails when the name is taken, so a file created meanwhile is never replaced.
+        match std::fs::hard_link(&tmp, dst) {
+            Ok(()) => {
+                let _ = std::fs::remove_file(&tmp);
+                Ok(true)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+            Err(_) => {
+                // No hard links here (some shared storage). Residual race: a file created between
+                // this check and the rename would be replaced; the window is tiny.
+                if dst.exists() {
+                    return Ok(false);
+                }
+                std::fs::rename(&tmp, dst)?;
+                Ok(true)
+            }
         }
-        std::fs::rename(&tmp, dst)?;
-        Ok(true)
     })();
     if !matches!(result, Ok(true)) {
         let _ = std::fs::remove_file(&tmp);
@@ -289,13 +301,13 @@ mod tests {
         std::fs::create_dir_all(&from).unwrap();
         std::fs::create_dir_all(&to).unwrap();
         std::fs::write(from.join("a.txt"), "real").unwrap();
-        std::fs::write(from.join(".old.txt.tstmp"), "junk").unwrap();
-        std::fs::write(to.join(".a.txt.tstmp"), "half").unwrap();
+        std::fs::write(from.join(".old.txt.tonestrand-copy"), "junk").unwrap();
+        std::fs::write(to.join(".a.txt.tonestrand-copy"), "half").unwrap();
         let r = copy_missing_report(&from, &to, &|_| false);
         assert_eq!((r.copied, r.failed.len()), (1, 0));
         assert_eq!(std::fs::read_to_string(to.join("a.txt")).unwrap(), "real");
-        assert!(!to.join(".a.txt.tstmp").exists());
-        assert!(!to.join(".old.txt.tstmp").exists());
+        assert!(!to.join(".a.txt.tonestrand-copy").exists());
+        assert!(!to.join(".old.txt.tonestrand-copy").exists());
         let _ = std::fs::remove_dir_all(&d);
     }
 
