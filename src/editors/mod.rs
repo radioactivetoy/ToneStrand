@@ -16,6 +16,7 @@ use crate::theme::{self, *};
 mod device;
 mod doc;
 mod hlx_file;
+mod pacing;
 mod studio;
 
 pub use device::{device_controllers, device_editor};
@@ -163,7 +164,7 @@ fn io_controls(ui: &mut egui::Ui, preset: &mut DevicePreset, s: &SlotView, live:
                 preset.set_value(s.path, s.position, vi, nv.clone());
                 *dirty = true;
             }
-            if live && commit {
+            if live && pacing::live_send(ui, ("io", s.global, vi), nv.is_some(), commit) {
                 if let Some(value) = preset.slots().get(s.global).and_then(|x| x.values.get(vi).cloned()) {
                     cmds.push(Cmd::SetParam { block: s.wire_block(), path: 0, index: vi as i64, value });
                 }
@@ -1154,7 +1155,7 @@ fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: b
                     }
                     *dirty = true;
                 }
-                if live && commit {
+                if live && pacing::live_send(ui, ("blk", s.global, cab, vi), nv.is_some(), commit) {
                     let cur = if cab {
                         preset.paired_values(s.path, s.position).get(vi).cloned()
                     } else {
