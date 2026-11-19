@@ -1,7 +1,7 @@
 //! Area clear of the system bars (status bar, navigation bar, display cutout), in egui points.
 //!
 //! Under edge-to-edge (targetSdk 35) `AndroidApp::content_rect()` is the whole screen, so the bar
-//! sizes come from the decor view's root window insets through JNI. They are cached and read again
+//! sizes (applied per edge, only where the content rect reaches the screen edge) come from the decor view's root window insets through JNI. They are cached and read again
 //! when the content rect or the native window size changes (rotation, resize), and at least once a
 //! second so a missed change heals. A failed read keeps the last good bars.
 
@@ -60,7 +60,14 @@ impl Insets {
             }
         }
         let (l, t, rt, b) = self.bars;
-        let (left, top, right, bottom) = (r.left + l, r.top + t, r.right - rt, r.bottom - b);
+        // Apply a bar's inset only on an edge where the content rect reaches the screen edge: below
+        // API 35 the content rect may already exclude the bars, and with the keyboard up (adjustResize)
+        // its bottom stops above the keyboard, so subtracting the nav bar again would leave a dead band.
+        let (w, h) = size;
+        let left = if r.left <= 0 { r.left + l } else { r.left };
+        let top = if r.top <= 0 { r.top + t } else { r.top };
+        let right = if w > 0 && r.right >= w { r.right - rt } else { r.right };
+        let bottom = if h > 0 && r.bottom >= h { r.bottom - b } else { r.bottom };
         if right <= left || bottom <= top || pixels_per_point <= 0.0 {
             return None;
         }

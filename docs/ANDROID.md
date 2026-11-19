@@ -74,6 +74,9 @@ Job `android` in `.github/workflows/ci.yml` (ubuntu-latest, `continue-on-error`)
 - Emulator (x86_64, Android API 35 tablet): starts, shows the editor; Back then start again and Home then start again both show the editor (Back only backgrounded the app); after force-stop and after swipe-away from recents a fresh start shows the editor.
 - Emulator: multicast lock acquired (log line); the launcher icon shows in the app drawer (`target/android-check/t8-drawer.png`).
 - Real tablet: nothing yet. To check there: pairing and connecting to the Box by name (mDNS) and by address, loading a preset, turning a knob, changing a snapshot, typing a preset name on the on-screen keyboard, Back and reopen.
+  - Insets on the tablet: top bar clear of the status bar, no blank band above the on-screen keyboard; note the tablet's Android version.
+  - IR/NAM (tonelib) list: press, hold and move an item onto a folder.
+  - Carry a preset onto another slot on the real pedal: the confirm appears, a backup is taken first (check the Pedal backups list), then the write.
 
 ## Colours
 
@@ -95,7 +98,7 @@ What the emulator reports (one debug-level line at start-up in `android/src/lib.
 1. Build and install: `android\build.ps1 -Abi arm64-v8a -Device <serial>` from PowerShell (`adb devices` shows the serial).
 2. Screenshot: `adb -s <serial> exec-out screencap -p > tablet-dark.png`.
 3. Read a pixel by opening the PNG in Paint and using the colour picker, or in PowerShell: `Add-Type -AssemblyName System.Drawing; $c=[System.Drawing.Bitmap]::FromFile("C:\path\to\tablet-dark.png").GetPixel(100,800); '{0:x2}{1:x2}{2:x2}' -f $c.R,$c.G,$c.B`. Read the pixel at (100,800) (inside the left preset panel, with the Editor page open and the tablet in landscape at 2560x1600; scale the point for another size). It must be #15161a within 3 per channel; the background at (1280,800) must be #101114 within 3. A value near #404248 may mean a second conversion is happening.
-4. Settings > Display > Light, screenshot again: top bar (1500,60) within 3 of #f6f7fa, background (1280,800) within 3 of #eceef3.
+4. Settings > Display > Light, screenshot again: top bar (1500,60) within 3 of #f6f7fa, background (1900,600) within 3 of #eceef3.
 5. If off, try in this order, stopping at the first that fixes it:
    a. In `android/src/lib.rs`, before painting, turn `FRAMEBUFFER_SRGB` (0x8DB9) off through `frame.gl()` when the extension list has `GL_EXT_sRGB_write_control` (the start-up log line shows whether it does).
    b. A vendored eframe under `android/vendor/eframe`, changed only to ask for a plain (non-sRGB) window surface, wired through `[patch.crates-io]` in `android/Cargo.toml`. Never touch the root `Cargo.toml`.
