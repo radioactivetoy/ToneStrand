@@ -29,21 +29,88 @@ pub fn list_row_sense() -> egui::Sense {
     }
 }
 
-/// Let a list row be picked up. Desktop: the usual drag payload. Touch: press and hold.
+/// A press-and-hold on a touch row: which row, where the finger went down, and whether the
+/// row has been picked up since.
+#[derive(Clone, Copy)]
+struct Hold {
+    row: egui::Id,
+    start: egui::Pos2,
+    carried: bool,
+}
+
+/// How far (points) the finger may move after the hold before the row is picked up.
+const HOLD_SLOP: f32 = 8.0;
+
+fn hold_key() -> egui::Id {
+    egui::Id::new("touch-row-hold")
+}
+
+/// Let a list row be picked up. Desktop: the usual drag payload. Touch: press and hold, then
+/// move to pick the row up (the payload is set once); release without moving opens the row's
+/// context menu (see [`row_menu`]).
 pub fn row_payload<P: std::any::Any + Send + Sync>(resp: &egui::Response, payload: P) {
-    if touch() {
-        if resp.long_touched() {
-            egui::DragAndDrop::set_payload(&resp.ctx, payload);
-        }
-    } else {
+    if !touch() {
         resp.dnd_set_drag_payload(payload);
+        return;
+    }
+    let ctx = &resp.ctx;
+    if resp.long_touched() {
+        if let Some(start) = ctx.input(|i| i.pointer.latest_pos()) {
+            ctx.data_mut(|d| d.insert_temp(hold_key(), Hold { row: resp.id, start, carried: false }));
+        }
+        return;
+    }
+    let Some(mut hold) = ctx.data(|d| d.get_temp::<Hold>(hold_key())).filter(|h| h.row == resp.id) else {
+        return;
+    };
+    let (down, pos) = ctx.input(|i| (i.pointer.any_down(), i.pointer.latest_pos()));
+    if !down {
+        ctx.data_mut(|d| d.remove::<Hold>(hold_key()));
+        if !hold.carried {
+            // Let go without moving: what a right-click opens on desktop.
+            open_menu_at(ctx, resp.id, hold.start);
+        }
+    } else if !hold.carried && pos.is_some_and(|p| p.distance(hold.start) > HOLD_SLOP) {
+        hold.carried = true;
+        egui::DragAndDrop::set_payload(ctx, payload);
+        ctx.data_mut(|d| d.insert_temp(hold_key(), hold));
     }
 }
 
-/// True on touch while a row is being carried: lists must not scroll then, and the
-/// long press must not also open a context menu.
+/// Open the context menu `response.context_menu` draws, for the row `id`, at `pos`.
+fn open_menu_at(ctx: &egui::Context, id: egui::Id, pos: egui::Pos2) {
+    // The id egui keeps its one context menu under.
+    let menu_id = egui::Id::new("__egui::context_menu");
+    let mut bar = egui::menu::BarState::load(ctx, menu_id);
+    **bar = Some(egui::menu::MenuRoot::new(pos, id));
+    bar.store(ctx, menu_id);
+    ctx.request_repaint();
+}
+
+/// A row's context menu. Desktop: as `Response::context_menu`. Touch: egui would open it the
+/// moment the hold starts; here it opens on release without moving (or never, once the row
+/// is being carried).
+pub fn row_menu(resp: &egui::Response, add_contents: impl FnOnce(&mut egui::Ui)) {
+    if touch() && (resp.long_touched() || carrying(&resp.ctx)) {
+        return;
+    }
+    resp.context_menu(add_contents);
+}
+
+/// True on touch while a row is being carried: lists must not scroll then. Also drops a
+/// payload (and hold) left over when no finger is down (focus lost, row gone).
 pub fn carrying(ctx: &egui::Context) -> bool {
-    touch() && egui::DragAndDrop::has_any_payload(ctx)
+    if !touch() {
+        return false;
+    }
+    let (down, released) = ctx.input(|i| (i.pointer.any_down(), i.pointer.any_released()));
+    if !down && !released {
+        if egui::DragAndDrop::has_any_payload(ctx) {
+            egui::DragAndDrop::clear_payload(ctx);
+        }
+        ctx.data_mut(|d| d.remove::<Hold>(hold_key()));
+    }
+    egui::DragAndDrop::has_any_payload(ctx)
 }
 
 /// One colour of each palette: (dark, light).

@@ -476,10 +476,12 @@ impl Library {
         if resp.double_clicked() {
             actions.push(Action::Open(e.path.clone()));
         }
-        let resp = resp.on_hover_text("Double-click to open, drag onto a folder to move, right-click for more");
-        if !theme::carrying(ui.ctx()) {
-            resp.context_menu(|ui| self.menu(ui, e, can_send, actions));
-        }
+        let resp = resp.on_hover_text(if theme::touch() {
+            "Double-tap to open, press and hold for more, press, hold and move onto a folder to move"
+        } else {
+            "Double-click to open, drag onto a folder to move, right-click for more"
+        });
+        theme::row_menu(&resp, |ui| self.menu(ui, e, can_send, actions));
     }
 
     fn row(&self, ui: &mut egui::Ui, e: &Entry, can_send: bool, actions: &mut Vec<Action>) {
@@ -513,9 +515,7 @@ impl Library {
         if resp.double_clicked() {
             actions.push(Action::Open(e.path.clone()));
         }
-        if !theme::carrying(ui.ctx()) {
-            resp.context_menu(|ui| self.menu(ui, e, can_send, actions));
-        }
+        theme::row_menu(&resp, |ui| self.menu(ui, e, can_send, actions));
         ui.separator();
     }
 }

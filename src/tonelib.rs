@@ -321,8 +321,7 @@ impl ToneLib {
                                 self.selected.insert(e.path.clone());
                             }
                         }
-                        if !theme::carrying(ui.ctx()) {
-                        r.context_menu(|ui| {
+                        theme::row_menu(&r, |ui| {
                             if ui.button("Show in Explorer").clicked() {
                                 folders::open_in_explorer(e.path.parent().unwrap_or(&self.root));
                                 ui.close_menu();
@@ -332,11 +331,17 @@ impl ToneLib {
                                 ui.close_menu();
                             }
                         });
-                        }
                         ui.add_space(3.0);
                     }
                     ui.add_space(4.0);
-                    theme::help(ui, "Click to select, Ctrl+click for several, drag onto a folder to move.");
+                    theme::help(
+                        ui,
+                        if theme::touch() {
+                            "Tap to select, press and hold for more, press, hold and move onto a folder to move."
+                        } else {
+                            "Click to select, Ctrl+click for several, drag onto a folder to move."
+                        },
+                    );
                 });
             });
         });
