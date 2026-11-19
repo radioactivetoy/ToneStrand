@@ -62,7 +62,11 @@ impl Catalog {
 
     pub fn from_pack(bytes: &[u8]) -> Result<Catalog, String> {
         let mut json = Vec::new();
-        flate2::read::GzDecoder::new(bytes).read_to_end(&mut json).map_err(|e| format!("effects list pack: {e}"))?;
+        const LIMIT: u64 = 32 * 1024 * 1024;
+        flate2::read::GzDecoder::new(bytes).take(LIMIT + 1).read_to_end(&mut json).map_err(|e| format!("effects list pack: {e}"))?;
+        if json.len() as u64 > LIMIT {
+            return Err("the effects list is too large".into());
+        }
         let doc: serde_json::Value = serde_json::from_slice(&json).map_err(|e| format!("effects list pack: {e}"))?;
         let format = doc.get("format").and_then(serde_json::Value::as_u64).ok_or("effects list pack: no format number")?;
         if format > u64::from(PACK_FORMAT) {
@@ -111,6 +115,11 @@ mod tests {
         let a = Catalog::load(&dir).unwrap();
         let b = Catalog::from_pack(&a.to_pack().unwrap()).unwrap();
         assert_eq!(a.model_count(), b.model_count());
+        // The stored data must match exactly (floats included), not just as formatted text.
+        assert!(a.sym == b.sym, "sym differs");
+        assert!(a.models == b.models, "models differ");
+        assert!(a.category == b.category, "category differs");
+        assert!(a.groups == b.groups, "groups differ");
         for n in 0..a.sym.len() as i64 {
             assert_eq!(a.model_name(n), b.model_name(n));
             assert_eq!(a.dsp_cost(n), b.dsp_cost(n));
@@ -132,6 +141,10 @@ mod tests {
     fn from_pack_rejects_garbage() {
         assert!(Catalog::from_pack(b"not gzip").is_err());
         assert!(Catalog::from_pack(&gzip(b"{\"format\":1}")).is_err());
+        let a = Catalog::load(&mini_hx_edit_dir()).unwrap().to_pack().unwrap();
+        assert!(Catalog::from_pack(&a[..a.len() / 2]).is_err());
+        assert!(Catalog::from_pack(&gzip(b"{not json")).is_err());
+        assert!(Catalog::from_pack(&gzip(b"{\"sym\":[],\"models\":{},\"category\":{},\"groups\":[]}")).is_err());
     }
 
     #[test]
