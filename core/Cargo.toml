@@ -15,3 +15,7 @@ nusb = "0.1"
 ureq = { version = "2", default-features = false, features = ["json"] }
 dirs = "5"
 flate2 = "1.1"
+
+[features]
+# Made-up fixtures (a mini HX Edit folder, a tiny preset) for tests in other crates.
+test-support = []

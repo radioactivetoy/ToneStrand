@@ -1894,7 +1894,8 @@ mod editing_tests {
 }
 
 impl DevicePreset {
-    /// A tiny made-up document for tests in other modules (and other crates, so not `cfg(test)`).
+    /// A tiny made-up document for tests in other modules and crates (the `test-support` feature).
+    #[cfg(any(test, feature = "test-support"))]
     #[doc(hidden)]
     pub fn tiny_for_tests() -> DevicePreset {
         let pairs = [0i64, 1, 2].iter().map(|k| (Value::int(*k), Value::map(vec![(1, Value::int(*k))]))).collect();

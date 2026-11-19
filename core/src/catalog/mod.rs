@@ -14,7 +14,12 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value as Json;
 
-#[derive(Clone, Debug, Default)]
+mod pack;
+pub use pack::{read_pack_meta, PackMeta, PACK_FORMAT};
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
+
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DisplayPiece {
     pub lower: f64,
     pub upper: f64,
@@ -23,7 +28,7 @@ pub struct DisplayPiece {
     pub format_units: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct DisplaySpec {
     pub scale: f64,
     pub int_offset: i64,
@@ -51,7 +56,7 @@ impl Default for DisplaySpec {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Param {
     pub id: String,
     pub name: String,
@@ -79,7 +84,7 @@ impl Param {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ModelInfo {
     pub name: String,
     /// DSP cost of the mono (or only) version, and of the stereo one.
@@ -91,19 +96,19 @@ pub struct ModelInfo {
     pub devices: Vec<i64>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SymEntry {
     pub symbol: String,
     pub params: Vec<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PickModel {
     pub name: String,
     pub number: i64,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct PickGroup {
     pub category: String,
     pub sub: String,
@@ -111,9 +116,17 @@ pub struct PickGroup {
     pub models: Vec<PickModel>,
 }
 
+/// Where a catalog came from.
+#[derive(Clone, Debug, PartialEq)]
+pub enum CatalogSource {
+    /// Read from an HX Edit installation's resource folder.
+    HxEdit(PathBuf),
+    /// Read from a pack made on a computer with HX Edit (the Android app's built-in list).
+    Builtin { hx_edit_version: String },
+}
+
 pub struct Catalog {
-    #[allow(dead_code)] // where the catalog was read from, for diagnostics
-    pub dir: PathBuf,
+    source: CatalogSource,
     pub sym: Vec<SymEntry>,
     sym_index: HashMap<String, usize>,
     models: HashMap<String, ModelInfo>,
@@ -620,7 +633,6 @@ impl Catalog {
                     .unwrap_or_default(),
             })
             .collect();
-        let sym_index = sym.iter().enumerate().map(|(i, s)| (s.symbol.clone(), i)).collect();
 
         let controls: Json =
             std::fs::read_to_string(dir.join("HelixControls.json")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Json::Null);
@@ -639,6 +651,25 @@ impl Catalog {
             }
         }
 
+        let mut cat = Catalog::assemble(CatalogSource::HxEdit(dir.to_owned()), sym, models, HashMap::new(), Vec::new());
+        if let Ok(t) = std::fs::read_to_string(dir.join("HX_ModelCatalog.json")) {
+            if let Ok(j) = serde_json::from_str::<Json>(&t) {
+                cat.read_categories(&j);
+            }
+        }
+        Ok(cat)
+    }
+
+    /// The one place a catalog is put together (from HX Edit's files or from a pack): the symbol index and the NAM block's look
+    /// are worked out from the rest.
+    fn assemble(
+        source: CatalogSource,
+        sym: Vec<SymEntry>,
+        models: HashMap<String, ModelInfo>,
+        category: HashMap<String, (String, Rgb)>,
+        groups: Vec<PickGroup>,
+    ) -> Catalog {
+        let sym_index = sym.iter().enumerate().map(|(i, s)| (s.symbol.clone(), i)).collect();
         let nam_info = models.get(crate::nam::BASE_SYMBOL).map(|x| ModelInfo {
             name: crate::nam::NAME.to_owned(),
             load: DSP_BUDGET * crate::nam::DSP_SHARE,
@@ -647,13 +678,11 @@ impl Catalog {
             cablink: None,
             devices: crate::nam::UNITS.to_vec(),
         });
-        let mut cat = Catalog { dir: dir.to_owned(), sym, sym_index, models, category: HashMap::new(), groups: Vec::new(), nam_info };
-        if let Ok(t) = std::fs::read_to_string(dir.join("HX_ModelCatalog.json")) {
-            if let Ok(j) = serde_json::from_str::<Json>(&t) {
-                cat.read_categories(&j);
-            }
-        }
-        Ok(cat)
+        Catalog { source, sym, sym_index, models, category, groups, nam_info }
+    }
+
+    pub fn source(&self) -> &CatalogSource {
+        &self.source
     }
 
     fn read_categories(&mut self, j: &Json) {
