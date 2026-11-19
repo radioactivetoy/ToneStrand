@@ -133,6 +133,8 @@ enum LogLevel {
 
 pub struct App {
     settings: Settings,
+    /// TONESTRAND_LAYOUT (for pictures): wins over the saved layout, never saved; a layout button clears it.
+    layout_override: Option<u8>,
     usb: Vec<UsbPedal>,
     usb_scanned: Option<Instant>,
     boxes: Vec<BoxInfo>,
@@ -273,8 +275,14 @@ impl App {
             .or_else(|| settings.library.clone().map(PathBuf::from))
             .unwrap_or_else(Self::default_library_dir);
         let boxes = settings.saved.clone();
+        let layout_override = match std::env::var("TONESTRAND_LAYOUT").as_deref() {
+            Ok("chain") => Some(1),
+            Ok("block") => Some(2),
+            _ => None,
+        };
         let mut app = App {
             settings,
+            layout_override,
             usb: Vec::new(),
             usb_scanned: None,
             boxes,
@@ -1365,25 +1373,28 @@ impl App {
                 .frame(egui::Frame::new().fill(card_bg()).inner_margin(egui::Margin::symmetric(14, 7)))
                 .show_inside(ui, |ui| self.studio_preset_bar(ui, i));
             // The layout is global: 0 normal, 1 chain maximized, 2 block panel maximized.
-            // TONESTRAND_LAYOUT=chain|block starts in one (for pictures; not saved).
-            static LAYOUT_ENV: std::sync::Once = std::sync::Once::new();
-            LAYOUT_ENV.call_once(|| match std::env::var("TONESTRAND_LAYOUT").as_deref() {
-                Ok("chain") => self.settings.editor_layout = 1,
-                Ok("block") => self.settings.editor_layout = 2,
-                _ => {}
-            });
-            let layout = if self.settings.editor_layout > 2 { 0 } else { self.settings.editor_layout };
+            let layout = self.layout_override.unwrap_or(self.settings.editor_layout);
+            let layout = if layout > 2 { 0 } else { layout };
             let mut new_layout: Option<u8> = None;
             // The chain takes the height it needs (scrolling past about 60% of the window)...
             let avail = ui.available_height();
             let canvas_max = (avail * 0.6).max(220.0);
-            // The chain's own height, measured last frame (not in the block layout: the strip's height is not the chain's).
+            // Heights measured last frame: the chain's own (per preset; not in the block layout, where
+            // the strip's height is not the chain's), the chain header row, the dock header, the strip.
             let h_id = egui::Id::new(("studio-canvas-h", i));
             let chain_h: f32 = ui.data(|d| d.get_temp(h_id)).unwrap_or(260.0);
+            let hdr_id = egui::Id::new("studio-canvas-hdr");
+            let hdr_h: f32 = ui.data(|d| d.get_temp(hdr_id)).unwrap_or(ui.spacing().interact_size.y);
+            // The maximize button makes the header row taller than the bare row it used to be.
+            let hdr_extra = (hdr_h - ui.spacing().interact_size.y).max(0.0);
+            let dock_id = egui::Id::new("studio-dock-h");
+            let dock_h: f32 = ui.data(|d| d.get_temp(dock_id)).unwrap_or(56.0);
+            let strip_id = egui::Id::new("studio-strip-h");
+            let strip_h: f32 = ui.data(|d| d.get_temp(strip_id)).unwrap_or(34.0);
             let canvas_h = match layout {
-                1 => (avail - 48.0).max(220.0),
-                2 => 32.0 + 48.0,
-                _ => chain_h.min(canvas_max) + 44.0,
+                1 => (avail - dock_h).max(220.0),
+                2 => strip_h + 16.0,
+                _ => chain_h.min(canvas_max) + 44.0 + hdr_extra,
             };
             egui::TopBottomPanel::top("studio-canvas")
                 .resizable(false)
@@ -1391,7 +1402,28 @@ impl App {
                 .show_separator_line(true)
                 .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin { left: 18, right: 18, top: 6, bottom: 10 }))
                 .show_inside(ui, |ui| {
-                    ui.horizontal(|ui| {
+                    if layout == 2 {
+                        // One row: a strip of the chain's blocks (to pick the one whose knobs are below),
+                        // with the help and restore button at its right end.
+                        let row = ui.horizontal(|ui| {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if layout_button(ui, "Restore", "Back to the normal layout") {
+                                    new_layout = Some(0);
+                                }
+                                theme::help(ui, "The blocks of the chain: tap one to edit its knobs below. Restore brings the chain back.");
+                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                                    self.editor(ui, i, 4);
+                                });
+                            });
+                        });
+                        let h = row.response.rect.height();
+                        if (h - strip_h).abs() > 1.0 {
+                            ui.data_mut(|d| d.insert_temp(strip_id, h));
+                            ui.ctx().request_repaint();
+                        }
+                        return;
+                    }
+                    let header = ui.horizontal(|ui| {
                         if let Some(n) = editors::current_note(ui.ctx()) {
                             ui.label(RichText::new(n).color(orange()));
                             ui.ctx().request_repaint_after(std::time::Duration::from_millis(500));
@@ -1413,10 +1445,10 @@ Drag an effect to move it; right-click for more.",
                             }
                         });
                     });
-                    if layout == 2 {
-                        // Only a strip of the chain's blocks, to pick the one whose knobs are below.
-                        self.editor(ui, i, 4);
-                        return;
+                    let h = header.response.rect.height();
+                    if (h - hdr_h).abs() > 1.0 {
+                        ui.data_mut(|d| d.insert_temp(hdr_id, h));
+                        ui.ctx().request_repaint();
                     }
                     let out = egui::ScrollArea::vertical().id_salt("studio-canvas").auto_shrink([false, false]).show(ui, |ui| {
                         self.editor(ui, i, 1);
@@ -1436,7 +1468,7 @@ Drag an effect to move it; right-click for more.",
                     let mut tab: usize = ui
                         .data(|d| d.get_temp(tab_id))
                         .unwrap_or_else(|| std::env::var("TONESTRAND_DOCK_TAB").ok().and_then(|v| v.parse().ok()).unwrap_or(0));
-                    ui.horizontal(|ui| {
+                    let dock_row = ui.horizontal(|ui| {
                         if let Some(t) = theme::segmented(ui, &["Block", "Controllers"], tab) {
                             tab = t;
                         }
@@ -1459,6 +1491,12 @@ Drag an effect to move it; right-click for more.",
                         });
                     });
                     ui.data_mut(|d| d.insert_temp(tab_id, tab));
+                    // The dock header's height with its margins, for the chain-maximized layout.
+                    let dh = dock_row.response.rect.height() + 16.0;
+                    if (dh - dock_h).abs() > 1.0 {
+                        ui.data_mut(|d| d.insert_temp(dock_id, dh));
+                        ui.ctx().request_repaint();
+                    }
                     if layout == 1 {
                         return;
                     }
@@ -1469,6 +1507,7 @@ Drag an effect to move it; right-click for more.",
                 },
             );
             if let Some(l) = new_layout {
+                self.layout_override = None;
                 self.settings.editor_layout = l;
                 self.settings.save();
                 ui.ctx().request_repaint();
