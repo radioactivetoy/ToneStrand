@@ -42,7 +42,8 @@ struct AndroidShell {
 impl eframe::App for AndroidShell {
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
         self.inner.update(ctx, frame);
-        self.keyboard.after_update(&self.android, ctx.wants_keyboard_input());
+        let tapped = ctx.input(|i| i.pointer.primary_pressed());
+        self.keyboard.after_update(&self.android, ctx.wants_keyboard_input(), tapped);
     }
 
     fn raw_input_hook(&mut self, _ctx: &eframe::egui::Context, raw: &mut eframe::egui::RawInput) {

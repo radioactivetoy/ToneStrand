@@ -25,17 +25,24 @@ impl Keyboard {
     }
 
     /// Call after each frame: show or hide the keyboard when a text field gains or loses focus.
-    pub fn after_update(&mut self, app: &AndroidApp, wants_keyboard: bool) {
+    /// `tapped`: a primary pointer press happened this frame; tapping a still-focused field after
+    /// Back dismissed the keyboard brings it back.
+    pub fn after_update(&mut self, app: &AndroidApp, wants_keyboard: bool, tapped: bool) {
         if wants_keyboard == self.shown {
+            if wants_keyboard && tapped {
+                app.show_soft_input(true);
+            }
             return;
         }
+        self.pairing.clear();
         log::info!("on-screen keyboard: {}", if wants_keyboard { "show" } else { "hide" });
         if wants_keyboard {
             // Plain text with no suggestions, so letters arrive as they are typed.
             app.set_ime_editor_info(
-                InputType::TYPE_CLASS_TEXT | InputType::TYPE_TEXT_VARIATION_VISIBLE_PASSWORD | InputType::TYPE_TEXT_FLAG_NO_SUGGESTIONS,
+                InputType::TYPE_CLASS_TEXT | InputType::TYPE_TEXT_VARIATION_VISIBLE_PASSWORD | InputType::TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                    | InputType::TYPE_TEXT_FLAG_MULTI_LINE,
                 TextInputAction::Done,
-                ImeOptions::IME_FLAG_NO_FULLSCREEN,
+                ImeOptions::IME_FLAG_NO_FULLSCREEN | ImeOptions::IME_FLAG_NO_ENTER_ACTION,
             );
             reset_text(app);
             app.show_soft_input(true);
@@ -47,7 +54,7 @@ impl Keyboard {
 
     /// Call before each frame: pair key events and turn typed text into egui events.
     pub fn input_hook(&mut self, app: &AndroidApp, raw: &mut eframe::egui::RawInput) {
-        let saw_backspace = self.pairing.fix(&mut raw.events);
+        let seen = self.pairing.fix(&mut raw.events);
         if !self.shown {
             return;
         }
@@ -55,7 +62,7 @@ impl Keyboard {
         if state.compose_region.is_some() {
             return;
         }
-        if let Some(events) = events_from_text(&state.text, saw_backspace) {
+        if let Some(events) = events_from_text(&state.text, seen) {
             raw.events.extend(events);
             reset_text(app);
         }
