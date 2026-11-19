@@ -54,6 +54,8 @@ public class MainActivity extends GameActivity {
     private final Object lock = new Object();
     private final Map<Integer, Req> requests = new HashMap<>();
     private final Map<Long, Uri> saveTargets = new HashMap<>();
+    /** Save targets that already held data when chosen (the picker returned an existing document). */
+    private final Set<Long> existedWithContent = new HashSet<>();
     private int nextCode = FIRST_CODE;
 
     static native void nativePicked(long id, String[] paths);
@@ -146,8 +148,10 @@ public class MainActivity extends GameActivity {
 
     public void commitSave(final long id, final String tempPath) {
         final Uri target;
+        final boolean existed;
         synchronized (lock) {
             target = saveTargets.remove(id);
+            existed = existedWithContent.remove(id);
         }
         if (target == null) {
             nativeSaved(id, "No file chosen");
@@ -156,18 +160,24 @@ public class MainActivity extends GameActivity {
         new Thread(() -> {
             String error = null;
             File temp = new File(tempPath);
-            try (InputStream in = new FileInputStream(temp);
-                 OutputStream out = getContentResolver().openOutputStream(target, "wt")) {
-                if (out == null) {
-                    throw new IOException("Cannot open the file");
+            // The temporary file must be there and readable before the target is touched.
+            if (!temp.isFile() || !temp.canRead()) {
+                error = "The file to save is missing";
+            } else {
+                try (InputStream in = new FileInputStream(temp);
+                     OutputStream out = getContentResolver().openOutputStream(target, "wt")) {
+                    if (out == null) {
+                        throw new IOException("Cannot open the file");
+                    }
+                    copy(in, out);
+                } catch (Throwable e) {
+                    error = String.valueOf(e.getMessage());
                 }
-                copy(in, out);
-            } catch (Throwable e) {
-                error = String.valueOf(e.getMessage());
             }
             deleteRecursively(temp.getParentFile(), true);
-            if (error != null) {
-                // CREATE_DOCUMENT left an empty document behind.
+            if (error != null && !existed && sizeOf(target) == 0) {
+                // CREATE_DOCUMENT made a new, still empty document: remove it. Never delete a
+                // document that had content or that we cannot show to be empty.
                 try {
                     DocumentsContract.deleteDocument(getContentResolver(), target);
                 } catch (Throwable ignored) {
@@ -212,8 +222,14 @@ public class MainActivity extends GameActivity {
                 nativePicked(req.id, new String[0]);
                 return;
             }
+            boolean existed = sizeOf(uri) > 0;
             synchronized (lock) {
                 saveTargets.put(req.id, uri);
+                if (existed) {
+                    existedWithContent.add(req.id);
+                } else {
+                    existedWithContent.remove(req.id);
+                }
             }
             nativeSaveTarget(req.id);
             return;
@@ -260,6 +276,18 @@ public class MainActivity extends GameActivity {
             deleteRecursively(dir, true);
             nativePickFailed(id, String.valueOf(e.getMessage()));
         }
+    }
+
+    /** The size of a document in bytes, or -1 when unknown. */
+    private long sizeOf(Uri uri) {
+        try (Cursor c = getContentResolver().query(uri, new String[] {OpenableColumns.SIZE}, null, null, null)) {
+            if (c != null && c.moveToFirst() && !c.isNull(0)) {
+                return c.getLong(0);
+            }
+        } catch (Throwable ignored) {
+            // Unknown.
+        }
+        return -1;
     }
 
     private String displayName(Uri uri) {

@@ -262,6 +262,8 @@ pub struct App {
     copied_for: Option<PathBuf>,
     /// Android: a shared folder that failed its write test.
     shared_failed: Option<PathBuf>,
+    /// `platform::storage_epoch()` last seen by `follow_storage`.
+    storage_epoch: u64,
     /// Android: the shared folder last used (its backups stay listed on the private library).
     last_shared: Option<PathBuf>,
 }
@@ -406,6 +408,7 @@ impl App {
             copy_job: None,
             copied_for: None,
             shared_failed: None,
+            storage_epoch: 0,
             last_shared: None,
         };
         app.catalog = crate::catalog::load_best(app.settings.hx_edit.as_deref()).map(Arc::new);
@@ -591,8 +594,16 @@ impl App {
         if live == Storage::Unknown {
             return;
         }
-        if !matches!(&live, Storage::Shared(d) if self.shared_failed.as_ref() == Some(d)) {
+        // Any storage report (also the same value again, after a permission answer) earns the
+        // shared folder another write test.
+        let epoch = crate::platform::storage_epoch();
+        if epoch != self.storage_epoch {
+            self.storage_epoch = epoch;
             self.shared_failed = None;
+        }
+        if !matches!(live, Storage::Shared(_)) {
+            // Regaining the shared folder copies again.
+            self.copied_for = None;
         }
         if let Storage::Shared(d) = self.effective_storage() {
             if self.copied_for.as_ref() != Some(&d) {

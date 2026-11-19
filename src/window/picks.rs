@@ -147,6 +147,12 @@ impl App {
             }
             Err(e) => {
                 self.pending.insert(id, pick);
+                // The temporary copy folder of this save (Android); best effort.
+                if platform::is_cache_path(path) {
+                    if let Some(dir) = path.parent().filter(|d| d.file_name().is_some_and(|n| n.to_string_lossy().starts_with("save-"))) {
+                        let _ = std::fs::remove_dir_all(dir);
+                    }
+                }
                 platform::abort_save(id, e.to_string());
             }
         }

@@ -159,8 +159,17 @@ static STORAGE: Mutex<Storage> = Mutex::new(Storage::Unknown);
 static PERMISSION_BACKEND: Mutex<Option<Arc<dyn Fn() + Send + Sync>>> = Mutex::new(None);
 static ANDROID_API: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
+static STORAGE_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 pub fn set_storage(s: Storage) {
     *STORAGE.lock().unwrap_or_else(|e| e.into_inner()) = s;
+    STORAGE_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Counts every `set_storage` call, even one that sets the same value (a retry after the person
+/// answered a permission prompt).
+pub fn storage_epoch() -> u64 {
+    STORAGE_EPOCH.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 pub fn storage() -> Storage {
