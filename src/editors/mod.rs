@@ -780,6 +780,15 @@ fn capture_picker(ui: &mut egui::Ui, cur: i64, nam: bool) -> Option<i64> {
 
 /// One knob, switch or chooser for a value of the pedal's document.
 /// Returns the new value and whether it should be sent now (released or clicked).
+/// A switch or one of a few fixed choices, drawn as a button in both states: filled with the accent when on, and a framed button (not bare
+/// text that seems to float) when off. Returns true when clicked.
+fn switch_button(ui: &mut egui::Ui, text: &str, on: bool) -> bool {
+    let label = RichText::new(text).color(if on { on_accent() } else { ink() });
+    let mut b = egui::Button::new(label).min_size(Vec2::new(56.0, 26.0)).corner_radius(CornerRadius::same(6));
+    b = if on { b.fill(accent_fill()) } else { b.fill(card_hi()).stroke(Stroke::new(1.0_f32, line())) };
+    ui.add(b).clicked()
+}
+
 fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<Value>, bool) {
     // The NAM block's capture and an IR block's IR Select: a pedal IR slot, picked by name.
     if let Some(nam) = meta.and_then(|m| match m.display.as_str() {
@@ -821,7 +830,7 @@ fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<V
             for target in [m.min, m.max] {
                 let label = crate::catalog::format_value(Some(m), target);
                 let on = (cur - target).abs() < (m.max - m.min) / 4.0;
-                if ui.selectable_label(on, label).clicked() && !on {
+                if switch_button(ui, &label, on) && !on {
                     let nv = match v {
                         Value::Int(..) => Value::int(target.round() as i64),
                         _ => Value::F32(target as f32),
@@ -854,11 +863,10 @@ fn value_widget(ui: &mut egui::Ui, meta: Option<&Param>, v: &Value) -> (Option<V
                 }
             } else {
                 let (off_lbl, on_lbl) = if choices.len() >= 2 { (choices[0].as_str(), choices[1].as_str()) } else { ("Off", "On") };
-                let label = if bb { format!("  {on_lbl}  ") } else { format!("  {off_lbl}  ") };
+                let label = if bb { on_lbl } else { off_lbl };
                 ui.add_space(10.0);
-                let r = ui.toggle_value(&mut bb, label);
-                if r.changed() {
-                    return (Some(Value::Bool(bb)), true);
+                if switch_button(ui, label, bb) {
+                    return (Some(Value::Bool(!bb)), true);
                 }
             }
         }
