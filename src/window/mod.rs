@@ -1011,10 +1011,19 @@ impl App {
                 self.note(LogLevel::Good, format!("Using HX Edit's effects list ({}).", dir.display()));
             }
             Some(crate::catalog::CatalogSource::Builtin { hx_edit_version }) => {
-                let msg = if chosen.is_some() {
-                    format!("That folder has no usable HX Edit files; using the list built into ToneStrand (HX Edit {hx_edit_version}).")
-                } else {
-                    format!("No newer HX Edit files found; using the list built into ToneStrand (HX Edit {hx_edit_version}).")
+                let msg = match builtin_reason(chosen.as_deref()) {
+                    BuiltinWhy::FolderHasNoFiles => {
+                        format!("That folder has no HX Edit files; using the list built into ToneStrand (HX Edit {hx_edit_version}).")
+                    }
+                    BuiltinWhy::FolderOlder => format!(
+                        "The list built into ToneStrand (HX Edit {hx_edit_version}) is newer than the one in that folder; using it."
+                    ),
+                    BuiltinWhy::NotInstalled => {
+                        format!("HX Edit not found; using the list built into ToneStrand (HX Edit {hx_edit_version}).")
+                    }
+                    BuiltinWhy::InstalledOlder => {
+                        format!("The list built into ToneStrand (HX Edit {hx_edit_version}) is newer than HX Edit's; using it.")
+                    }
                 };
                 self.note(LogLevel::Good, msg);
             }
@@ -2058,4 +2067,27 @@ fn side_section<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::U
         .inner;
     ui.add_space(6.0);
     r
+}
+
+/// Why the built-in effects list is in use instead of HX Edit's.
+pub(crate) enum BuiltinWhy {
+    FolderHasNoFiles,
+    FolderOlder,
+    NotInstalled,
+    InstalledOlder,
+}
+
+pub(crate) fn builtin_reason(custom: Option<&str>) -> BuiltinWhy {
+    match custom {
+        Some(f) => {
+            let dir = std::path::Path::new(f);
+            if dir.join("Helix.sym").is_file() || dir.join("res").join("Helix.sym").is_file() {
+                BuiltinWhy::FolderOlder
+            } else {
+                BuiltinWhy::FolderHasNoFiles
+            }
+        }
+        None if crate::catalog::find_dir(None).is_some() => BuiltinWhy::InstalledOlder,
+        None => BuiltinWhy::NotInstalled,
+    }
 }

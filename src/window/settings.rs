@@ -102,10 +102,16 @@ impl App {
                             let custom = self.settings.hx_edit.clone();
                             let text = match self.catalog.as_ref().map(|c| c.source()) {
                                 Some(crate::catalog::CatalogSource::HxEdit(dir)) => format!("From HX Edit ({})", dir.display()),
-                                Some(crate::catalog::CatalogSource::Builtin { hx_edit_version }) => match custom {
-                                    Some(p) => format!("Built into ToneStrand (HX Edit {hx_edit_version}). The folder {p} is not used: no usable HX Edit files there."),
-                                    None => format!("Built into ToneStrand (HX Edit {hx_edit_version})"),
-                                },
+                                Some(crate::catalog::CatalogSource::Builtin { hx_edit_version }) => {
+                                    use super::BuiltinWhy::*;
+                                    let base = format!("Built into ToneStrand (HX Edit {hx_edit_version})");
+                                    match (super::builtin_reason(custom.as_deref()), custom) {
+                                        (FolderHasNoFiles, Some(p)) => format!("{base}. The folder {p} is not used: no HX Edit files there."),
+                                        (FolderOlder, Some(p)) => format!("{base}. The folder {p} is not used: the built-in list is newer."),
+                                        (InstalledOlder, _) => format!("{base}. HX Edit's list is older."),
+                                        _ => format!("{base}. HX Edit not found."),
+                                    }
+                                }
                                 None => custom.unwrap_or_else(|| "Looking in the usual place".into()),
                             };
                             ui.label(RichText::new(text).small().color(muted()));

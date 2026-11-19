@@ -13,7 +13,8 @@ thread. Everything else is plain data structures edited in place every frame.
             │ window/    App: tabs of Doc { kind: Hlx(json) | Device(DevicePreset) }│
             │   ├─ editors/     chain + block panel + controllers (per Doc kind)    │
             │   ├─ chain.rs     signal-path diagram (cells, hits, line menu)        │
-            │   ├─ controllers.rs / snapshots.rs / units.rs   (.hlx editing)        │
+            │   ├─ controllers.rs   (.hlx and Command Center drawing)             │
+            │   │             (.hlx editing itself: core/ hlx, snapshots, units)  │
             │   ├─ library.rs / folders.rs / tonelib.rs        (files on disk)      │
             │   └─ theme.rs / icons.rs / modelinfo.rs / realnames.rs (look, data)   │
             └───────────────▲──────────────────────────────┬──────────────────────┘
