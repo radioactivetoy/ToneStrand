@@ -61,3 +61,7 @@ Android cloud backup must not copy it.
 
 - Emulator (x86_64, Android API 35 tablet): starts, shows the editor; Back then start again and Home then start again both show the editor (Back only backgrounded the app); after force-stop and after swipe-away from recents a fresh start shows the editor.
 - Real tablet: nothing yet.
+
+## Colours
+
+On the emulator (host GPU through the Android Emulator OpenGL ES Translator, NVIDIA) the theme colours come out exact, dark and light: `theme::panel()` #15161a reads #15161a, `card_bg()` #1b1d22 reads #1b1d22, and the light palette likewise (checked by screenshot). No eframe patch or framebuffer change was needed. The earlier spike's "too light" colours (#404248) were not reproduced. This is a GPU-path property (the sRGB write-control and EGL surface handling differ between GPU drivers), so **the real tablet must be checked too**: compare a flat panel pixel in a screenshot with #15161a. If it is lighter, the fix to try is disabling `GL_FRAMEBUFFER_SRGB_EXT` (where `EXT_sRGB_write_control` exists) before painting, or a linear EGL surface.
