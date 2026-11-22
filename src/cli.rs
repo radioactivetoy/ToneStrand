@@ -5,8 +5,9 @@ use crate::msgpack::Value;
 use crate::{backup, boxes, catalog, devpreset, hlx, msgpack, nam, proto, realnames, session, wire};
 
 /// The command-line tools (everything else opens the window).
-pub const CLI_FLAGS: [&str; 25] = [
+pub const CLI_FLAGS: [&str; 26] = [
     "--export-catalog",
+    "--export-focus",
     "--to-hlx",
     "--cc-live",
     "--put-slot",
@@ -437,6 +438,58 @@ pub fn export_catalog(res: &std::path::Path, out: &std::path::Path, version: &st
     Ok(dir)
 }
 
+/// Make `focus/<version>/` (the Focus mode tones, `focus.json.gz` and `meta.json`) from the folder Helix Stadium Native keeps them in.
+/// Refuses to touch a version that exists. `cat` is the effects list the parameter positions come from.
+pub fn export_focus(
+    src: &std::path::Path,
+    out: &std::path::Path,
+    version: &str,
+    cat: &catalog::Catalog,
+) -> Result<std::path::PathBuf, String> {
+    use tonestrand_core::focus::{FocusMeta, FocusSet, PACK_FORMAT};
+    if !catalog::version::is_version(version) {
+        return Err(format!("\"{version}\" is not a version name (numbers and dots, like 1.4.1)"));
+    }
+    let dir = out.join(version);
+    if dir.exists() {
+        return Err(format!("{} already exists; nothing was changed", dir.display()));
+    }
+    let (set, files_read) = FocusSet::resolve_folder(src, cat)?;
+    if set.models.is_empty() {
+        return Err(format!("{} holds no Focus mode tones the effects list knows", src.display()));
+    }
+    let pack = set.to_pack()?;
+    let catalog_name = match cat.source() {
+        catalog::CatalogSource::HxEdit(p) => format!("HX Edit files in {}", p.display()),
+        catalog::CatalogSource::Builtin { hx_edit_version } => format!("built-in list from HX Edit {hx_edit_version}"),
+    };
+    let created = crate::support::stamp(std::time::SystemTime::now()).chars().take(10).collect();
+    let r = &set.report;
+    let meta = FocusMeta {
+        format: PACK_FORMAT,
+        stadium_version: version.to_owned(),
+        created,
+        catalog: catalog_name,
+        files_read,
+        mapped: r.mapped,
+        stadium_only: r.stadium_only,
+        not_in_catalog: r.unmapped.len(),
+        params_left_out: r.skipped_params.len(),
+    };
+    let mut meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
+    meta_json.push('\n');
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
+    std::fs::create_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let written = crate::files::write_atomic(&dir.join("focus.json.gz"), &pack)
+        .map_err(|e| format!("focus.json.gz: {e}"))
+        .and_then(|_| crate::files::write_atomic(&dir.join("meta.json"), meta_json.as_bytes()).map_err(|e| format!("meta.json: {e}")));
+    if let Err(e) = written {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(e);
+    }
+    Ok(dir)
+}
+
 const HELP: &str = "\
 ToneStrand command-line tools. The first group only reads; the second WRITES to the pedal and is for testing.
 
@@ -458,6 +511,7 @@ Read and convert (nothing is written to a pedal):
   --fmt-check                       how a dual cab's knobs read at their edges
   --list-models                     every effect in the picker, with real-gear names
   --export-catalog <hx edit res folder> <catalogs folder> <version>  convert HX Edit's effects list into catalogs/<version>/ (writes files on this computer)
+  --export-focus <focus-view-xy-defaults folder> <focus folder> <version>  convert Helix Stadium Native's Focus mode tones into focus/<version>/ (writes files on this computer)
   --find-boxes                      look for ToneStrand Boxes for 6 seconds
   --screenshot <file.png>           open the window, save a picture of it and quit
 
@@ -489,6 +543,25 @@ pub fn run(args: &[String]) -> bool {
             std::process::exit(1);
         };
         match export_catalog(std::path::Path::new(res), std::path::Path::new(out), version) {
+            Ok(dir) => println!("wrote {}", dir.display()),
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        return true;
+    }
+    if let Some(i) = args.iter().position(|a| a == "--export-focus") {
+        let rest = &args[i + 1..];
+        let (Some(src), Some(out), Some(version)) = (rest.first(), rest.get(1), rest.get(2)) else {
+            eprintln!("usage: --export-focus <focus-view-xy-defaults folder> <focus folder> <Helix Stadium Native version, e.g. 1.4.1>");
+            std::process::exit(1);
+        };
+        let Some(cat) = catalog::load_best(boxes::Settings::load().hx_edit.as_deref()) else {
+            eprintln!("no effects list found (HX Edit's files or the built-in list)");
+            std::process::exit(1);
+        };
+        match export_focus(std::path::Path::new(src), std::path::Path::new(out), version, &cat) {
             Ok(dir) => println!("wrote {}", dir.display()),
             Err(e) => {
                 eprintln!("{e}");
@@ -995,6 +1068,31 @@ fn op_raw_tool(rest: &[String]) {
 mod tests {
     use super::*;
     use crate::catalog::{read_pack_meta, Catalog, PACK_FORMAT};
+
+    #[test]
+    fn export_focus_writes_pack_and_meta_and_refuses_overwrite() {
+        use tonestrand_core::focus::{FocusMeta, FocusSet};
+        let res = tonestrand_core::catalog::test_support::mini_hx_edit_dir();
+        let cat = Catalog::load(&res).unwrap();
+        let src = res.join("focus-view-xy-defaults");
+        std::fs::create_dir_all(src.join("amp")).unwrap();
+        std::fs::write(
+            src.join("amp").join("TS_TestAmp.json"),
+            r#"{"modelName": "Test Amp", "params": {"TS_Drive": {"id": 1, "behavior": "interpolate"}}, "regions": {"origin": {"name": "Home", "TS_Drive": 0.5}, "x_min_y_min": {"name": "A", "TS_Drive": 0.1}, "x_min_y_max": {"name": "B", "TS_Drive": 0.2}, "x_max_y_min": {"name": "C", "TS_Drive": 0.3}, "x_max_y_max": {"name": "D", "TS_Drive": 0.4}}}"#,
+        )
+        .unwrap();
+        let out = std::env::temp_dir().join(format!("tonestrand-export-focus-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&out);
+        let dir = export_focus(&src, &out, "9.9.9", &cat).unwrap();
+        let meta: FocusMeta = serde_json::from_str(&std::fs::read_to_string(dir.join("meta.json")).unwrap()).unwrap();
+        assert_eq!((meta.stadium_version.as_str(), meta.files_read, meta.mapped), ("9.9.9", 1, 1));
+        assert!(FocusSet::from_pack(&std::fs::read(dir.join("focus.json.gz")).unwrap()).unwrap().model_for("TS_TestAmp").is_some());
+        assert!(export_focus(&src, &out, "9.9.9", &cat).is_err(), "an existing version is not touched");
+        assert!(export_focus(&src, &out, "v9", &cat).is_err());
+        assert!(export_focus(&out.join("missing"), &out, "9.9.8", &cat).is_err());
+        assert!(!out.join("9.9.8").exists());
+        let _ = std::fs::remove_dir_all(&out);
+    }
 
     #[test]
     fn export_catalog_writes_pack_and_meta_and_refuses_overwrite() {

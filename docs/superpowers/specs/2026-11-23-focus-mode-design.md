@@ -118,3 +118,10 @@ Must be measured through the Box: how many parameter messages per second the ped
   outside the catalog's range (DL4 Analog Delay Time 2.038 against 2: held to 2 when evaluated). The compressed pack is about 75 KB.
   The real-file report is `TONESTRAND_FOCUS_FILE=<file> cargo test -p tonestrand-core focus::real_data -- --nocapture`.
 - Next: phase 2, the tool that makes the bundled pack (`catalogs/`-style folder embedded at build time) and the NOTICE line; then the UI.
+- **Phase 2 done (2026-11-23):** `FocusSet::resolve_folder` reads Helix Stadium Native's own `focus-view-xy-defaults` folder (one `.json` per
+  model file, so the data is reproducible from Line 6's files and not from a third-party extract); `tonestrand --export-focus <folder> focus <version>`
+  writes `focus/<version>/focus.json.gz` and `meta.json` (refuses an existing version, like `--export-catalog`); `core/build.rs` embeds the
+  newest one (`focus::builtin()`, `focus::load_builtin()`). Made from Stadium Native 1.4.1: 674 files read, 595 pads, 31 Stadium-only, 48 files
+  not in HX Edit 3.82's list, 18 parameters left out; the pack is 75 KB. Same numbers as the analysis JSON, so the two routes agree.
+  `focus/README.md` and a line in the main README's Line 6 notice. Tests: folder reader, export tool, and the bundled pack is well formed.
+- Next: phase 3, the pad in the editor (file editors first, no pedal needed).

@@ -162,6 +162,8 @@ supported by Line 6, Yamaha Guitar Group, or the makers of the Helrig Box.
   release notes.
 - **Effects lists** (`catalogs/`): effect names, knob names and ranges, and categories, converted
   from HX Edit's resource files into one compressed file per HX Edit version.
+- **Focus mode tones** (`focus/`): each effect's five named tones and their values, from Helix Stadium Native's `focus-view-xy-defaults`,
+  converted into one compressed file per Helix Stadium Native version and matched to the pedal's effects.
 - **Effect-type icons** (`assets/block Images/`) are Line 6 artwork from HX Edit / Helix Stadium.
 
 This material is © Yamaha Guitar Group, Inc. (Line 6) and remains theirs. It is included free of

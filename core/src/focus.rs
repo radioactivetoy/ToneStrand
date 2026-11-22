@@ -19,6 +19,28 @@ use crate::catalog::Catalog;
 /// The pack layout this build writes and reads.
 pub const PACK_FORMAT: u32 = 1;
 
+mod embedded {
+    include!(concat!(env!("OUT_DIR"), "/builtin_focus.rs"));
+}
+
+/// The tones built into ToneStrand: (Helix Stadium Native version they were made from, pack bytes). The newest folder in
+/// `focus/` at build time; `None` when there was none.
+pub fn builtin() -> Option<(&'static str, &'static [u8])> {
+    embedded::BUILTIN
+}
+
+/// The built-in tones, or `None` (logged) when they are missing or unreadable.
+pub fn load_builtin() -> Option<FocusSet> {
+    let (_, bytes) = builtin()?;
+    match FocusSet::from_pack(bytes) {
+        Ok(set) => Some(set),
+        Err(e) => {
+            eprintln!("the built-in Focus mode tones could not be read: {e}");
+            None
+        }
+    }
+}
+
 /// The five tones, in the order used by weights and regions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RegionKey {
@@ -130,6 +152,22 @@ pub struct Region {
     pub values: Vec<f64>,
 }
 
+/// What is known about a pack besides its contents (kept next to it as JSON).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FocusMeta {
+    pub format: u32,
+    /// The Helix Stadium Native version the tones come from.
+    pub stadium_version: String,
+    pub created: String,
+    /// Which effects list the parameter positions were taken from (HX Edit's files or the built-in list).
+    pub catalog: String,
+    pub files_read: usize,
+    pub mapped: usize,
+    pub stadium_only: usize,
+    pub not_in_catalog: usize,
+    pub params_left_out: usize,
+}
+
 /// A value to give a parameter.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FocusValue {
@@ -237,33 +275,70 @@ impl FocusSet {
         for (_, list) in categories {
             let Some(list) = list.as_array() else { continue };
             for m in list {
-                set.report.models += 1;
-                let name = m.get("modelName").and_then(Json::as_str).unwrap_or("").to_owned();
                 let files: Vec<&str> =
                     m.get("files").and_then(Json::as_array).map(|a| a.iter().filter_map(Json::as_str).collect()).unwrap_or_default();
-                if files.iter().any(|f| f.contains("Agoura")) {
-                    set.report.stadium_only += 1;
-                    continue;
-                }
-                let mut found = false;
-                for file in &files {
-                    let Some(symbol) =
-                        ["HD2_", "L6SPB_", ""].iter().map(|p| format!("{p}{file}")).find(|s| cat.sym.iter().any(|e| &e.symbol == s))
-                    else {
-                        continue;
-                    };
-                    if let Some(model) = build_model(m, &name, &symbol, cat, &mut set.report) {
-                        set.models.insert(symbol, model);
-                        found = true;
-                    }
-                }
-                if !found {
-                    set.report.unmapped.push(format!("{name} [{}]", files.join(", ")));
-                }
+                set.add_model(m, &files, cat);
             }
         }
         set.report.mapped = set.models.len();
         Ok(set)
+    }
+
+    /// Read the folder Helix Stadium Native keeps its tones in (`.../res/meta-data/focus-view-xy-defaults`: one folder per category,
+    /// one `<File>.json` per model file) and map it like [`FocusSet::resolve`]. The file's name is the symbol without `HD2_` or
+    /// `L6SPB_`. Returns the set and how many files were read.
+    pub fn resolve_folder(root: &std::path::Path, cat: &Catalog) -> Result<(FocusSet, usize), String> {
+        let mut set = FocusSet::default();
+        let mut read = 0;
+        let mut categories: Vec<_> = std::fs::read_dir(root).map_err(|e| format!("{}: {e}", root.display()))?.flatten().collect();
+        categories.sort_by_key(|e| e.file_name());
+        for dir in categories.into_iter().filter(|e| e.path().is_dir()) {
+            let mut files: Vec<_> =
+                std::fs::read_dir(dir.path()).map_err(|e| format!("{}: {e}", dir.path().display()))?.flatten().collect();
+            files.sort_by_key(|e| e.file_name());
+            for f in files {
+                let path = f.path();
+                let Some(stem) =
+                    path.file_stem().and_then(|s| s.to_str()).filter(|_| path.extension().and_then(|e| e.to_str()) == Some("json"))
+                else {
+                    continue;
+                };
+                let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let mut m: Json =
+                    serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("{}: {e}", path.display()))?;
+                if let Some(obj) = m.as_object_mut() {
+                    obj.insert("category".into(), Json::String(dir.file_name().to_string_lossy().into_owned()));
+                }
+                set.add_model(&m, &[stem], cat);
+                read += 1;
+            }
+        }
+        set.report.mapped = set.models.len();
+        Ok((set, read))
+    }
+
+    /// One model of the file, with the model files it covers: counted, and kept when the catalog knows a symbol for one of the files.
+    fn add_model(&mut self, m: &Json, files: &[&str], cat: &Catalog) {
+        self.report.models += 1;
+        let name = m.get("modelName").and_then(Json::as_str).unwrap_or("").to_owned();
+        if files.iter().any(|f| f.contains("Agoura")) {
+            self.report.stadium_only += 1;
+            return;
+        }
+        let mut found = false;
+        for file in files {
+            let Some(symbol) = ["HD2_", "L6SPB_", ""].iter().map(|p| format!("{p}{file}")).find(|s| cat.sym.iter().any(|e| &e.symbol == s))
+            else {
+                continue;
+            };
+            if let Some(model) = build_model(m, &name, &symbol, cat, &mut self.report) {
+                self.models.insert(symbol, model);
+                found = true;
+            }
+        }
+        if !found {
+            self.report.unmapped.push(format!("{name} [{}]", files.join(", ")));
+        }
     }
 
     /// The set as pack bytes (gzip of one JSON document; the same set gives the same bytes). The report is not kept.
@@ -555,5 +630,70 @@ mod real_data {
         let pack = set.to_pack().unwrap();
         println!("pack: {} bytes", pack.len());
         assert!(FocusSet::from_pack(&pack).unwrap().models == set.models);
+    }
+}
+
+#[cfg(test)]
+mod folder_tests {
+    use super::*;
+    use crate::catalog::test_support::mini_hx_edit_dir;
+
+    /// A made-up Stadium folder: `amp/TS_TestAmp.json`, `amp/AgouraThing.json` and a note that is not a model.
+    pub fn stadium_folder() -> std::path::PathBuf {
+        let dir = mini_hx_edit_dir().join("focus-view-xy-defaults");
+        std::fs::create_dir_all(dir.join("amp")).unwrap();
+        std::fs::write(
+            dir.join("amp").join("TS_TestAmp.json"),
+            "\u{feff}{\"modelName\": \"Test Amp\", \"params\": {\"TS_Drive\": {\"id\": 1, \"behavior\": \"interpolate\"}}, \"regions\": {\
+             \"origin\": {\"name\": \"Home\", \"TS_Drive\": 0.5}, \"x_min_y_min\": {\"name\": \"A\", \"TS_Drive\": 0.1}, \"x_min_y_max\": {\"name\": \"B\", \"TS_Drive\": 0.2},\
+             \"x_max_y_min\": {\"name\": \"C\", \"TS_Drive\": 0.3}, \"x_max_y_max\": {\"name\": \"D\", \"TS_Drive\": 0.4}}}",
+        )
+        .unwrap();
+        std::fs::write(dir.join("amp").join("AgouraThing.json"), "{\"modelName\": \"Thing\", \"params\": {}, \"regions\": {}}").unwrap();
+        std::fs::write(dir.join("amp").join("notes.txt"), "not a model").unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_stadium_folder_is_read_file_by_file() {
+        let cat = Catalog::load(&mini_hx_edit_dir()).unwrap();
+        let (set, read) = FocusSet::resolve_folder(&stadium_folder(), &cat).unwrap();
+        assert_eq!(read, 2, "the two .json files, not the note");
+        assert_eq!(set.report.stadium_only, 1);
+        let m = set.model_for("TS_TestAmp").unwrap();
+        assert_eq!(m.category, "amp");
+        assert_eq!(m.region_name(RegionKey::BottomRight), "C");
+        assert!(FocusSet::resolve_folder(&std::env::temp_dir().join("no-such-focus-folder"), &cat).is_err());
+    }
+}
+
+#[cfg(test)]
+mod builtin_tests {
+    use super::*;
+
+    /// The tones built into the program hang together: five regions, a value per parameter in each, no two parameters in one place.
+    #[test]
+    fn the_built_in_tones_are_well_formed() {
+        let Some((version, _)) = builtin() else { return }; // a build with no focus/ folder
+        let set = load_builtin().unwrap_or_else(|| panic!("the built-in tones ({version}) could not be read"));
+        assert!(set.models.len() > 400, "{} models", set.models.len());
+        for (symbol, m) in &set.models {
+            assert_eq!(m.regions.len(), 5, "{symbol}");
+            assert!(!m.params.is_empty(), "{symbol}");
+            for r in &m.regions {
+                assert_eq!(r.values.len(), m.params.len(), "{symbol} {}", r.name);
+                assert!(!r.name.is_empty(), "{symbol} has a tone with no name");
+                assert!(r.values.iter().all(|v| v.is_finite()), "{symbol}");
+            }
+            let mut idx: Vec<usize> = m.params.iter().map(|p| p.index).collect();
+            idx.sort_unstable();
+            idx.dedup();
+            assert_eq!(idx.len(), m.params.len(), "{symbol}: two parameters in one place");
+            // The centre and the corners come back exactly.
+            for key in RegionKey::ALL {
+                let (x, y) = key.at();
+                assert_eq!(m.evaluate(x, y).len(), m.params.len(), "{symbol}");
+            }
+        }
     }
 }
