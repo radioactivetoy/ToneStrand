@@ -25,4 +25,4 @@ $adb = "$sdk\platform-tools\adb.exe"
 if (& $adb -s $Device shell pm list packages com.tonestrand.spike) { & $adb -s $Device uninstall com.tonestrand.spike | Out-Null }
 & $adb -s $Device install -r $apk
 if ($LASTEXITCODE) { throw 'install failed' }
-& $adb -s $Device shell am start -n com.tonestrand.app/com.google.androidgamesdk.GameActivity
+& $adb -s $Device shell am start -n com.tonestrand.app/com.tonestrand.app.MainActivity

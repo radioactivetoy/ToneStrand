@@ -35,6 +35,8 @@ pub struct Entry {
 pub enum Action {
     /// Send these files to the pedal's IR slots.
     SendToPedal(Vec<PathBuf>),
+    /// Pick .wav IRs and .nam captures to copy into the library.
+    Import,
     /// Something was written: tell the person.
     Note(bool, String),
 }
@@ -201,7 +203,7 @@ impl ToneLib {
                     }
                 }
                 ui.add_space(10.0);
-                if ui.small_button("📁 Show library folder").clicked() {
+                if !cfg!(target_os = "android") && ui.small_button("📁 Show library folder").clicked() {
                     folders::open_in_explorer(&self.root);
                 }
             });
@@ -230,13 +232,7 @@ impl ToneLib {
                 ui.horizontal_wrapped(|ui| {
                     theme::search_box(ui, &mut self.search, "Search IRs and captures", 220.0);
                     if ui.button("Import files...").on_hover_text("Copy .wav IRs and .nam captures into the selected folder").clicked() {
-                        if let Some(files) = crate::platform::FileDialog::new().add_filter("IRs and NAM captures", &["wav", "nam"]).pick_files() {
-                            let dir = self.folder();
-                            let _ = std::fs::create_dir_all(&dir);
-                            let n = files.iter().filter(|f| crate::files::copy_into(f, &dir).is_ok()).count();
-                            actions.push(Action::Note(true, format!("Imported {n} file{}", if n == 1 { "" } else { "s" })));
-                            rescan = true;
-                        }
+                        actions.push(Action::Import);
                     }
                     let to_convert: Vec<Entry> = if picked.iter().any(|e| e.kind == Kind::Nam) { picked.iter().filter(|e| e.kind == Kind::Nam).cloned().collect() } else { unconverted.clone() };
                     let label = if picked.iter().any(|e| e.kind == Kind::Nam) { format!("Convert selected ({})", to_convert.len()) } else { format!("Convert all not converted ({})", to_convert.len()) };
@@ -322,7 +318,7 @@ impl ToneLib {
                             }
                         }
                         theme::row_menu(&r, |ui| {
-                            if ui.button("Show in Explorer").clicked() {
+                            if !cfg!(target_os = "android") && ui.button("Show in Explorer").clicked() {
                                 folders::open_in_explorer(e.path.parent().unwrap_or(&self.root));
                                 ui.close_menu();
                             }

@@ -47,6 +47,100 @@ pub fn copy_into(from: &Path, dir: &Path) -> std::io::Result<PathBuf> {
     Ok(to)
 }
 
+/// What a copy did: files copied, and the entries that could not be (with why).
+#[derive(Debug, Default)]
+pub struct CopyReport {
+    pub copied: usize,
+    pub failed: Vec<(PathBuf, String)>,
+}
+
+/// Temporary names used while copying: `.<name>.tonestrand-copy`.
+fn is_copy_temp(name: &std::ffi::OsStr) -> bool {
+    let n = name.to_string_lossy();
+    n.starts_with('.') && n.ends_with(".tonestrand-copy")
+}
+
+/// Copy every file under `from` whose relative path does not exist under `to`, creating folders;
+/// never overwrites. Returns how many files were copied (the first failure is an error).
+pub fn copy_missing(from: &Path, to: &Path) -> std::io::Result<usize> {
+    let r = copy_missing_report(from, to, &|_| false);
+    match r.failed.into_iter().next() {
+        Some((p, why)) => Err(std::io::Error::other(format!("{}: {why}", p.display()))),
+        None => Ok(r.copied),
+    }
+}
+
+/// Like `copy_missing`, but a bad entry is reported and the rest still copies; every path for
+/// which `skip` is true is left out. Each file goes to a temporary name next to its destination
+/// and is renamed into place only if the final name is still free, so a half copy is never
+/// taken for a file and nothing is replaced.
+pub fn copy_missing_report(from: &Path, to: &Path, skip: &dyn Fn(&Path) -> bool) -> CopyReport {
+    let mut rep = CopyReport::default();
+    let rd = match std::fs::read_dir(from) {
+        Ok(rd) => rd,
+        Err(e) => {
+            rep.failed.push((from.to_path_buf(), e.to_string()));
+            return rep;
+        }
+    };
+    for e in rd.flatten() {
+        let src = e.path();
+        if skip(&src) || is_copy_temp(&e.file_name()) {
+            continue;
+        }
+        let dst = to.join(e.file_name());
+        let Ok(kind) = e.file_type() else { continue };
+        if kind.is_dir() {
+            let sub = copy_missing_report(&src, &dst, skip);
+            rep.copied += sub.copied;
+            rep.failed.extend(sub.failed);
+        } else if kind.is_file() {
+            if dst.is_dir() {
+                rep.failed.push((src, "a folder is in the way at the destination".into()));
+            } else if !dst.exists() {
+                match copy_one(&src, &dst) {
+                    Ok(true) => rep.copied += 1,
+                    Ok(false) => {}
+                    Err(err) => rep.failed.push((src, err.to_string())),
+                }
+            }
+        }
+    }
+    rep
+}
+
+fn copy_one(src: &Path, dst: &Path) -> std::io::Result<bool> {
+    let dir = dst.parent().unwrap_or(Path::new("."));
+    std::fs::create_dir_all(dir)?;
+    let name = dst.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let tmp = dir.join(format!(".{name}.tonestrand-copy"));
+    let _ = std::fs::remove_file(&tmp);
+    let result = (|| {
+        std::fs::copy(src, &tmp)?;
+        // A hard link fails when the name is taken, so a file created meanwhile is never replaced.
+        match std::fs::hard_link(&tmp, dst) {
+            Ok(()) => {
+                let _ = std::fs::remove_file(&tmp);
+                Ok(true)
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+            Err(_) => {
+                // No hard links here (some shared storage). Residual race: a file created between
+                // this check and the rename would be replaced; the window is tiny.
+                if dst.exists() {
+                    return Ok(false);
+                }
+                std::fs::rename(&tmp, dst)?;
+                Ok(true)
+            }
+        }
+    })();
+    if !matches!(result, Ok(true)) {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
+}
+
 /// Unix seconds as (year, month, day, hour, minute) in UTC.
 pub fn civil(secs: u64) -> (i64, u32, u32, u32, u32) {
     let days = (secs / 86_400) as i64;
@@ -159,6 +253,78 @@ mod tests {
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
+    }
+
+    #[test]
+    fn copy_missing_never_overwrites() {
+        let d = scratch("copy-a");
+        let (from, to) = (d.join("from"), d.join("to"));
+        std::fs::create_dir_all(from.join("sub")).unwrap();
+        std::fs::create_dir_all(&to).unwrap();
+        std::fs::write(from.join("a.txt"), "new").unwrap();
+        std::fs::write(from.join("sub/b.txt"), "b").unwrap();
+        std::fs::write(to.join("a.txt"), "old").unwrap();
+        assert_eq!(copy_missing(&from, &to).unwrap(), 1);
+        assert_eq!(std::fs::read_to_string(to.join("a.txt")).unwrap(), "old");
+        assert!(to.join("sub/b.txt").exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn copy_missing_twice_copies_nothing_more() {
+        let d = scratch("copy-b");
+        let (from, to) = (d.join("from"), d.join("to"));
+        std::fs::create_dir_all(from.join("sub")).unwrap();
+        std::fs::write(from.join("a.txt"), "a").unwrap();
+        std::fs::write(from.join("sub/b.txt"), "b").unwrap();
+        assert_eq!(copy_missing(&from, &to).unwrap(), 2);
+        assert_eq!(copy_missing(&from, &to).unwrap(), 0);
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn copy_missing_skips_what_it_is_told() {
+        let d = scratch("copy-c");
+        let (from, to) = (d.join("from"), d.join("to"));
+        std::fs::create_dir_all(from.join("cache")).unwrap();
+        std::fs::write(from.join("cache/x.txt"), "x").unwrap();
+        std::fs::write(from.join("a.txt"), "a").unwrap();
+        assert_eq!(copy_missing_report(&from, &to, &|p| p.ends_with("cache")).copied, 1);
+        assert!(!to.join("cache").exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn stale_temp_file_does_not_stop_the_copy() {
+        let d = scratch("copy-d");
+        let (from, to) = (d.join("from"), d.join("to"));
+        std::fs::create_dir_all(&from).unwrap();
+        std::fs::create_dir_all(&to).unwrap();
+        std::fs::write(from.join("a.txt"), "real").unwrap();
+        std::fs::write(from.join(".old.txt.tonestrand-copy"), "junk").unwrap();
+        std::fs::write(to.join(".a.txt.tonestrand-copy"), "half").unwrap();
+        let r = copy_missing_report(&from, &to, &|_| false);
+        assert_eq!((r.copied, r.failed.len()), (1, 0));
+        assert_eq!(std::fs::read_to_string(to.join("a.txt")).unwrap(), "real");
+        assert!(!to.join(".a.txt.tonestrand-copy").exists());
+        assert!(!to.join(".old.txt.tonestrand-copy").exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn a_bad_entry_is_reported_and_the_rest_copies() {
+        let d = scratch("copy-e");
+        let (from, to) = (d.join("from"), d.join("to"));
+        std::fs::create_dir_all(&from).unwrap();
+        std::fs::create_dir_all(to.join("a.txt")).unwrap(); // a folder where a file should go
+        std::fs::write(from.join("a.txt"), "a").unwrap();
+        std::fs::write(from.join("b.txt"), "b").unwrap();
+        let r = copy_missing_report(&from, &to, &|_| false);
+        assert_eq!(r.copied, 1);
+        assert_eq!(r.failed.len(), 1);
+        assert!(r.failed[0].0.ends_with("a.txt"));
+        assert!(to.join("b.txt").exists());
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]

@@ -26,6 +26,7 @@ mod compare_window;
 mod connection;
 mod irs;
 mod library_page;
+mod picks;
 mod refresh;
 mod restore_all;
 mod settings;
@@ -65,7 +66,14 @@ enum Origin {
     File,
 }
 
+/// A tab's number that stays the same while other tabs open and close.
+fn next_doc_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
 struct Doc {
+    id: u64,
     title: String,
     /// The preset's name on the pedal, for device documents.
     name: String,
@@ -95,7 +103,8 @@ impl Doc {
 
 /// What is waiting for "save your changes?" to be answered.
 enum CloseAsk {
-    Tab(usize),
+    /// A tab, by its `Doc::id`.
+    Tab(u64),
     Quit,
 }
 
@@ -235,6 +244,46 @@ pub struct App {
     user_disconnected: bool,
     /// "Not now" was clicked on the card that explains HX Edit is missing.
     catalog_card_hidden: bool,
+    /// File dialogs in progress, by request id (`platform::FileDialog`), and what each is for.
+    pending: std::collections::HashMap<u64, picks::Pick>,
+    /// Where a save dialog said to write, until the platform has delivered the file.
+    saved_to: std::collections::HashMap<u64, PathBuf>,
+    /// A close or quit waiting for a save dialog to finish.
+    after_save: Option<CloseAsk>,
+    /// Ask the window to close at the end of this frame (after a save that was needed to quit).
+    close_requested: bool,
+    /// Android: the whole-pedal backups to choose from, when that list is open.
+    restore_all_folders: Option<Vec<PathBuf>>,
+    /// Android: the app's private library folder (None on the desktop).
+    private_library: Option<PathBuf>,
+    /// Android: the background copy into the shared folder, while it runs.
+    copy_job: Option<Receiver<crate::files::CopyReport>>,
+    /// Android: the shared folder a copy was started for.
+    copied_for: Option<PathBuf>,
+    /// Android: a shared folder that failed its write test.
+    shared_failed: Option<PathBuf>,
+    /// `platform::storage_epoch()` last seen by `follow_storage`.
+    storage_epoch: u64,
+    /// Android: the shared folder last used (its backups stay listed on the private library).
+    last_shared: Option<PathBuf>,
+}
+
+/// Make sure a folder exists and can be written: a small file is written and removed.
+fn check_writable(dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dir)?;
+    let t = dir.join(".tonestrand-write-test");
+    std::fs::write(&t, b"x")?;
+    std::fs::remove_file(&t)
+}
+
+/// Which library folder to use for the storage state, and whether to warn that backups are only
+/// kept inside the app.
+pub(super) fn library_for(storage: &crate::platform::Storage, private: &Path) -> (PathBuf, bool) {
+    match storage {
+        crate::platform::Storage::Shared(d) => (d.clone(), false),
+        crate::platform::Storage::Unknown => (private.to_path_buf(), false),
+        _ => (private.to_path_buf(), true),
+    }
 }
 
 /// The hidden Tests page (Ctrl+Shift+T).
@@ -350,10 +399,22 @@ impl App {
             reconnect: None,
             user_disconnected: false,
             catalog_card_hidden: false,
+            pending: std::collections::HashMap::new(),
+            saved_to: std::collections::HashMap::new(),
+            after_save: None,
+            close_requested: false,
+            restore_all_folders: None,
+            private_library: std::env::var_os("TONESTRAND_LIBRARY_PRIVATE").map(PathBuf::from),
+            copy_job: None,
+            copied_for: None,
+            shared_failed: None,
+            storage_epoch: 0,
+            last_shared: None,
         };
         app.catalog = crate::catalog::load_best(app.settings.hx_edit.as_deref()).map(Arc::new);
         app.catalog_why = catalog_why(app.catalog.as_deref(), app.settings.hx_edit.as_deref());
         app.lib = Library::new(app.library_dir.clone());
+        app.last_shared = app.private_library.as_ref().filter(|p| **p != app.library_dir).map(|_| app.library_dir.clone());
         app.unit = app.settings.unit.unwrap_or(2162694);
         // Start for a given unit (used to check pictures for each pedal).
         if let Some(u) = std::env::var("TONESTRAND_UNIT").ok().and_then(|v| v.parse::<i64>().ok()) {
@@ -374,6 +435,7 @@ impl App {
         }
         if open_sample {
             app.docs.push(Doc {
+                id: next_doc_id(),
                 title: "Sample Tone".into(),
                 name: String::new(),
                 path: None,
@@ -401,7 +463,7 @@ impl App {
                 app.irs_local = true;
                 app.scan_tones();
             }
-            Ok("tests") => app.view = View::Tests,
+            Ok("tests") if !cfg!(target_os = "android") => app.view = View::Tests,
             Ok("open") => {
                 // For checks: open a preset file at start (TONESTRAND_OPEN).
                 if let Some(p) = std::env::var_os("TONESTRAND_OPEN") {
@@ -494,6 +556,127 @@ impl App {
         self.library_dir.join("Pedal backups")
     }
 
+    /// The folders holding pedal backups: the library's first, then the private one and the last
+    /// shared one when they are other folders that exist.
+    pub(super) fn backup_dirs(&self) -> Vec<PathBuf> {
+        let mut dirs = vec![self.backup_dir()];
+        for base in self.private_library.iter().chain(self.last_shared.iter()) {
+            let d = base.join("Pedal backups");
+            if !dirs.contains(&d) && std::fs::read_dir(&d).is_ok() {
+                dirs.push(d);
+            }
+        }
+        dirs
+    }
+
+    /// The storage state, except that a shared folder that failed its write test counts as refused.
+    pub(super) fn effective_storage(&self) -> crate::platform::Storage {
+        use crate::platform::Storage;
+        match crate::platform::storage() {
+            Storage::Shared(d) if self.shared_failed.as_ref() == Some(&d) => Storage::Refused,
+            s => s,
+        }
+    }
+
+    /// Android: whether backups are only kept inside the app (no shared folder).
+    pub(super) fn storage_warning(&self) -> bool {
+        cfg!(target_os = "android") && self.private_library.as_ref().is_some_and(|p| library_for(&self.effective_storage(), p).1)
+    }
+
+    /// Android, at the start of a frame: follow the storage state. A usable shared folder gets a
+    /// background copy of what it lacks and becomes the library at once; when it goes away, back
+    /// to the private one.
+    fn follow_storage(&mut self, ctx: &egui::Context) {
+        use crate::platform::Storage;
+        let Some(private) = self.private_library.clone() else { return };
+        self.poll_copy(ctx);
+        let live = crate::platform::storage();
+        if live == Storage::Unknown {
+            return;
+        }
+        // Any storage report (also the same value again, after a permission answer) earns the
+        // shared folder another write test.
+        let epoch = crate::platform::storage_epoch();
+        if epoch != self.storage_epoch {
+            self.storage_epoch = epoch;
+            self.shared_failed = None;
+        }
+        if !matches!(live, Storage::Shared(_)) {
+            // Regaining the shared folder copies again.
+            self.copied_for = None;
+        }
+        if let Storage::Shared(d) = self.effective_storage() {
+            if self.copied_for.as_ref() != Some(&d) {
+                if self.copy_job.is_some() {
+                    return;
+                }
+                match check_writable(&d) {
+                    Ok(()) => {
+                        self.copied_for = Some(d.clone());
+                        self.last_shared = Some(d.clone());
+                        let (tx, rx) = channel();
+                        let from = private.clone();
+                        std::thread::spawn(move || {
+                            let _ = tx.send(crate::files::copy_missing_report(&from, &d, &crate::platform::is_cache_path));
+                        });
+                        self.copy_job = Some(rx);
+                    }
+                    Err(e) => {
+                        self.note(LogLevel::Bad, format!("Cannot use {}: {e}", d.display()));
+                        self.shared_failed = Some(d);
+                    }
+                }
+            }
+        }
+        let (dir, _) = library_for(&self.effective_storage(), &private);
+        if dir != self.library_dir {
+            self.library_dir = dir.clone();
+            self.lib = Library::new(dir);
+            self.scan_library();
+            self.scan_tones();
+        }
+    }
+
+    /// Collect the background copy into the shared folder, when it is done.
+    fn poll_copy(&mut self, ctx: &egui::Context) {
+        use std::sync::mpsc::TryRecvError;
+        let Some(rx) = &self.copy_job else { return };
+        match rx.try_recv() {
+            Ok(rep) => {
+                self.copy_job = None;
+                if rep.copied > 0 {
+                    self.note(LogLevel::Good, format!("Copied {} files into Documents/ToneStrand", rep.copied));
+                }
+                if !rep.failed.is_empty() {
+                    self.note(LogLevel::Bad, format!("Could not copy {} files", rep.failed.len()));
+                    for (p, why) in rep.failed.iter().take(20) {
+                        self.note(LogLevel::Info, format!("{}: {why}", p.display()));
+                    }
+                }
+                self.scan_library();
+                self.scan_tones();
+            }
+            Err(TryRecvError::Empty) => ctx.request_repaint_after(std::time::Duration::from_millis(300)),
+            Err(TryRecvError::Disconnected) => {
+                self.copy_job = None;
+                self.note(LogLevel::Bad, "Copying into Documents/ToneStrand stopped unexpectedly");
+                self.scan_library();
+                self.scan_tones();
+            }
+        }
+    }
+
+    /// The warning card with its button (Android, no shared folder).
+    pub(super) fn storage_card(&self, ui: &mut egui::Ui) {
+        theme::card(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label("Backups are only kept inside the app and are lost if it is uninstalled. Allow storage access to keep them in Documents/ToneStrand.");
+            if ui.add(egui::Button::new("Allow storage access").min_size(egui::vec2(0.0, 32.0))).clicked() {
+                crate::platform::request_storage_permission();
+            }
+        });
+    }
+
     fn scan_library(&mut self) {
         let cat = self.catalog.clone();
         self.lib.skip = vec![self.tone_dir(), self.library_dir.join("Self-test backups")];
@@ -545,9 +728,11 @@ impl App {
             }
         };
         self.docs.push(Doc {
+            id: next_doc_id(),
             title,
             name,
-            path: Some(path.to_owned()),
+            // A temporary copy (Android's picker) has no file of its own to save back to.
+            path: Some(path.to_owned()).filter(|p| picks::rememberable(p)),
             kind,
             dirty: false,
             selected: None,
@@ -577,7 +762,7 @@ impl App {
 
     /// Put a file at the top of the recent list (at most 10, no repeats).
     fn remember_recent(&mut self, path: &Path) {
-        if self.screenshot.is_some() {
+        if self.screenshot.is_some() || !picks::rememberable(path) {
             return;
         }
         let p = path.to_string_lossy().into_owned();
@@ -590,25 +775,33 @@ impl App {
     /// The saved preset files that are open now, for "reopen last session's tabs". Live and
     /// pedal-slot documents have no file and are left out.
     fn open_file_paths(&self) -> Vec<String> {
-        self.docs.iter().filter_map(|d| d.path.as_ref()).map(|p| p.to_string_lossy().into_owned()).collect()
+        self.docs
+            .iter()
+            .filter_map(|d| d.path.as_ref())
+            .filter(|p| picks::rememberable(p))
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect()
     }
 
     fn save_doc(&mut self, i: usize, save_as: bool) {
         let lib = self.library_dir.clone();
         let Some(doc) = self.docs.get_mut(i) else { return };
+        let doc_id = doc.id;
         let (ext, bytes) = (doc.kind.doc().file_ext(), doc.kind.doc().encode());
-        let path = if save_as || doc.path.is_none() {
-            let _ = std::fs::create_dir_all(&lib);
-            let base = if doc.name.is_empty() { doc.title.clone() } else { doc.name.clone() };
-            crate::platform::FileDialog::new()
-                .set_directory(&lib)
-                .set_file_name(format!("{}.{ext}", device::sanitize(&base)))
-                .add_filter("Preset", &[ext])
-                .save_file()
-        } else {
-            doc.path.clone()
+        let path = match doc.path.clone().filter(|_| !save_as) {
+            Some(path) => path,
+            None => {
+                // Where to save is asked first; the file is written when the answer comes (picks.rs).
+                let _ = std::fs::create_dir_all(&lib);
+                let base = if doc.name.is_empty() { doc.title.clone() } else { doc.name.clone() };
+                let id = crate::platform::FileDialog::new()
+                    .set_directory(&lib)
+                    .set_file_name(format!("{}.{ext}", device::sanitize(&base)))
+                    .add_filter("Preset", &[ext])
+                    .save_file();
+                return self.start_pick(id, picks::Pick::SaveAs(doc_id, bytes));
+            }
         };
-        let Some(path) = path else { return };
         match crate::files::write_atomic(&path, &bytes) {
             Ok(_) => {
                 doc.path = Some(path.clone());
@@ -903,8 +1096,8 @@ impl App {
 
     /// Close a tab, asking first when it has changes that aren't saved.
     fn request_close_tab(&mut self, i: usize) {
-        if self.docs.get(i).is_some_and(Doc::needs_save) {
-            self.close_ask = Some(CloseAsk::Tab(i));
+        if let Some(d) = self.docs.get(i).filter(|d| d.needs_save()) {
+            self.close_ask = Some(CloseAsk::Tab(d.id));
         } else {
             self.close_tab(i);
         }
@@ -937,10 +1130,11 @@ impl App {
         let Some(ask) = self.close_ask.take() else { return };
         let unsaved: Vec<usize> = (0..self.docs.len()).filter(|&i| self.docs[i].needs_save()).collect();
         let (text, title) = match &ask {
-            CloseAsk::Tab(i) => match self.docs.get(*i) {
-                Some(d) if d.needs_save() => (format!("\"{}\" has changes that aren't saved.", d.title), "Close preset"),
-                // Saved or gone since: nothing to ask.
-                _ => return self.close_tab(*i),
+            CloseAsk::Tab(id) => match picks::doc_index(&self.docs, *id).map(|i| (i, &self.docs[i])) {
+                Some((_, d)) if d.needs_save() => (format!("\"{}\" has changes that aren't saved.", d.title), "Close preset"),
+                // Saved since: nothing to ask. Gone: nothing to close.
+                Some((i, _)) => return self.close_tab(i),
+                None => return,
             },
             CloseAsk::Quit => {
                 if unsaved.is_empty() {
@@ -976,23 +1170,23 @@ impl App {
         match (choice, ask) {
             (None, ask) => self.close_ask = Some(ask),
             (Some(2), _) => {}
-            (Some(0), CloseAsk::Tab(i)) => {
+            (Some(0), CloseAsk::Tab(id)) => {
+                let Some(i) = picks::doc_index(&self.docs, id) else { return };
                 self.save_doc(i, false);
-                // Still unsaved means the save was cancelled or failed: keep the tab.
                 if !self.docs.get(i).is_some_and(Doc::needs_save) {
+                    self.close_tab(i);
+                } else if self.pending.values().any(|p| matches!(p, picks::Pick::SaveAs(t, _) if *t == id)) {
+                    // Asking where to save: the tab closes when that is done.
+                    self.after_save = Some(CloseAsk::Tab(id));
+                }
+                // Otherwise the save failed: keep the tab.
+            }
+            (Some(_), CloseAsk::Tab(id)) => {
+                if let Some(i) = picks::doc_index(&self.docs, id) {
                     self.close_tab(i);
                 }
             }
-            (Some(_), CloseAsk::Tab(i)) => self.close_tab(i),
-            (Some(0), CloseAsk::Quit) => {
-                for &i in &unsaved {
-                    self.save_doc(i, false);
-                }
-                if !self.docs.iter().any(Doc::needs_save) {
-                    self.quit_ok = true;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                }
-            }
+            (Some(0), CloseAsk::Quit) => self.save_unsaved_then_quit(),
             (Some(_), CloseAsk::Quit) => {
                 self.quit_ok = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1212,6 +1406,12 @@ impl App {
             return self.tests_page(ctx);
         }
 
+        if self.storage_warning() {
+            egui::TopBottomPanel::top("storage-warning")
+                .show_separator_line(false)
+                .frame(egui::Frame::new().fill(bg()).inner_margin(egui::Margin { left: 14, right: 14, top: 10, bottom: 0 }))
+                .show(ctx, |ui| self.storage_card(ui));
+        }
         self.catalog_card(ctx);
         self.getting_started_card(ctx);
         if !self.docs.is_empty() {
@@ -1323,7 +1523,8 @@ impl App {
                     );
                     ui.add_space(4.0);
                     ui.horizontal_wrapped(|ui| {
-                        if theme::primary_button(ui, "Choose HX Edit folder...").clicked() {
+                        // Android's picker cannot give a folder path: the built-in list is used there.
+                        if !cfg!(target_os = "android") && theme::primary_button(ui, "Choose HX Edit folder...").clicked() {
                             choose = true;
                         }
                         if ui.button("Look again").on_hover_text("Search the usual places again").clicked() {
@@ -1340,11 +1541,8 @@ impl App {
                 });
             });
         if choose {
-            if let Some(d) = crate::platform::FileDialog::new().pick_folder() {
-                self.settings.hx_edit = Some(d.to_string_lossy().into_owned());
-                self.settings.save();
-                self.reload_catalog();
-            }
+            let id = crate::platform::FileDialog::new().pick_folder();
+            self.start_pick(id, picks::Pick::HxEditFolder);
         }
         if again {
             self.reload_catalog();
@@ -1922,6 +2120,7 @@ Drag an effect to move it; right-click for more.",
         self.ir_plan_window(ctx);
         self.restore_window(ctx);
         self.restore_all_window(ctx);
+        self.restore_all_list_window(ctx);
         self.compare_window(ctx);
         if let Some((text, cmd)) = self.confirm.take() {
             let mut result = None;
@@ -2049,6 +2248,14 @@ impl eframe::App for App {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         theme::track_keyboard_nav(ctx);
+        if cfg!(target_os = "android") {
+            self.follow_storage(ctx);
+        }
+        // Answers of the file dialogs, before anything is drawn.
+        self.poll_picks();
+        if std::mem::take(&mut self.close_requested) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         // Fill the monitor on start (asking at window creation isn't always honoured on Windows),
         // unless the window was left smaller last time: then it comes back as it was.
         let fill = self.settings.window.is_none() || self.settings.window_maximized;
@@ -2095,7 +2302,7 @@ impl eframe::App for App {
         self.poll(ctx);
         self.auto_pick();
         // The hidden Tests page.
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::T)) {
+        if !cfg!(target_os = "android") && ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::SHIFT, egui::Key::T)) {
             self.view = if self.view == View::Tests { View::Editor } else { View::Tests };
         }
         self.studio_top_bar(ctx);
@@ -2111,6 +2318,10 @@ impl eframe::App for App {
             if let Some((st, model, cab)) = editors::picker_window(ctx, &mut self.picker, &cat) {
                 self.apply_pick(&cat, st, model, cab);
             }
+        }
+        // A dialog still open (or one just started) is looked at again soon.
+        if !self.pending.is_empty() {
+            ctx.request_repaint_after(Duration::from_millis(100));
         }
         self.screenshot_step(ctx);
     }

@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 $adb = "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
 New-Item -ItemType Directory -Force $Out | Out-Null
 $Out = (Resolve-Path $Out).Path
-function Start-App { & $adb -s $Device shell am start -n com.tonestrand.app/com.google.androidgamesdk.GameActivity | Out-Null; Start-Sleep 6 }
+function Start-App { & $adb -s $Device shell am start -n com.tonestrand.app/com.tonestrand.app.MainActivity | Out-Null; Start-Sleep 6 }
 function Shot($name) { cmd /c "`"$adb`" -s $Device exec-out screencap -p > `"$Out\$name.png`"" }
 Start-App; Shot '1-start'
 & $adb -s $Device shell input keyevent KEYCODE_BACK; Start-Sleep 3

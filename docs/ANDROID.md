@@ -53,6 +53,18 @@ Android cloud backup must not copy it.
 
 Android drops Wi-Fi multicast packets, which hides the Box's mDNS announcements. At start `android/src/multicast.rs` takes a `WifiManager.MulticastLock` (tag `tonestrand`, not reference counted) through JNI, using the `CHANGE_WIFI_MULTICAST_STATE` permission, and logs `multicast lock acquired` (or the error; start-up never fails because of it). The emulator can't see mDNS, so only the log line is checked there; finding the Box by name needs a real device on the same Wi-Fi.
 
+## Files and the ToneStrand folder
+
+The activity is `com.tonestrand.app.MainActivity` (extends GameActivity; Java in `android/app/app/src/main/java`). `android/src/files.rs` installs the `tonestrand::platform` backends that call it and implements its native methods (`Java_com_tonestrand_app_MainActivity_*`).
+
+- Picker: Open and Save as use the system picker (`ACTION_OPEN_DOCUMENT` / `ACTION_CREATE_DOCUMENT`, type `*/*`; the app re-checks extensions). Only one picker at a time. Folder requests are answered "Not available on Android".
+- Copy through the cache: a picked document is copied to `<cache>/pick-<id>/<display name>` on a background thread (duplicate names in one pick become `name (2).ext`), and the app gets that path. Save as writes the whole file to `<cache>/save-<id>/<name>` first, then Java copies it to the chosen document. Cache paths are never remembered (recent files, tabs). The cache is emptied at activity start; `cancel_pending()` is called then so a lost answer cannot block the pickers.
+- Folder: `Environment.getExternalStoragePublicDirectory(DIRECTORY_DOCUMENTS)/ToneStrand` (on the emulator `/storage/emulated/0/Documents/ToneStrand`). At start it is created and test-written; if usable it is the library, else the private `Library` is used and the app shows the storage warning.
+- Permission: `WRITE_EXTERNAL_STORAGE` (max API 29) is requested at start on Android 10 and older, `READ_EXTERNAL_STORAGE` max API 32, and `requestLegacyExternalStorage="true"`. The answer re-tests the folder and switches the library without a restart (refused gives the warning with the "Allow storage access" button).
+- Android 11+ limitation: files put in the folder by other apps or by an earlier install are not visible to the app (Settings says so).
+
+Check on the emulator (API 35): `android\build.ps1`; in the app, New preset, Save as, menu, pick the device, Documents, Save, then `adb shell ls /sdcard/Documents` shows the file; Open, Open file, pick it: the preset opens and `adb shell run-as com.tonestrand.app ls cache` shows `pick-<n>`; Back in either picker does nothing; Settings shows `/storage/emulated/0/Documents/ToneStrand`; `adb logcat -d -s tonestrand:*` has `shared folder ... is usable` and no errors. The permission prompt needs a real Android 10 device (not checked on the emulator).
+
 ## Launcher icon
 
 `android\make-icons.ps1` (PowerShell and System.Drawing, no other tools) writes square and round PNGs for mdpi to xxxhdpi (48 to 192 px) into `android/app/app/src/main/res/mipmap-*` from `assets/logos/AppIcon.jpg`; the manifest sets `icon` and `roundIcon`. Re-run it after changing the picture.

@@ -69,6 +69,7 @@ impl App {
             title = format!("{name} ({})", crate::units::unit_name(unit));
         }
         self.docs.push(Doc {
+            id: next_doc_id(),
             title,
             name: String::new(),
             path: None,
@@ -91,6 +92,7 @@ impl App {
     pub(super) fn new_preset(&mut self) {
         let json = hlx::blank_for("New Preset", self.unit);
         self.docs.push(Doc {
+            id: next_doc_id(),
             title: "New Preset".into(),
             name: String::new(),
             path: None,
@@ -170,11 +172,9 @@ impl App {
     }
 
     pub(super) fn open_file_dialog(&mut self) {
-        if let Some(p) =
-            crate::platform::FileDialog::new().set_directory(&self.library_dir).add_filter("Presets", &["hlx", "hxpreset"]).pick_file()
-        {
-            self.open_file(&p);
-        }
+        let id =
+            crate::platform::FileDialog::new().set_directory(&self.library_dir).add_filter("Presets", &["hlx", "hxpreset"]).open_file();
+        self.start_pick(id, picks::Pick::OpenPreset);
     }
 
     /// The top bar: the app and its pages, the open preset's name, undo and
@@ -445,7 +445,7 @@ impl App {
     }
 
     /// The activity log as plain text, with the program version and the pedal, for a bug report.
-    fn log_text(&self) -> String {
+    pub(super) fn log_text(&self) -> String {
         let mut out =
             format!("ToneStrand {}\nPedal: {}\n\n", env!("CARGO_PKG_VERSION"), self.connected.as_deref().unwrap_or("not connected"));
         for (_, msg) in &self.log {
@@ -556,18 +556,12 @@ impl App {
 
     /// "Save..." in the Activity list: the log as a text file.
     fn save_log(&mut self) {
-        let Some(path) = crate::platform::FileDialog::new()
+        let id = crate::platform::FileDialog::new()
             .set_directory(&self.library_dir)
             .set_file_name("ToneStrand log.txt")
             .add_filter("Text", &["txt"])
-            .save_file()
-        else {
-            return;
-        };
-        match crate::files::write_atomic(&path, self.log_text().as_bytes()) {
-            Ok(_) => self.note(LogLevel::Good, format!("Saved the log to {}", path.display())),
-            Err(e) => self.note(LogLevel::Bad, format!("Could not save the log: {e}")),
-        }
+            .save_file();
+        self.start_pick(id, picks::Pick::SaveLog);
     }
 
     pub(super) fn left_panel(&mut self, ctx: &egui::Context) {

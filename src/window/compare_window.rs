@@ -48,6 +48,14 @@ impl App {
         }
     }
 
+    /// A file picked for one side of the compare window.
+    pub(super) fn set_compare_side(&mut self, side: usize, path: &Path, cat: &Catalog) {
+        let picked = self.pick_file(path, cat);
+        if let (Some(st), Some(picked)) = (self.compare.as_mut(), picked) {
+            *(if side == 0 { &mut st.a } else { &mut st.b }) = Some(picked);
+        }
+    }
+
     pub(super) fn open_compare(&mut self) {
         let Some(cat) = self.catalog.clone() else {
             return self.note(LogLevel::Bad, "Comparing needs HX Edit's effect list (see Settings).");
@@ -127,11 +135,9 @@ impl App {
                 }
             });
         if let Some(side) = file_for {
-            if let Some(p) =
-                crate::platform::FileDialog::new().set_directory(&self.library_dir).add_filter("Presets", &["hlx", "hxpreset"]).pick_file()
-            {
-                *(if side == 0 { &mut new_a } else { &mut new_b }) = self.pick_file(&p, &cat);
-            }
+            let id =
+                crate::platform::FileDialog::new().set_directory(&self.library_dir).add_filter("Presets", &["hlx", "hxpreset"]).open_file();
+            self.start_pick(id, picks::Pick::ComparePick(side));
         }
         if let Some(na) = new_a {
             st.a = Some(na);

@@ -73,19 +73,62 @@ pub(super) fn scan_full_backup(folder: &Path, setlists: &[String]) -> (Vec<FullP
 }
 
 impl App {
-    /// "Restore the whole pedal": pick a backup folder and show what is in it.
+    /// "Restore the whole pedal": pick a backup folder and show what is in it. Android's picker
+    /// cannot give a folder, so there the backups folders are listed in the app instead.
     pub(super) fn open_restore_all(&mut self) {
-        let Some(folder) =
-            crate::platform::FileDialog::new().set_directory(&self.library_dir).set_title("Pick a whole-pedal backup folder").pick_folder()
-        else {
+        if cfg!(target_os = "android") {
+            self.restore_all_folders = Some(picks::backup_folders(&self.backup_dirs()));
             return;
-        };
+        }
+        let id =
+            crate::platform::FileDialog::new().set_directory(&self.library_dir).set_title("Pick a whole-pedal backup folder").pick_folder();
+        self.start_pick(id, picks::Pick::RestoreAllFolder);
+    }
+
+    /// Show what a whole-pedal backup folder holds.
+    pub(super) fn restore_all_from(&mut self, folder: PathBuf) {
         let (presets, irs, problems) = scan_full_backup(&folder, &self.setlists);
         if presets.is_empty() && irs.is_empty() {
             let why = problems.first().cloned().unwrap_or_else(|| "no presets or IRs in it".into());
             return self.note(LogLevel::Bad, format!("{} is not a whole-pedal backup: {why}", folder.display()));
         }
         self.restore_all = Some(RestoreAllState { folder, presets, irs, problems });
+    }
+
+    /// Android: the list of backup folders to restore from.
+    pub(super) fn restore_all_list_window(&mut self, ctx: &egui::Context) {
+        let Some(folders) = self.restore_all_folders.take() else { return };
+        let mut open = true;
+        let mut chosen = None;
+        egui::Window::new("Restore the whole pedal")
+            .open(&mut open)
+            .collapsible(false)
+            .default_width(480.0)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                if folders.is_empty() {
+                    ui.label(RichText::new("No whole-pedal backups yet. Use Backups > Back up the whole pedal first.").color(muted()));
+                    return;
+                }
+                ui.label(RichText::new("Pick a backup. Nothing is written until you confirm.").color(muted()));
+                egui::ScrollArea::vertical().max_height(360.0).auto_shrink([true, true]).show(ui, |ui| {
+                    for f in &folders {
+                        ui.horizontal(|ui| {
+                            ui.label(f.file_name().and_then(|n| n.to_str()).unwrap_or("?"));
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.add(egui::Button::new("Restore from this").min_size(egui::vec2(0.0, 32.0))).clicked() {
+                                    chosen = Some(f.clone());
+                                }
+                            });
+                        });
+                    }
+                });
+            });
+        match chosen {
+            Some(f) => self.restore_all_from(f),
+            None if open => self.restore_all_folders = Some(folders),
+            None => {}
+        }
     }
 
     /// Read the picked files and ask for the go-ahead. Nothing is written yet.

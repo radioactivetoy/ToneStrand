@@ -1,4 +1,4 @@
-// GameActivity wrapper around the Rust library (no Java code of our own).
+// GameActivity wrapper around the Rust library; MainActivity adds the system file picker and the storage permission.
 plugins { id 'com.android.application' }
 android {
     namespace 'com.tonestrand.app'

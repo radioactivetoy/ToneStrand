@@ -188,12 +188,10 @@ impl App {
                     }
                 }
                 library::Action::Import => {
-                    if let Some(files) = crate::platform::FileDialog::new()
+                    let id = crate::platform::FileDialog::new()
                         .add_filter("Presets, backups and setlists", &["hlx", "hxpreset", "hxb", "hls"])
-                        .pick_files()
-                    {
-                        self.import_files(files);
-                    }
+                        .open_files();
+                    self.start_pick(id, picks::Pick::ImportLibrary);
                 }
             }
         }
