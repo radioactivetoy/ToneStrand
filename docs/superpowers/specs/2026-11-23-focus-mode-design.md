@@ -106,3 +106,15 @@ Must be measured through the Box: how many parameter messages per second the ped
 - Live rate: several messages per drag step may be too many for the Box link; coalescing and a lower tick rate are the answer, to be measured.
 - About 80 models are not on HX Edit 3.82 yet: they stay hidden, not broken.
 - Legal: see decision 1.
+
+## Progress
+
+- **Phase 1 done (2026-11-23):** `core/src/focus.rs` (module `tonestrand_core::focus`): `weights`, `FocusModel::evaluate`, `FocusSet::resolve`
+  (Stadium JSON to pedal symbols and value indices), `to_pack` / `from_pack`. 9 tests with invented data (corners and centre exact,
+  weights add up to 1, edge midpoints, smoothness, snapping, range clamp, mapping, pack round trip). Run on the real file:
+  595 pads by symbol (Mono and Stereo count separately: amp 111, preamp 112, distortion 105, modulation 76, delay 56, dynamics 29,
+  reverb 26, filter 19, wah 22, synth 20, pitch 10, volume 7, eq 2), 33 models not in HX Edit 3.82's list, 31 Stadium-only,
+  18 parameters left out (not on the pedal's list for that model, for example Reverb Non Linear's Width, RoomSize, Manual), one value
+  outside the catalog's range (DL4 Analog Delay Time 2.038 against 2: held to 2 when evaluated). The compressed pack is about 75 KB.
+  The real-file report is `TONESTRAND_FOCUS_FILE=<file> cargo test -p tonestrand-core focus::real_data -- --nocapture`.
+- Next: phase 2, the tool that makes the bundled pack (`catalogs/`-style folder embedded at build time) and the NOTICE line; then the UI.

@@ -9,6 +9,7 @@ pub mod devpreset;
 #[cfg(test)]
 mod fakepedal;
 pub mod files;
+pub mod focus;
 pub mod hlx;
 pub mod irs;
 pub mod msgpack;
