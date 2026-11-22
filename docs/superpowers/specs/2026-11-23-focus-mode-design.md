@@ -51,11 +51,12 @@ corners the result must equal the stored values exactly.
 
 ## Decisions to take before building
 
-1. **Where the data comes from (legal, shapes the design).** The file is Line 6 data, extracted from the owner's Helix Stadium
-   Native install. Options: (a) **import**: ToneStrand reads it from the user's own Stadium install (a `--build-focus` tool and an
-   Import button; on Android a file pick), nothing Line 6 is shipped; (b) **bundle** a converted file in the repository, the way the
-   HX Edit 3.82 catalog is (owner changed that rule on 2026-11-19; this is a different Line 6 product and includes the creative
-   region names). Recommendation: write the loader once so both work, ship (a) first, and decide on (b) deliberately. The owner decides.
+1. **Where the data comes from: DECIDED, bundle (owner, 2026-11-23: "so no extra software is needed").** A converted file is included
+   in the repository and in the downloads, the way the HX Edit 3.82 catalog is, so Focus mode works on a fresh install on the computer and
+   on Android. The data is Line 6's (from Helix Stadium Native's `focus-view-xy-defaults`) and includes the creative region names; this is a
+   different Line 6 product from HX Edit and the owner has taken the decision. To do with it: a line in NOTICE.md and the README (Line 6
+   data, not affiliated), the converted file records where it came from, and the loader still reads the original Stadium JSON, so an
+   import path costs nothing later (a newer Stadium version, or removing the bundled file).
 2. **First categories.** Suggested order: distortion, delay, reverb, modulation (clear tonal meaning, few parameters), then
    amps and preamps (many parameters, Level compensation), then the rest.
 3. **Where the toggle lives.** Suggested: a `Knobs | Focus` switch in the block panel header, remembered per model, with a
