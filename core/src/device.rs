@@ -1,6 +1,7 @@
 //! A background thread that owns the pedal session, so the window never waits
 //! on USB or Wi-Fi. The window sends commands; the thread answers with events.
 
+use std::collections::VecDeque;
 use std::sync::mpsc::{channel, Receiver, RecvTimeoutError, Sender};
 use std::time::Duration;
 
@@ -462,6 +463,46 @@ pub fn change_command_center(s: &mut Session, send: &dyn Fn(Event), change: CcCh
     Ok(false)
 }
 
+/// The block a command touches, for the commands that name one and change only that block (the others count as touching everything).
+fn block_of(c: &Cmd) -> Option<i64> {
+    match c {
+        Cmd::SetParam { block, .. }
+        | Cmd::SetHidden { block, .. }
+        | Cmd::SetEnabled { block, .. }
+        | Cmd::SetModel { block, .. }
+        | Cmd::ReplaceBlock { block, .. }
+        | Cmd::ClearBlock { block } => Some(*block),
+        _ => None,
+    }
+}
+
+/// Drop each `SetParam` that a later `SetParam` for the same knob (block, path, index) replaces: only the newest value matters, and
+/// a fast drag (a Focus pad sends about nine knobs every 50 ms, each a round trip to the pedal) must not leave the pedal catching up.
+/// Everything else keeps its place, and nothing is dropped across another command for the same block (a `SetEnabled` or `SetModel`
+/// between two values of one knob keeps both) or across a command that names no block (a preset change, a snapshot...).
+pub fn coalesce_set_params(cmds: Vec<Cmd>) -> Vec<Cmd> {
+    let key = |c: &Cmd| match c {
+        Cmd::SetParam { block, path, index, .. } => Some((*block, *path, *index)),
+        _ => None,
+    };
+    let mut drop = vec![false; cmds.len()];
+    for i in 0..cmds.len() {
+        let Some(k) = key(&cmds[i]) else { continue };
+        for j in i + 1..cmds.len() {
+            if key(&cmds[j]) == Some(k) {
+                drop[i] = true;
+                break;
+            }
+            // Another SetParam is no obstacle; a command for another block is none; anything else is.
+            let ok = matches!(cmds[j], Cmd::SetParam { .. }) || block_of(&cmds[j]).is_some_and(|b| b != k.0);
+            if !ok {
+                break;
+            }
+        }
+    }
+    cmds.into_iter().zip(drop).filter(|(_, d)| !d).map(|(c, _)| c).collect()
+}
+
 fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
     if let Err(e) = refresh(s, send) {
         send(Event::Error(format!("Could not read the preset list: {e}")));
@@ -478,12 +519,25 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
     // in use (left alone for long, live edits stopped landing) and finds out early when it
     // stopped answering, to pick the loaded preset up again.
     let mut last_beat = std::time::Instant::now();
+    // Commands taken from the channel and not done yet. Everything already waiting is taken at once and the superseded knob values
+    // are dropped (`coalesce_set_params`), then the queue is done in order before waiting for more.
+    let mut backlog: VecDeque<Cmd> = VecDeque::new();
     loop {
-        let cmd = match rx.recv_timeout(Duration::from_millis(40)) {
-            Ok(c) => Some(c),
-            Err(RecvTimeoutError::Timeout) => None,
-            Err(RecvTimeoutError::Disconnected) => return,
-        };
+        if backlog.is_empty() {
+            match rx.recv_timeout(Duration::from_millis(40)) {
+                Ok(c) => backlog.push_back(c),
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => return,
+            }
+        }
+        if !backlog.is_empty() {
+            let mut waiting: Vec<Cmd> = backlog.drain(..).collect();
+            while let Ok(c) = rx.try_recv() {
+                waiting.push(c);
+            }
+            backlog = coalesce_set_params(waiting).into();
+        }
+        let cmd = backlog.pop_front();
         if cmd.is_some() {
             last_beat = std::time::Instant::now();
         }
@@ -619,23 +673,27 @@ fn run(s: &mut Session, rx: &Receiver<Cmd>, send: &dyn Fn(Event)) {
                     send(Event::Done(format!("Saved \"{name}\" on the pedal")));
                 }
                 Cmd::SetParam { block, path, index, value } => {
-                    s.set_param(block, path, index, value).map_err(|e| e.to_string())?;
+                    s.set_param(block, path, index, value).map_err(|e| format!("Setting block {block} parameter {index}: {e}"))?;
                 }
                 Cmd::SetHidden { block, cab, index, value } => {
-                    let mut doc = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;
-                    let (path, position) = (block / 20, (block % 20) as usize);
-                    if cab {
-                        doc.set_paired_value(path, position, index as usize, value);
-                    } else {
-                        doc.set_value(path, position, index as usize, value);
-                    }
-                    s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
-                    // The window already shows the change: it is handed the pedal's copy only when the pedal kept something else.
-                    let kept = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)
-                        .is_ok_and(|back| back.knob_value(block, index as usize, cab) == doc.knob_value(block, index as usize, cab));
-                    if !kept {
-                        read_live(s, send)?;
-                    }
+                    let done: Result<(), String> = (|| {
+                        let mut doc = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)?;
+                        let (path, position) = (block / 20, (block % 20) as usize);
+                        if cab {
+                            doc.set_paired_value(path, position, index as usize, value);
+                        } else {
+                            doc.set_value(path, position, index as usize, value);
+                        }
+                        s.write_edit_buffer(doc.encode_checked()?).map_err(|e| e.to_string())?;
+                        // The window already shows the change: it is handed the pedal's copy only when the pedal kept something else.
+                        let kept = crate::devpreset::DevicePreset::parse(&s.read_current().map_err(|e| e.to_string())?)
+                            .is_ok_and(|back| back.knob_value(block, index as usize, cab) == doc.knob_value(block, index as usize, cab));
+                        if !kept {
+                            read_live(s, send)?;
+                        }
+                        Ok(())
+                    })();
+                    done.map_err(|e| format!("Setting block {block} parameter {index}: {e}"))?;
                 }
                 Cmd::SetEnabled { block, enabled } => {
                     s.set_enabled(block, enabled).map_err(|e| e.to_string())?;
@@ -1282,4 +1340,73 @@ pub fn slot_op(s: &mut Session, send: &dyn Fn(Event), sl: i64, from: i64, to: i6
         SlotOp::Swap => format!("Swapped {} and {}", label(from), label(to)),
     }));
     Ok(())
+}
+
+#[cfg(test)]
+mod coalesce_tests {
+    use super::*;
+
+    fn p(block: i64, index: i64, v: f32) -> Cmd {
+        Cmd::SetParam { block, path: 0, index, value: Value::F32(v) }
+    }
+
+    /// A short name for each command, to compare lists.
+    fn names(cmds: &[Cmd]) -> Vec<String> {
+        cmds.iter()
+            .map(|c| match c {
+                Cmd::SetParam { block, index, value, .. } => format!("P{block}.{index}={}", value.as_f64().unwrap()),
+                Cmd::SetEnabled { block, .. } => format!("E{block}"),
+                Cmd::SetHidden { block, index, .. } => format!("H{block}.{index}"),
+                Cmd::Snapshot(n) => format!("S{n}"),
+                Cmd::Refresh => "R".into(),
+                _ => "?".into(),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_later_value_for_the_same_knob_replaces_the_earlier_one() {
+        let out = coalesce_set_params(vec![p(1, 0, 0.1), p(1, 0, 0.2), p(1, 0, 0.3)]);
+        assert_eq!(names(&out), vec!["P1.0=0.30000001192092896"]);
+    }
+
+    #[test]
+    fn different_knobs_are_all_kept_in_order() {
+        let out = coalesce_set_params(vec![p(1, 0, 0.1), p(1, 1, 0.2), p(2, 0, 0.3), p(1, 0, 0.4), p(1, 1, 0.5)]);
+        // The first two are superseded (a flush of nine knobs, twice, leaves the newest nine); the rest keep their order.
+        assert_eq!(out.len(), 3);
+        assert_eq!(names(&out)[0], "P2.0=0.30000001192092896");
+        assert!(names(&out)[1].starts_with("P1.0=0.4") && names(&out)[2].starts_with("P1.1=0.5"));
+    }
+
+    #[test]
+    fn other_commands_never_move_or_vanish() {
+        let out = coalesce_set_params(vec![
+            Cmd::Snapshot(2),
+            p(1, 0, 0.1),
+            Cmd::SetHidden { block: 3, cab: false, index: 4, value: Value::F32(0.0) },
+            p(1, 0, 0.2),
+            Cmd::Refresh,
+        ]);
+        // The SetHidden is for another block: no obstacle, the first value is dropped; the others stay put.
+        assert_eq!(names(&out), vec!["S2", "H3.4", "P1.0=0.20000000298023224", "R"]);
+    }
+
+    #[test]
+    fn a_command_for_the_same_block_between_two_values_keeps_both() {
+        let out = coalesce_set_params(vec![p(1, 0, 0.1), Cmd::SetEnabled { block: 1, enabled: false }, p(1, 0, 0.2)]);
+        assert_eq!(out.len(), 3);
+        let out = coalesce_set_params(vec![
+            p(1, 0, 0.1),
+            Cmd::SetHidden { block: 1, cab: false, index: 9, value: Value::F32(0.0) },
+            p(1, 0, 0.2),
+        ]);
+        assert_eq!(out.len(), 3);
+        // A command naming no block (a snapshot change, a refresh) is a barrier too.
+        let out = coalesce_set_params(vec![p(1, 0, 0.1), Cmd::Snapshot(1), p(1, 0, 0.2)]);
+        assert_eq!(out.len(), 3);
+        // ...while one for another block is not.
+        let out = coalesce_set_params(vec![p(1, 0, 0.1), Cmd::SetEnabled { block: 2, enabled: true }, p(1, 0, 0.2)]);
+        assert_eq!(out.len(), 2);
+    }
 }
