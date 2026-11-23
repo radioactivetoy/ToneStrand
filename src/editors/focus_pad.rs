@@ -5,7 +5,7 @@
 //! with it. The logic that is not drawing (pad position and x,y, value conversion, send pacing, "edited by hand") is in small
 //! functions at the top, with tests.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -266,21 +266,58 @@ pub fn model_for(symbol: &str) -> Option<&'static FocusModel> {
     set()?.model_for(symbol)
 }
 
-fn modes() -> &'static Mutex<HashMap<String, bool>> {
-    static MODES: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+/// What the program knows about Focus on/off: the person's choices per effect (kept in the settings), the "open in Focus" default, and
+/// whether a choice changed since the window last looked (to save the settings).
+#[derive(Default)]
+struct Modes {
+    models: BTreeMap<String, bool>,
+    default_on: bool,
+    changed: bool,
+}
+
+fn modes() -> &'static Mutex<Modes> {
+    static MODES: OnceLock<Mutex<Modes>> = OnceLock::new();
     MODES.get_or_init(Default::default)
 }
 
-/// Whether this model's panel shows Focus. Remembered while the program runs; `TONESTRAND_FOCUS=1` makes it the default (pictures).
-// TODO: keep the choice in the settings (a later phase).
+/// Whether an effect shows Focus. The person's own choice for that effect wins, then `TONESTRAND_FOCUS=1` (pictures), then the
+/// "open in Focus" setting, then Knobs.
+fn focus_choice(explicit: Option<bool>, env_on: bool, default_on: bool) -> bool {
+    explicit.unwrap_or(env_on || default_on)
+}
+
+/// Hand the saved choices over at start (not in a picture run: pictures never depend on the owner's settings).
+pub fn load_choices(models: BTreeMap<String, bool>, default_on: bool) {
+    if let Ok(mut m) = modes().lock() {
+        m.models = models;
+        m.default_on = default_on;
+        m.changed = false;
+    }
+}
+
+/// The Settings page changed "open in Focus".
+pub fn set_default(on: bool) {
+    if let Ok(mut m) = modes().lock() {
+        m.default_on = on;
+    }
+}
+
+/// The person's choices if one changed since the last call (to be saved), else None.
+pub fn take_changed_choices() -> Option<BTreeMap<String, bool>> {
+    let mut m = modes().lock().ok()?;
+    std::mem::take(&mut m.changed).then(|| m.models.clone())
+}
+
+/// Whether this model's panel shows Focus.
 pub fn in_focus(symbol: &str) -> bool {
-    let chosen = modes().lock().ok().and_then(|m| m.get(symbol).copied());
-    chosen.unwrap_or_else(|| std::env::var("TONESTRAND_FOCUS").is_ok_and(|v| v == "1"))
+    let (explicit, default_on) = modes().lock().map(|m| (m.models.get(symbol).copied(), m.default_on)).unwrap_or((None, false));
+    focus_choice(explicit, std::env::var("TONESTRAND_FOCUS").is_ok_and(|v| v == "1"), default_on)
 }
 
 pub fn set_focus(symbol: &str, on: bool) {
     if let Ok(mut m) = modes().lock() {
-        m.insert(symbol.to_owned(), on);
+        m.models.insert(symbol.to_owned(), on);
+        m.changed = true;
     }
 }
 
@@ -947,6 +984,17 @@ mod tests {
         assert_eq!(changed, vec![1], "knob 3 is back at its original, knob 0 was never captured");
         // After Revert the originals are gone: no dots.
         assert!(knob_order(5, &[1, 3], &[], &cur).iter().all(|k| !k.changed));
+    }
+
+    #[test]
+    fn the_saved_choice_beats_the_picture_variable_beats_the_default() {
+        // (explicit, TONESTRAND_FOCUS, focus_default) -> Focus?
+        assert!(!focus_choice(None, false, false), "Knobs by default");
+        assert!(focus_choice(None, false, true), "the setting");
+        assert!(focus_choice(None, true, false), "the picture variable");
+        assert!(focus_choice(Some(true), false, false), "a saved Focus");
+        assert!(!focus_choice(Some(false), true, true), "a saved Knobs beats both");
+        assert!(focus_choice(Some(true), false, false));
     }
 
     #[test]

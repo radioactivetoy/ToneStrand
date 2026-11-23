@@ -62,6 +62,10 @@ pub struct Settings {
     pub real_names: bool,
     /// The pedal runs the community NAM A2 Lite firmware (HX Stomp, XL, HX Effects).
     pub nam_lite: bool,
+    /// Focus mode per effect (its symbol): the person's own choice, true for Focus and false for Knobs.
+    pub focus_models: BTreeMap<String, bool>,
+    /// Open effects in Focus mode when they have it and the person has not chosen for that effect.
+    pub focus_default: bool,
     /// Converter options: keep the capture's input level and loudness.
     pub nam_use_level: bool,
     pub nam_use_loudness: bool,
@@ -109,6 +113,8 @@ impl Default for Settings {
             ui_scale: 1.0,
             real_names: false,
             nam_lite: false,
+            focus_models: BTreeMap::new(),
+            focus_default: false,
             nam_use_level: true,
             nam_use_loudness: true,
             nam_out_dir: None,
@@ -379,6 +385,21 @@ fn lookup_pass(tx: &Sender<BoxInfo>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn focus_choices_default_off_in_an_old_file_and_round_trip() {
+        // A settings file from before Focus mode has neither field.
+        let s: Settings = serde_json::from_str(r#"{"confirm_pedal": false}"#).unwrap();
+        assert!(s.focus_models.is_empty() && !s.focus_default);
+        assert!(!s.confirm_pedal);
+        let mut s = Settings { focus_default: true, ..Settings::default() };
+        s.focus_models.insert("HD2_AmpA".into(), false);
+        s.focus_models.insert("HD2_DelayB".into(), true);
+        let back: Settings = serde_json::from_str(&serde_json::to_string(&s).unwrap()).unwrap();
+        assert!(back.focus_default);
+        assert_eq!(back.focus_models.get("HD2_AmpA"), Some(&false));
+        assert_eq!(back.focus_models.get("HD2_DelayB"), Some(&true));
+    }
 
     #[test]
     fn editor_layout_defaults_to_normal_and_round_trips() {

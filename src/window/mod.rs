@@ -425,6 +425,10 @@ impl App {
         // The box by its .local name, in case the network search misses it.
         boxes::lookup_local_names(tx_local);
 
+        // Focus on/off per effect: the saved choices (a picture run never uses the owner's settings).
+        if app.screenshot.is_none() {
+            crate::editors::focus_load_choices(app.settings.focus_models.clone(), app.settings.focus_default);
+        }
         // The sample preset is for the first start; after that only if it is asked for again
         // in Settings. (Pictures of the pages (--screenshot) always have it, and change nothing.)
         let open_sample = app.settings.show_sample || app.screenshot.is_some();
@@ -2264,6 +2268,13 @@ impl eframe::App for App {
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         theme::track_keyboard_nav(ctx);
+        // A Focus on/off choice made in the editor is kept in the settings (never in a picture run).
+        if let Some(choices) = crate::editors::focus_take_changed_choices() {
+            if self.screenshot.is_none() {
+                self.settings.focus_models = choices;
+                self.settings.save();
+            }
+        }
         if cfg!(target_os = "android") {
             self.follow_storage(ctx);
         }

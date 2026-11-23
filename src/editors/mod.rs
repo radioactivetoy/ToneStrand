@@ -1550,3 +1550,16 @@ pub fn focus_gesture_started() {
 pub fn focus_gesture_active() -> bool {
     focus_pad::gesture_active()
 }
+
+/// Focus on/off choices, kept in the settings: handed over at start, and read back when one changed.
+pub fn focus_load_choices(models: std::collections::BTreeMap<String, bool>, default_on: bool) {
+    focus_pad::load_choices(models, default_on)
+}
+
+pub fn focus_set_default(on: bool) {
+    focus_pad::set_default(on)
+}
+
+pub fn focus_take_changed_choices() -> Option<std::collections::BTreeMap<String, bool>> {
+    focus_pad::take_changed_choices()
+}
