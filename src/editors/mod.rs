@@ -1537,3 +1537,16 @@ pub fn footswitch_strip(ui: &mut egui::Ui, count: usize, items: &[FootswitchItem
     });
     ui.add_space(6.0);
 }
+
+/// The window's undo asks about the Focus pad's gestures, so that a drag, a click, Centre or Revert is one undo step.
+pub fn focus_gesture_start_pending() -> bool {
+    focus_pad::gesture_start_pending()
+}
+
+pub fn focus_gesture_started() {
+    focus_pad::gesture_started()
+}
+
+pub fn focus_gesture_active() -> bool {
+    focus_pad::gesture_active()
+}

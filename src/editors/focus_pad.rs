@@ -6,10 +6,11 @@
 //! functions at the top, with tests.
 
 use std::collections::{BTreeMap, HashMap};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, RichText, Sense, Stroke, Vec2};
-use tonestrand_core::focus::{self, FocusModel, FocusSet, FocusValue, Kind as FocusKind, RegionKey};
+use tonestrand_core::focus::{self, FocusModel, FocusSet, FocusValue, Kind as FocusKind, Located, RegionKey, GHOST_MAX_ERROR};
 
 use crate::device::Cmd;
 use crate::devpreset::{DevicePreset, SlotView};
@@ -203,11 +204,6 @@ fn same(a: &Value, b: &Value) -> bool {
     }
 }
 
-/// True when a value Focus last set has been changed since (a knob turned by hand).
-fn edited_by_hand(applied: &[(usize, Value)], current: &[Value]) -> bool {
-    applied.iter().any(|(i, v)| current.get(*i).is_some_and(|c| !same(c, v)))
-}
-
 /// Whether a live send is due: always at the end of a gesture, otherwise when `FLUSH_STEP` has passed since the last one.
 fn should_flush(last: Option<f64>, now: f64, ended: bool) -> bool {
     ended || last.is_none_or(|t| now - t >= FLUSH_STEP)
@@ -294,31 +290,192 @@ pub(super) fn knobs_for(ctx: &egui::Context, s: &SlotView, symbol: &str, model: 
     super::FocusKnobs { moved: model.params.iter().map(|p| p.index).collect(), originals: st.originals }
 }
 
+/// The values of a block's Focus parameters (value index, value), in the model's order.
+type Vals = Vec<(usize, Value)>;
+
+/// One undoable step: the values of all Focus parameters before and after one gesture (a drag, a click, Centre, Revert).
+#[derive(Clone, Debug, PartialEq)]
+struct Step {
+    before: Vals,
+    after: Vals,
+}
+
+/// The pad's own undo and redo (the live preset has none of its own), per block per session.
+#[derive(Clone, Debug, Default)]
+struct History {
+    undo: Vec<Step>,
+    redo: Vec<Step>,
+}
+
+/// The most steps kept.
+const HISTORY_MAX: usize = 100;
+
+impl History {
+    /// A finished gesture. A gesture that changed nothing is not a step; a new step drops what could be redone.
+    fn push(&mut self, step: Step) -> bool {
+        if same_vals(&step.before, &step.after) {
+            return false;
+        }
+        self.undo.push(step);
+        if self.undo.len() > HISTORY_MAX {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
+        true
+    }
+
+    /// The values to go back to, and the step moves to the redo side.
+    fn undo(&mut self) -> Option<Vals> {
+        let step = self.undo.pop()?;
+        let before = step.before.clone();
+        self.redo.push(step);
+        Some(before)
+    }
+
+    fn redo(&mut self) -> Option<Vals> {
+        let step = self.redo.pop()?;
+        let after = step.after.clone();
+        self.undo.push(step);
+        Some(after)
+    }
+}
+
+/// Whether two lists of values are the same.
+fn same_vals(a: &[(usize, Value)], b: &[(usize, Value)]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.0 == y.0 && same(&x.1, &y.1))
+}
+
+/// A stored value as a number for `locate` (a switch is 0 or 1).
+fn num(v: &Value) -> f64 {
+    match v {
+        Value::Bool(b) => f64::from(*b),
+        _ => v.as_f64().unwrap_or(0.0),
+    }
+}
+
+/// The block's values at the model's parameters.
+fn focus_values(model: &FocusModel, cur: &[Value]) -> Vals {
+    model.params.iter().filter_map(|p| cur.get(p.index).map(|v| (p.index, v.clone()))).collect()
+}
+
 /// What one block's pad remembers (in egui's temporary memory).
 #[derive(Clone, Default)]
 struct PadState {
-    /// Where the puck is; none until it is first used.
-    puck: Option<(f64, f64)>,
-    /// The block's values at the model's parameters before the first move, for Revert.
-    originals: Vec<(usize, Value)>,
-    /// What Focus last wrote, to tell a knob turned by hand.
-    applied: Vec<(usize, Value)>,
+    /// The last known place of the puck (the preferred spot when the values are located again, so it does not jump).
+    pos: Option<(f64, f64)>,
+    /// True while the values are exactly what the last gesture wrote: the solid puck. A knob turned since, a reload or an undo from
+    /// outside makes it a ghost or nothing (see [`shown`]).
+    solid: bool,
+    /// Where the current values sit on the pad, when they were last looked at.
+    located: Option<Located>,
+    /// The values `located` was computed from, to find out when they change (as numbers: cheap to compare).
+    seen: Vec<(usize, f64)>,
+    /// The block's values at the model's parameters before the first gesture of the session, for Revert.
+    originals: Vals,
+    history: History,
+    /// The values when the current drag began.
+    drag_before: Option<Vals>,
     /// Values not yet sent to the pedal (newest per parameter).
     pending: BTreeMap<usize, Value>,
     last_flush: Option<f64>,
     started: bool,
 }
 
+/// What the pad shows for the puck.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Shown {
+    /// A gesture put the values here: the solid puck.
+    Solid(f64, f64),
+    /// The values (set elsewhere, or saved from the pad) match a point of the pad: an outlined ring.
+    Ghost(f64, f64),
+    /// Set by hand: no puck; the closest point is only used to name the closest tone.
+    Hand(f64, f64),
+    Nothing,
+}
+
+/// What to show for the state of a pad (a pure rule, tested).
+fn shown(solid: bool, pos: Option<(f64, f64)>, located: Option<Located>) -> Shown {
+    match (solid, pos, located) {
+        (true, Some((x, y)), _) => Shown::Solid(x, y),
+        (_, _, Some(l)) if l.error <= GHOST_MAX_ERROR => Shown::Ghost(l.x, l.y),
+        (_, _, Some(l)) => Shown::Hand(l.x, l.y),
+        _ => Shown::Nothing,
+    }
+}
+
 /// What the user did to the pad this frame.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Gesture {
     /// Dragging: continuous.
     Move(f64, f64),
     /// A click, Centre or the preview: exact, and sent at once.
     Jump(f64, f64),
     Revert,
+    Undo,
+    Redo,
     /// The drag ended.
     Release,
+}
+
+/// What the pad's controls report in one frame.
+#[derive(Clone, Copy, Default)]
+struct Input {
+    /// Where the pointer is while it drags on the pad.
+    dragging: Option<Pos2>,
+    /// Where a click on the pad landed.
+    clicked: Option<Pos2>,
+    drag_stopped: bool,
+    centre: bool,
+    revert: bool,
+    undo: bool,
+    redo: bool,
+}
+
+/// What the input asks for. Nothing asked, nothing done: opening Focus, switching block or reloading never writes anything.
+fn decide(input: Input, inner: Rect, snap: f32) -> Option<Gesture> {
+    let mut g = None;
+    if let Some(p) = input.dragging {
+        let (x, y) = xy_at(inner, p);
+        g = Some(Gesture::Move(x, y));
+    } else if let Some(p) = input.clicked {
+        let (x, y) = snap_to_tone(inner, p, snap).unwrap_or_else(|| xy_at(inner, p));
+        g = Some(Gesture::Jump(x, y));
+    }
+    if input.drag_stopped {
+        g = g.or(Some(Gesture::Release));
+    }
+    if input.centre {
+        g = Some(Gesture::Jump(0.0, 0.0));
+    }
+    if input.revert {
+        g = Some(Gesture::Revert);
+    }
+    if input.undo {
+        g = Some(Gesture::Undo);
+    }
+    if input.redo {
+        g = Some(Gesture::Redo);
+    }
+    g
+}
+
+// The window's undo groups a pad gesture into one step: these flags tell it when a gesture begins and while it lasts.
+static GESTURE_START: AtomicBool = AtomicBool::new(false);
+static GESTURE_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// True from the start of a pad gesture until the window has made it an undo step (it calls [`gesture_started`] then).
+pub fn gesture_start_pending() -> bool {
+    GESTURE_START.load(Ordering::Relaxed)
+}
+
+/// The window made the step.
+pub fn gesture_started() {
+    GESTURE_START.store(false, Ordering::Relaxed);
+}
+
+/// True if a pad drag went on this frame (read once per frame: it is cleared).
+pub fn gesture_active() -> bool {
+    GESTURE_ACTIVE.swap(false, Ordering::Relaxed)
 }
 
 fn current_values(preset: &DevicePreset, s: &SlotView) -> Vec<Value> {
@@ -333,36 +490,59 @@ fn write(preset: &mut DevicePreset, s: &SlotView, st: &mut PadState, live: bool,
     }
 }
 
-fn apply_at(preset: &mut DevicePreset, s: &SlotView, st: &mut PadState, model: &FocusModel, live: bool, dirty: &mut bool, x: f64, y: f64) {
+/// Write these values (where they differ from the block's).
+fn write_values(preset: &mut DevicePreset, s: &SlotView, st: &mut PadState, live: bool, dirty: &mut bool, vals: Vals) {
     let cur = current_values(preset, s);
-    if st.originals.is_empty() {
-        st.originals = model.params.iter().filter_map(|p| cur.get(p.index).map(|v| (p.index, v.clone()))).collect();
-    }
-    st.puck = Some((x, y));
-    st.applied.clear();
-    for (index, fv) in model.evaluate(x, y) {
-        let Some(old) = cur.get(index) else { continue };
-        let new = to_value(old, fv);
-        if !same(old, &new) {
-            write(preset, s, st, live, dirty, index, new.clone());
-        }
-        st.applied.push((index, new));
-    }
-}
-
-fn revert(preset: &mut DevicePreset, s: &SlotView, st: &mut PadState, live: bool, dirty: &mut bool) {
-    let cur = current_values(preset, s);
-    for (index, v) in std::mem::take(&mut st.originals) {
+    for (index, v) in vals {
         if cur.get(index).is_some_and(|c| !same(c, &v)) {
             write(preset, s, st, live, dirty, index, v);
         }
     }
-    st.puck = None;
-    st.applied.clear();
+}
+
+fn apply_at(preset: &mut DevicePreset, s: &SlotView, st: &mut PadState, model: &FocusModel, live: bool, dirty: &mut bool, x: f64, y: f64) {
+    let cur = current_values(preset, s);
+    if st.originals.is_empty() {
+        st.originals = focus_values(model, &cur);
+    }
+    for (index, fv) in model.evaluate(x, y) {
+        let Some(old) = cur.get(index) else { continue };
+        let new = to_value(old, fv);
+        if !same(old, &new) {
+            write(preset, s, st, live, dirty, index, new);
+        }
+    }
+    st.pos = Some((x, y));
+    st.solid = true;
+    st.located = Some(Located { x, y, error: 0.0 });
+    st.seen = focus_values(model, &current_values(preset, s)).iter().map(|(i, v)| (*i, num(v))).collect();
+}
+
+/// Look where the block's current values sit on the pad (when they changed since the last look).
+fn relocate(st: &mut PadState, model: &FocusModel, cur: &[Value]) {
+    let nums: Vec<(usize, f64)> = focus_values(model, cur).iter().map(|(i, v)| (*i, num(v))).collect();
+    if nums == st.seen {
+        return;
+    }
+    st.solid = false;
+    st.located = model.locate(&nums, st.pos);
+    if let Some(l) = st.located {
+        st.pos = Some((l.x, l.y));
+    }
+    st.seen = nums;
+}
+
+/// For pictures only: `TONESTRAND_FOCUS_GHOST=x,y` writes the values at that point into the block as if the preset had been saved
+/// from the pad: no gesture, no undo step.
+fn ghost_at() -> Option<(f64, f64)> {
+    let v = std::env::var("TONESTRAND_FOCUS_GHOST").ok()?;
+    let (x, y) = v.split_once(',')?;
+    Some((x.trim().parse::<f64>().ok()?.clamp(-1.0, 1.0), y.trim().parse::<f64>().ok()?.clamp(-1.0, 1.0)))
 }
 
 /// The pad, its tone name and its buttons. Writes into the preset (so the knobs drawn after it show the change in the same frame)
-/// and, on the live preset, sends the changed parameters in paced batches.
+/// and, on the live preset, sends the changed parameters in paced batches. Nothing is written until the person clicks or drags on
+/// the pad or presses a button.
 pub fn focus_pad(
     ui: &mut egui::Ui,
     preset: &mut DevicePreset,
@@ -377,32 +557,36 @@ pub fn focus_pad(
     let look = Look::new(theme::touch());
     let id = pad_id(s, symbol);
     let mut st: PadState = ui.data(|d| d.get_temp(id)).unwrap_or_default();
-    let mut gesture = None;
+    let mut input = Input::default();
+    let mut preview = None;
     if !st.started {
         st.started = true;
-        if let Some((x, y)) = preview_at() {
-            gesture = Some(Gesture::Jump(x, y));
+        // Pictures only (environment variables): a puck placed on the first frame, or values written as if saved from the pad.
+        preview = preview_at();
+        if let Some((x, y)) = ghost_at().filter(|_| preview.is_none()) {
+            let cur = current_values(preset, s);
+            for (index, fv) in model.evaluate(x, y) {
+                if let Some(old) = cur.get(index) {
+                    preset.set_value(s.path, s.position, index, to_value(old, fv));
+                }
+            }
         }
     }
-    let by_hand = st.puck.is_some() && edited_by_hand(&st.applied, &current_values(preset, s));
+    relocate(&mut st, model, &current_values(preset, s));
 
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 4.0;
         let (rect, resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
         let inner = inner_rect(rect, look.inset);
         if resp.dragged() {
-            if let Some(p) = resp.interact_pointer_pos() {
-                let (x, y) = xy_at(inner, p);
-                gesture = Some(Gesture::Move(x, y));
-            }
+            input.dragging = resp.interact_pointer_pos();
+            GESTURE_ACTIVE.store(true, Ordering::Relaxed);
         } else if resp.clicked() {
-            if let Some(p) = resp.interact_pointer_pos() {
-                let (x, y) = snap_to_tone(inner, p, look.snap).unwrap_or_else(|| xy_at(inner, p));
-                gesture = Some(Gesture::Jump(x, y));
-            }
+            input.clicked = resp.interact_pointer_pos();
         }
-        if resp.drag_stopped() {
-            gesture = gesture.or(Some(Gesture::Release));
+        input.drag_stopped = resp.drag_stopped();
+        if resp.drag_started() {
+            GESTURE_START.store(true, Ordering::Relaxed);
         }
         if resp.dragged() || resp.is_pointer_button_down_on() {
             ui.ctx().request_repaint();
@@ -411,45 +595,84 @@ pub fn focus_pad(
         // The caption (the centre tone's name), the readout, then the buttons (their gestures count this frame too).
         let (crect, _) = ui.allocate_exact_size(Vec2::new(size.x, look.row_h), Sense::hover());
         let (srect, _) = ui.allocate_exact_size(Vec2::new(size.x, look.row_h), Sense::hover());
-        let (centre, revert_it) = ui
-            .horizontal(|ui| {
-                let c = ui
-                    .add(
-                        egui::Button::new(RichText::new("Centre").color(ink()))
-                            .min_size(Vec2::new(56.0, look.button_h))
-                            .corner_radius(CornerRadius::same(6))
-                            .fill(card_hi())
-                            .stroke(Stroke::new(1.0_f32, line())),
-                    )
-                    .clicked();
-                let r = ui
-                    .add_enabled(!st.originals.is_empty(), egui::Button::new("Revert").min_size(Vec2::new(56.0, look.button_h)))
-                    .clicked();
-                (c, r)
-            })
-            .inner;
-        if centre {
-            gesture = Some(Gesture::Jump(0.0, 0.0));
+        let now_vals = focus_values(model, &current_values(preset, s));
+        ui.horizontal(|ui| {
+            let button = |ui: &mut egui::Ui, text: &str, enabled: bool| {
+                ui.add_enabled(
+                    enabled,
+                    egui::Button::new(RichText::new(text).color(ink()))
+                        .min_size(Vec2::new(48.0, look.button_h))
+                        .corner_radius(CornerRadius::same(6))
+                        .fill(card_hi())
+                        .stroke(Stroke::new(1.0_f32, line())),
+                )
+                .clicked()
+            };
+            input.centre = button(ui, "Centre", true);
+            input.revert = button(ui, "Revert", !st.originals.is_empty() && !same_vals(&st.originals, &now_vals));
+            if live {
+                input.undo = button(ui, "Undo", !st.history.undo.is_empty());
+                input.redo = button(ui, "Redo", !st.history.redo.is_empty());
+            }
+        });
+        let mut gesture = decide(input, inner, look.snap);
+        if let Some((x, y)) = preview {
+            gesture = Some(Gesture::Jump(x, y));
         }
-        if revert_it {
-            gesture = Some(Gesture::Revert);
+        if matches!(gesture, Some(Gesture::Jump(..) | Gesture::Revert | Gesture::Undo | Gesture::Redo)) {
+            GESTURE_START.store(true, Ordering::Relaxed);
         }
 
         let mut ended = false;
         match gesture {
-            Some(Gesture::Move(x, y)) => apply_at(preset, s, &mut st, model, live, dirty, x, y),
+            Some(Gesture::Move(x, y)) => {
+                if st.drag_before.is_none() {
+                    st.drag_before = Some(now_vals.clone());
+                }
+                apply_at(preset, s, &mut st, model, live, dirty, x, y);
+            }
             Some(Gesture::Jump(x, y)) => {
                 apply_at(preset, s, &mut st, model, live, dirty, x, y);
+                let after = focus_values(model, &current_values(preset, s));
+                st.history.push(Step { before: now_vals.clone(), after });
                 ended = true;
             }
             Some(Gesture::Revert) => {
-                revert(preset, s, &mut st, live, dirty);
+                let originals = st.originals.clone();
+                write_values(preset, s, &mut st, live, dirty, originals);
+                let after = focus_values(model, &current_values(preset, s));
+                st.history.push(Step { before: now_vals.clone(), after });
+                st.solid = false;
+                st.seen.clear();
+                ended = true;
+            }
+            Some(Gesture::Undo) => {
+                if let Some(v) = st.history.undo() {
+                    write_values(preset, s, &mut st, live, dirty, v);
+                }
+                st.solid = false;
+                st.seen.clear();
+                ended = true;
+            }
+            Some(Gesture::Redo) => {
+                if let Some(v) = st.history.redo() {
+                    write_values(preset, s, &mut st, live, dirty, v);
+                }
+                st.solid = false;
+                st.seen.clear();
                 ended = true;
             }
             Some(Gesture::Release) => ended = true,
             None => {}
         }
-        let by_hand = by_hand && !matches!(gesture, Some(Gesture::Move(..) | Gesture::Jump(..) | Gesture::Revert));
+        // A drag is one step: from where it began to where it ended.
+        if matches!(gesture, Some(Gesture::Release)) || (st.drag_before.is_some() && !resp.dragged()) {
+            if let Some(before) = st.drag_before.take() {
+                let after = focus_values(model, &current_values(preset, s));
+                st.history.push(Step { before, after });
+            }
+        }
+        relocate(&mut st, model, &current_values(preset, s));
 
         // Live sending: newest value per parameter, at most every FLUSH_STEP while dragging, everything at the end.
         if live && !st.pending.is_empty() {
@@ -466,19 +689,28 @@ pub fn focus_pad(
             }
         }
 
-        paint_pad(ui, rect, inner, model, symbol, st.puck, by_hand, look);
-        let (text, col) = match (st.puck, by_hand) {
-            (None, _) => ("Drag to change the character".to_owned(), muted()),
-            (Some(_), true) => ("Edited by hand".to_owned(), muted()),
-            (Some((x, y)), false) => {
-                let k = nearest_tone(x, y);
-                let share = focus::weights(x, y)[RegionKey::ALL.iter().position(|r| *r == k).unwrap_or(0)] * 100.0;
-                (format!("{}  {:.0}%", model.region_name(k), share), ink())
+        let what = shown(st.solid, st.pos, st.located);
+        paint_pad(ui, rect, inner, model, symbol, what, look);
+        let dominant = |x: f64, y: f64| {
+            let k = nearest_tone(x, y);
+            let share = focus::weights(x, y)[RegionKey::ALL.iter().position(|r| *r == k).unwrap_or(0)] * 100.0;
+            (model.region_name(k).to_owned(), share)
+        };
+        let (text, col) = match what {
+            Shown::Solid(x, y) => {
+                let (n, share) = dominant(x, y);
+                (format!("{n}  {share:.0}%"), ink())
             }
+            Shown::Ghost(x, y) => {
+                let (n, share) = dominant(x, y);
+                (format!("On the pad: {n} {share:.0}%"), muted())
+            }
+            Shown::Hand(x, y) => (format!("Set by hand: closest tone {}", model.region_name(nearest_tone(x, y))), muted()),
+            Shown::Nothing => ("Drag to change the character".to_owned(), muted()),
         };
         ui.painter().text(srect.left_center(), Align2::LEFT_CENTER, text, FontId::proportional(look.text), col);
         // "Centre: <name>", the name in the accent colour while the centre is the leading tone.
-        let centre_leads = !by_hand && st.puck.is_some_and(|(x, y)| nearest_tone(x, y) == RegionKey::Origin);
+        let centre_leads = matches!(what, Shown::Solid(x, y) | Shown::Ghost(x, y) if nearest_tone(x, y) == RegionKey::Origin);
         let font = FontId::proportional(look.text);
         let head = ui.painter().layout_no_wrap("Centre: ".to_owned(), font.clone(), muted());
         let name = ui.painter().layout_no_wrap(
@@ -509,16 +741,7 @@ fn label_rect(rect: Rect, at: Pos2, x: f64, y: f64, size: Vec2) -> Rect {
     Rect::from_min_size(Pos2::new(min_x, min_y), size)
 }
 
-fn paint_pad(
-    ui: &egui::Ui,
-    rect: Rect,
-    inner: Rect,
-    model: &FocusModel,
-    symbol: &str,
-    puck: Option<(f64, f64)>,
-    by_hand: bool,
-    look: Look,
-) {
+fn paint_pad(ui: &egui::Ui, rect: Rect, inner: Rect, model: &FocusModel, symbol: &str, what: Shown, look: Look) {
     let p = ui.painter();
     let round = CornerRadius::same(8);
     p.rect_filled(rect, round, Color32::from_rgb(0x10, 0x11, 0x14));
@@ -534,8 +757,12 @@ fn paint_pad(
     p.line_segment([Pos2::new(c.x, inner.top()), Pos2::new(c.x, inner.bottom())], faint);
     p.line_segment([Pos2::new(inner.left(), c.y), Pos2::new(inner.right(), c.y)], faint);
 
-    let puck_at = puck.map(|(x, y)| pos_of(inner, x, y));
-    let leading = puck.filter(|_| !by_hand).map(|(x, y)| nearest_tone(x, y));
+    let at_puck = match what {
+        Shown::Solid(x, y) | Shown::Ghost(x, y) => Some((x, y)),
+        _ => None,
+    };
+    let puck_at = at_puck.map(|(x, y)| pos_of(inner, x, y));
+    let leading = at_puck.map(|(x, y)| nearest_tone(x, y));
     let font = FontId::proportional(look.text);
     for key in RegionKey::ALL {
         let (x, y) = key.at();
@@ -557,12 +784,21 @@ fn paint_pad(
         p.galley_with_override_text_color(pill.center() - galley.size() / 2.0, galley, colour.gamma_multiply(fade));
     }
     if let Some(at) = puck_at {
-        let (fill, ring) = if by_hand { (theme::muted().gamma_multiply(0.7), muted()) } else { (accent_fill(), Color32::WHITE) };
-        p.circle_filled(at, look.halo, fill.gamma_multiply(0.25));
-        p.circle_stroke(at, look.halo, Stroke::new(if look.halo > 20.0 { 2.0_f32 } else { 1.0 }, fill.gamma_multiply(0.6)));
-        p.circle_filled(at, look.puck, fill);
-        p.circle_stroke(at, look.puck, Stroke::new(2.0_f32, Color32::from_black_alpha(200)));
-        p.circle_stroke(at, look.puck + 1.5, Stroke::new(1.0_f32, ring));
+        let halo_w = if look.halo > 20.0 { 2.0_f32 } else { 1.0 };
+        if matches!(what, Shown::Solid(..)) {
+            let fill = accent_fill();
+            p.circle_filled(at, look.halo, fill.gamma_multiply(0.25));
+            p.circle_stroke(at, look.halo, Stroke::new(halo_w, fill.gamma_multiply(0.6)));
+            p.circle_filled(at, look.puck, fill);
+            p.circle_stroke(at, look.puck, Stroke::new(2.0_f32, Color32::from_black_alpha(200)));
+            p.circle_stroke(at, look.puck + 1.5, Stroke::new(1.0_f32, Color32::WHITE));
+        } else {
+            // A ghost: the same puck as an outline only, so it reads as "the values are here" and not "you put it here".
+            p.circle_stroke(at, look.halo, Stroke::new(halo_w, accent().gamma_multiply(0.5)));
+            p.circle_filled(at, look.puck, Color32::from_black_alpha(60));
+            p.circle_stroke(at, look.puck, Stroke::new(3.0_f32, Color32::from_black_alpha(200)));
+            p.circle_stroke(at, look.puck, Stroke::new(2.0_f32, accent()));
+        }
     }
 }
 
@@ -690,6 +926,64 @@ mod tests {
     }
 
     #[test]
+    fn opening_focus_asks_for_nothing() {
+        let inner = inner_rect(pad(), Look::new(false).inset);
+        // No pointer, no button: no gesture, so nothing is written, sent or marked dirty.
+        assert_eq!(decide(Input::default(), inner, Look::new(false).snap), None);
+        // A drag, a click (snapping to a tone) and the buttons each ask for something.
+        let p = pos_of(inner, 0.5, 0.5);
+        assert!(matches!(decide(Input { dragging: Some(p), ..Default::default() }, inner, 22.0), Some(Gesture::Move(..))));
+        let near_corner = pos_of(inner, 1.0, 1.0) + Vec2::new(-4.0, 4.0);
+        assert_eq!(decide(Input { clicked: Some(near_corner), ..Default::default() }, inner, 22.0), Some(Gesture::Jump(1.0, 1.0)));
+        assert_eq!(decide(Input { centre: true, ..Default::default() }, inner, 22.0), Some(Gesture::Jump(0.0, 0.0)));
+        assert_eq!(decide(Input { revert: true, ..Default::default() }, inner, 22.0), Some(Gesture::Revert));
+        assert_eq!(decide(Input { undo: true, ..Default::default() }, inner, 22.0), Some(Gesture::Undo));
+        assert_eq!(decide(Input { drag_stopped: true, ..Default::default() }, inner, 22.0), Some(Gesture::Release));
+    }
+
+    #[test]
+    fn the_puck_state_follows_the_rule() {
+        let near = Located { x: 0.2, y: -0.4, error: GHOST_MAX_ERROR / 2.0 };
+        let far = Located { x: -0.1, y: 0.6, error: GHOST_MAX_ERROR * 5.0 };
+        // A gesture's own values: solid, wherever the fit says.
+        assert_eq!(shown(true, Some((0.5, 0.5)), Some(far)), Shown::Solid(0.5, 0.5));
+        // Not from a gesture: a ghost when it fits, none (set by hand) when it does not.
+        assert_eq!(shown(false, Some((0.5, 0.5)), Some(near)), Shown::Ghost(0.2, -0.4));
+        assert_eq!(shown(false, None, Some(far)), Shown::Hand(-0.1, 0.6));
+        assert_eq!(shown(false, None, None), Shown::Nothing);
+    }
+
+    fn step(before: f32, after: f32) -> Step {
+        Step { before: vec![(0, Value::F32(before))], after: vec![(0, Value::F32(after))] }
+    }
+
+    #[test]
+    fn undo_and_redo_walk_the_steps_and_a_new_gesture_drops_the_redo() {
+        let mut h = History::default();
+        assert!(h.undo().is_none() && h.redo().is_none());
+        assert!(h.push(step(0.1, 0.5)));
+        assert!(h.push(step(0.5, 0.9)));
+        assert!(!h.push(step(0.9, 0.9)), "a gesture that changed nothing is not a step");
+        assert_eq!(h.undo(), Some(vec![(0, Value::F32(0.5))]));
+        assert_eq!(h.undo(), Some(vec![(0, Value::F32(0.1))]));
+        assert!(h.undo().is_none());
+        assert_eq!(h.redo(), Some(vec![(0, Value::F32(0.5))]));
+        // A new gesture starts a new line: nothing to redo.
+        assert!(h.push(step(0.5, 0.7)));
+        assert!(h.redo().is_none());
+        assert_eq!(h.undo(), Some(vec![(0, Value::F32(0.5))]));
+    }
+
+    #[test]
+    fn revert_is_a_step_that_can_be_undone() {
+        let mut h = History::default();
+        h.push(step(0.1, 0.8)); // a gesture
+        h.push(step(0.8, 0.1)); // Revert: back to the originals
+        assert_eq!(h.undo(), Some(vec![(0, Value::F32(0.8))]), "undoing Revert brings the gesture back");
+        assert_eq!(h.redo(), Some(vec![(0, Value::F32(0.1))]));
+    }
+
+    #[test]
     fn touch_makes_everything_bigger() {
         let (d, t) = (Look::new(false), Look::new(true));
         assert_eq!((d.snap, d.puck, d.inset, d.fade, d.button_h), (22.0, 11.0, 34.0, 40.0, 26.0));
@@ -731,18 +1025,6 @@ mod tests {
         assert_eq!(to_value(&Value::int(3), FocusValue::Float(4.6)), Value::int(5));
         assert_eq!(to_value(&Value::F32(0.1), FocusValue::Float(0.5)), Value::F32(0.5));
         assert_eq!(to_value(&Value::F32(0.1), FocusValue::Bool(true)), Value::F32(1.0));
-    }
-
-    #[test]
-    fn edited_by_hand_sees_a_changed_knob() {
-        let applied = vec![(0, Value::F32(0.5)), (2, Value::Bool(true))];
-        let same_now = vec![Value::F32(0.5), Value::F32(9.0), Value::Bool(true)];
-        assert!(!edited_by_hand(&applied, &same_now));
-        let knob_moved = vec![Value::F32(0.6), Value::F32(9.0), Value::Bool(true)];
-        assert!(edited_by_hand(&applied, &knob_moved));
-        let switch_flipped = vec![Value::F32(0.5), Value::F32(9.0), Value::Bool(false)];
-        assert!(edited_by_hand(&applied, &switch_flipped));
-        assert!(!edited_by_hand(&[], &knob_moved));
     }
 
     #[test]

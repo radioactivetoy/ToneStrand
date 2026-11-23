@@ -1250,6 +1250,7 @@ impl App {
     /// Keep the undo history of a preset: an edit that starts after a short pause is a new
     /// step (so one knob drag is one step); `history` asks to undo (true) or redo (false).
     fn track_history(&mut self, i: usize, before: DocKind, history: Option<bool>) {
+        let active = crate::editors::focus_gesture_active();
         let Some(doc) = self.docs.get_mut(i) else { return };
         if doc.is_live() {
             doc.undo.clear();
@@ -1283,7 +1284,17 @@ impl App {
         if !changed {
             return;
         }
-        if doc.last_edit.is_none_or(|t| t.elapsed() > Duration::from_millis(700)) {
+        // A Focus pad gesture is one step however long it takes (a slow drag must not be split by the pause timer), and a
+        // new gesture is always a new step.
+        let new_step = if crate::editors::focus_gesture_start_pending() {
+            crate::editors::focus_gesture_started();
+            true
+        } else if active {
+            false
+        } else {
+            doc.last_edit.is_none_or(|t| t.elapsed() > Duration::from_millis(700))
+        };
+        if new_step {
             doc.undo.push(before);
             if doc.undo.len() > 100 {
                 doc.undo.drain(..1);
