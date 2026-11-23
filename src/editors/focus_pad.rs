@@ -209,6 +209,19 @@ fn should_flush(last: Option<f64>, now: f64, ended: bool) -> bool {
     ended || last.is_none_or(|t| now - t >= FLUSH_STEP)
 }
 
+/// Whether a value is worth a round trip to the pedal: at the end of a gesture always, otherwise only when it differs from the last
+/// one sent for that parameter by at least 0.1% of the parameter's range (a switch or a choice: when it is not the same).
+fn worth_sending(last: Option<&Value>, new: &Value, range: f64, ended: bool) -> bool {
+    let Some(last) = last else { return true };
+    if ended {
+        return true;
+    }
+    match (last.as_f64(), new.as_f64()) {
+        (Some(a), Some(b)) => (a - b).abs() >= 0.001 * range,
+        _ => !same(last, new),
+    }
+}
+
 /// Take the values to send from the pending map (newest value per parameter). Switch-like ones (`deferred`) stay unless
 /// `with_deferred`.
 fn take_flush(pending: &mut BTreeMap<usize, Value>, deferred: impl Fn(usize) -> bool, with_deferred: bool) -> Vec<(usize, Value)> {
@@ -378,6 +391,8 @@ struct PadState {
     /// Values not yet sent to the pedal (newest per parameter).
     pending: BTreeMap<usize, Value>,
     last_flush: Option<f64>,
+    /// The last value sent to the pedal for each parameter in this gesture, to skip changes too small to matter.
+    last_sent: BTreeMap<usize, Value>,
     started: bool,
 }
 
@@ -627,6 +642,7 @@ pub fn focus_pad(
         match gesture {
             Some(Gesture::Move(x, y)) => {
                 if st.drag_before.is_none() {
+                    st.last_sent.clear();
                     st.drag_before = Some(now_vals.clone());
                 }
                 apply_at(preset, s, &mut st, model, live, dirty, x, y);
@@ -680,7 +696,15 @@ pub fn focus_pad(
             if should_flush(st.last_flush, now, ended) {
                 let deferred = |i: usize| model.params.iter().any(|p| p.index == i && (p.quantize || p.kind == FocusKind::Bool));
                 for (index, value) in take_flush(&mut st.pending, deferred, ended || SEND_SWITCHES_WHILE_DRAGGING) {
-                    cmds.push(Cmd::SetParam { block: s.wire_block(), path: 0, index: index as i64, value });
+                    let range =
+                        model.params.iter().find(|p| p.index == index).map_or(1.0, |p| if p.max > p.min { p.max - p.min } else { 1.0 });
+                    if worth_sending(st.last_sent.get(&index), &value, range, ended) {
+                        st.last_sent.insert(index, value.clone());
+                        cmds.push(Cmd::SetParam { block: s.wire_block(), path: 0, index: index as i64, value });
+                    } else {
+                        // Not worth a round trip yet: keep it for the next flush (and the end of the gesture sends it).
+                        st.pending.insert(index, value);
+                    }
                 }
                 st.last_flush = Some(now);
             }
@@ -1033,6 +1057,22 @@ mod tests {
         assert!(!should_flush(Some(1.0), 1.02, false));
         assert!(should_flush(Some(1.0), 1.06, false));
         assert!(should_flush(Some(1.0), 1.001, true));
+    }
+
+    #[test]
+    fn a_tiny_change_is_not_sent_but_the_end_of_a_gesture_always_sends() {
+        let sent = Value::F32(0.5);
+        assert!(worth_sending(None, &Value::F32(0.5), 1.0, false), "never sent: send");
+        assert!(!worth_sending(Some(&sent), &Value::F32(0.5004), 1.0, false), "0.04% of the range");
+        assert!(worth_sending(Some(&sent), &Value::F32(0.502), 1.0, false), "0.2% of the range");
+        assert!(!worth_sending(Some(&sent), &Value::F32(0.5004), 1.0, false));
+        assert!(worth_sending(Some(&sent), &Value::F32(0.5004), 1.0, true), "the end always sends");
+        // The range scales the limit: 0.05 of a 0-100 range is small, of a 0-1 range it is big.
+        assert!(!worth_sending(Some(&Value::F32(50.0)), &Value::F32(50.05), 100.0, false));
+        assert!(worth_sending(Some(&Value::F32(0.5)), &Value::F32(0.55), 1.0, false));
+        // A switch is sent when it changes, and not when it is the same.
+        assert!(worth_sending(Some(&Value::Bool(false)), &Value::Bool(true), 1.0, false));
+        assert!(!worth_sending(Some(&Value::Bool(true)), &Value::Bool(true), 1.0, false));
     }
 
     #[test]
