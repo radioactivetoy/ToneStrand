@@ -227,6 +227,90 @@ impl FocusModel {
     }
 }
 
+/// Where the puck would sit for a set of values already in the block (see [`FocusModel::locate`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Located {
+    pub x: f64,
+    pub y: f64,
+    /// RMS over the model's parameters of the difference as a part of each one's range (a switch or a snapping choice that does not
+    /// match counts as 1): 0 is an exact match.
+    pub error: f64,
+}
+
+/// The largest [`Located::error`] at which the values count as "on the pad" (a ghost puck is shown); above it they were set by hand.
+pub const GHOST_MAX_ERROR: f64 = 0.04;
+
+impl FocusModel {
+    /// How far (0 exact, 1 as far as it gets) the values of the model's parameters at (x, y) are from `current`.
+    fn fit_error(&self, current: &[f64], x: f64, y: f64) -> f64 {
+        let w = weights(x, y);
+        let mut sum = 0.0;
+        for (i, p) in self.params.iter().enumerate() {
+            let want = match self.value_of(i, p, &w) {
+                FocusValue::Float(f) => f,
+                FocusValue::Int(n) => n as f64,
+                FocusValue::Bool(b) => f64::from(b),
+            };
+            let d = if p.kind == Kind::Bool || p.quantize {
+                f64::from((want - current[i]).abs() > 1e-4 * (p.max - p.min).abs().max(1.0))
+            } else {
+                let range = if p.max > p.min { p.max - p.min } else { 1.0 };
+                (want - current[i]).abs() / range
+            };
+            sum += d * d;
+        }
+        (sum / self.params.len().max(1) as f64).sqrt()
+    }
+
+    /// The point of the pad whose values are closest to `current` (value index, value; a switch is 0 or 1), or None if a value the
+    /// model needs is missing. A coarse grid, then a local refinement of the best few. When several points fit equally well (a model
+    /// with one moving parameter fits along a whole line) the one closest to `prefer` (the centre if none) wins, so the puck does not jump.
+    pub fn locate(&self, current: &[(usize, f64)], prefer: Option<(f64, f64)>) -> Option<Located> {
+        if self.params.is_empty() {
+            return None;
+        }
+        let cur: Vec<f64> = self.params.iter().map(|p| current.iter().find(|c| c.0 == p.index).map(|c| c.1)).collect::<Option<_>>()?;
+        let err = |x: f64, y: f64| self.fit_error(&cur, x, y);
+        let (px, py) = prefer.map_or((0.0, 0.0), |(x, y)| (x.clamp(-1.0, 1.0), y.clamp(-1.0, 1.0)));
+        const N: i32 = 40;
+        let mut grid: Vec<(f64, f64, f64)> = Vec::with_capacity(((N + 1) * (N + 1)) as usize);
+        for i in 0..=N {
+            for j in 0..=N {
+                let (x, y) = (f64::from(i) / f64::from(N) * 2.0 - 1.0, f64::from(j) / f64::from(N) * 2.0 - 1.0);
+                grid.push((err(x, y), x, y));
+            }
+        }
+        grid.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // Refine the best few, and the preferred point.
+        let refine = |mut x: f64, mut y: f64| {
+            let mut e = err(x, y);
+            let mut step = 0.05;
+            for _ in 0..14 {
+                let mut moved = false;
+                for (dx, dy) in [(1.0, 0.0), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0), (1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)] {
+                    let (nx, ny) = ((x + dx * step).clamp(-1.0, 1.0), (y + dy * step).clamp(-1.0, 1.0));
+                    let ne = err(nx, ny);
+                    if ne < e {
+                        (x, y, e, moved) = (nx, ny, ne, true);
+                    }
+                }
+                if !moved {
+                    step /= 2.0;
+                }
+            }
+            (e, x, y)
+        };
+        let mut found: Vec<(f64, f64, f64)> = grid.iter().take(6).map(|g| refine(g.1, g.2)).collect();
+        found.push(refine(px, py));
+        found.extend(grid.iter().take_while(|g| g.0 <= grid[0].0 + 1e-6).copied());
+        let best = found.iter().map(|f| f.0).fold(f64::INFINITY, f64::min);
+        let (e, x, y) = found
+            .into_iter()
+            .filter(|f| f.0 <= best + 1e-6)
+            .min_by(|a, b| ((a.1 - px).powi(2) + (a.2 - py).powi(2)).total_cmp(&((b.1 - px).powi(2) + (b.2 - py).powi(2))))?;
+        Some(Located { x, y, error: e })
+    }
+}
 /// What turning Line 6's file into a [`FocusSet`] left out, and why.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Report {
@@ -451,6 +535,10 @@ mod tests {
     }
 
     /// Five tones for a float, a snapping choice and a switch.
+    pub(super) fn model_for_locate() -> FocusModel {
+        model()
+    }
+
     fn model() -> FocusModel {
         let p = |id: &str, index, quantize, kind, min, max| FocusParam { id: id.into(), index, quantize, kind, min, max };
         FocusModel {
@@ -749,5 +837,105 @@ mod builtin_tests {
                 assert_eq!(m.evaluate(x, y).len(), m.params.len(), "{symbol}");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod locate_tests {
+    use super::*;
+
+    fn values_at(m: &FocusModel, x: f64, y: f64) -> Vec<(usize, f64)> {
+        m.evaluate(x, y)
+            .into_iter()
+            .map(|(i, v)| {
+                (
+                    i,
+                    match v {
+                        FocusValue::Float(f) => f,
+                        FocusValue::Int(n) => n as f64,
+                        FocusValue::Bool(b) => f64::from(b),
+                    },
+                )
+            })
+            .collect()
+    }
+
+    const SAMPLES: [(f64, f64); 12] = [
+        (0.0, 0.0),
+        (-1.0, -1.0),
+        (-1.0, 1.0),
+        (1.0, -1.0),
+        (1.0, 1.0),
+        (0.0, 1.0),
+        (0.0, -1.0),
+        (-1.0, 0.0),
+        (1.0, 0.0),
+        (0.3, -0.7),
+        (-0.55, 0.2),
+        (0.9, 0.9),
+    ];
+
+    /// Locating the values a point gives finds values that evaluate the same (positions can be ambiguous, values cannot).
+    fn round_trips(name: &str, m: &FocusModel) {
+        for (x, y) in SAMPLES {
+            let cur = values_at(m, x, y);
+            let loc = m.locate(&cur, Some((x, y))).unwrap_or_else(|| panic!("{name}: nothing located"));
+            assert!(loc.error < 1e-3, "{name} at ({x},{y}): error {}", loc.error);
+            let back = values_at(m, loc.x, loc.y);
+            for ((i, a), (j, b)) in cur.iter().zip(&back) {
+                assert_eq!(i, j);
+                assert!((a - b).abs() <= 1e-3 * (a.abs().max(1.0)), "{name} at ({x},{y}): value {i} {a} against {b}");
+            }
+        }
+    }
+
+    #[test]
+    fn locating_the_made_up_model() {
+        let m = tests::model_for_locate();
+        round_trips("made-up", &m);
+        // A missing value gives nothing.
+        assert!(m.locate(&[(0, 0.5)], None).is_none());
+    }
+
+    #[test]
+    fn a_model_with_one_moving_parameter_does_not_make_the_puck_jump() {
+        let p = FocusParam { id: "Drive".into(), index: 0, quantize: false, kind: Kind::Float, min: 0.0, max: 1.0 };
+        let r = |n: &str, v: f64| Region { name: n.into(), values: vec![v] };
+        // Drive depends on x only, so a whole vertical line fits equally.
+        let m = FocusModel {
+            name: "One".into(),
+            category: "amp".into(),
+            params: vec![p],
+            regions: vec![r("a", 0.5), r("b", 0.0), r("c", 0.0), r("d", 1.0), r("e", 1.0)],
+        };
+        let cur = values_at(&m, 0.4, 0.6);
+        let at = m.locate(&cur, Some((0.4, -0.3))).unwrap();
+        assert!(at.error < 1e-6);
+        assert!((at.x - 0.4).abs() < 0.02, "x {}", at.x);
+        assert!((at.y + 0.3).abs() < 0.02, "stays near the preferred y, not {}", at.y);
+    }
+
+    #[test]
+    fn every_built_in_model_locates_its_own_values() {
+        let Some(set) = load_builtin() else { return };
+        for (symbol, m) in &set.models {
+            round_trips(symbol, m);
+        }
+    }
+
+    #[test]
+    fn a_hand_edited_amp_is_not_on_the_pad() {
+        let Some(set) = load_builtin() else { return };
+        let mut tested = 0;
+        for (symbol, m) in set.models.iter().filter(|(_, m)| m.category == "amp" && m.params.len() >= 6).take(25) {
+            let mut cur = values_at(m, 0.3, -0.7);
+            let p = &m.params[0];
+            let far = if (cur[0].1 - p.min).abs() > (cur[0].1 - p.max).abs() { p.min } else { p.max };
+            cur[0].1 = far;
+            let loc = m.locate(&cur, Some((0.3, -0.7))).unwrap();
+            assert!(loc.error > GHOST_MAX_ERROR, "{symbol}: error {}", loc.error);
+            tested += 1;
+        }
+        assert!(tested > 5, "{tested} amps");
     }
 }
