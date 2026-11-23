@@ -130,3 +130,9 @@ Must be measured through the Box: how many parameter messages per second the ped
   puck, and paced live sending (50 ms, everything on release; switches only on release, constant `SEND_SWITCHES_WHILE_DRAGGING`). Not yet tested on a pedal.
   Pictures: `TONESTRAND_FOCUS=1` (Focus by default), `TONESTRAND_FOCUS_AT=x,y` (puck placed on the first frame). `--screenshot` runs no longer ask about unsaved changes on quit.
   Not done: mode kept in settings, the .hlx editor, a model missing on the connected pedal.
+- **Phase 3b redesign (2026-11-23), after the owner's review:** the `Knobs | Focus` pair is gone; a `Focus` toggle button sits in the block header just before
+  "Change effect...". While on, the photo column becomes the pad (width min(340, 30% of the panel), height 0.85 x width; the panel body grows to fit) with the
+  model's photo as its background ("cover" fit, dimmed by 150/255 black), a faint cross-hair, five ring anchors, tone names as dark pills inside the corners (the
+  leading tone in the accent colour, a name fades to 35% when the puck is within 40 px), a larger puck with glow, snap within 22 px, and the readout naming the
+  leading tone with its percentage. Pure helpers (non-square mapping, snap radius, label fade, cover fit, sizes) have tests. Pictures checked: Hiwatt (dark), Simple
+  Delay, Boss AC-2 and others, Focus off, and 1280x800.

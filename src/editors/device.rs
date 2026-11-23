@@ -426,6 +426,12 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
         return;
     };
     let s = slots[sel].clone();
+    // The effect's symbol when it has Focus tones (only blocks do): the Focus toggle in the header and the pad use it.
+    let header_focus_sym: Option<String> = if s.kind == Kind::Block {
+        s.model.zip(cat).and_then(|(m, c)| c.symbol(m)).filter(|y| focus_pad::model_for(y).is_some()).map(str::to_owned)
+    } else {
+        None
+    };
     theme::card(ui, |ui| {
         // Header: the effect, its switch, and swapping or removing it.
         ui.horizontal(|ui| {
@@ -473,6 +479,13 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                         }
                         None => {
                             ui.label(RichText::new("Effect list needs HX Edit's files").small().color(muted()));
+                        }
+                    }
+                    // Right to left: this sits just before (left of) "Change effect...".
+                    if let Some(sy) = header_focus_sym.as_deref() {
+                        let on = focus_pad::in_focus(sy);
+                        if super::switch_button(ui, "Focus", on) {
+                            focus_pad::set_focus(sy, !on);
                         }
                     }
                 }
@@ -557,8 +570,16 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
         let focus_model = if s.kind == Kind::Block { sym.as_deref().and_then(focus_pad::model_for) } else { None };
         let side = (has_photo(&sym) || has_photo(&cab_sym)) && ui.available_width() > 700.0;
         let full = ui.available_width();
-        let h = super::BODY_H;
-        super::body_section(ui, side, full, h, sym.as_deref(), |ui| {
+        let focus_on = focus_model.is_some() && sym.as_deref().is_some_and(focus_pad::in_focus);
+        let pad_w = focus_pad::pad_width(full);
+        let h = if focus_on { focus_pad::panel_height(pad_w) } else { super::BODY_H };
+        let mut content = |ui: &mut egui::Ui, left: bool| {
+            if left {
+                if let (Some(sy), Some(model)) = (sym.as_deref(), focus_model) {
+                    focus_pad::focus_pad(ui, &mut *preset, live, &mut *cmds, &mut *dirty, &s, sy, model, pad_w);
+                }
+                return;
+            }
             // Which footswitch turns this block on and off.
             if s.kind == Kind::Block {
                 let fam = snapshots::family_of_device(crate::nam::unit());
@@ -589,44 +610,21 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                     }
                 }
                 theme::help(ui, "The footswitch that turns this block on and off. Knobs on footswitches, expression pedals, snapshots and MIDI are in the Controllers card below.");
-                // Focus mode: steer the character on an X-Y pad instead of (or with) the knobs.
-                if let (Some(sy), Some(_)) = (sym.as_deref(), focus_model) {
-                    ui.add_space(24.0);
-                    let on = focus_pad::in_focus(sy);
-                    if super::switch_button(ui, "Knobs", !on) {
-                        focus_pad::set_focus(sy, false);
-                    }
-                    if super::switch_button(ui, "Focus", on) {
-                        focus_pad::set_focus(sy, true);
-                    }
-                }
             });
                 ui.add_space(4.0);
             }
-            match (sym.as_deref(), focus_model) {
-                (Some(sy), Some(model)) if focus_pad::in_focus(sy) => {
-                    ui.horizontal_top(|ui| {
-                        focus_pad::focus_pad(ui, &mut *preset, live, &mut *cmds, &mut *dirty, &s, sy, model);
-                        ui.add_space(10.0);
-                        ui.vertical(|ui| {
-                            knob_grid(
-                                ui,
-                                DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty },
-                                &s,
-                                sel,
-                                false,
-                            );
-                        });
-                    });
-                }
-                _ => knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, false),
-            }
-        });
+            knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, false);
+        };
+        if focus_on {
+            super::body_section_pad(ui, pad_w, full, h, &mut content);
+        } else {
+            super::body_section(ui, side, full, h, sym.as_deref(), |ui| content(ui, false));
+        }
         if let Some(cab) = s.paired {
             ui.add_space(6.0);
             ui.separator();
             ui.add_space(6.0);
-            super::body_section(ui, side, full, h, cab_sym.as_deref(), |ui| {
+            super::body_section(ui, side, full, super::BODY_H, cab_sym.as_deref(), |ui| {
                 let (name, _, col) = describe(cat, cab);
                 let dual = s.model.zip(cat).is_some_and(|(m, c)| c.symbol(m).is_some_and(|x| x.starts_with("HD2_Cab")));
                 let mut pick = None;

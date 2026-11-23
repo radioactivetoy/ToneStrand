@@ -8,7 +8,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Mutex, OnceLock};
 
-use eframe::egui::{self, Align2, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, Vec2};
+use eframe::egui::{self, Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, Vec2};
 use tonestrand_core::focus::{self, FocusModel, FocusSet, FocusValue, Kind as FocusKind, RegionKey};
 
 use crate::device::Cmd;
@@ -16,12 +16,23 @@ use crate::devpreset::{DevicePreset, SlotView};
 use crate::msgpack::Value;
 use crate::theme::{self, *};
 
-/// Side of the pad (the body height of a block panel minus a little).
-const PAD_SIDE: f32 = super::BODY_H - 10.0;
+/// The pad's widest size and its share of the panel's width.
+const PAD_MAX_W: f32 = 340.0;
+const PAD_SHARE: f32 = 0.30;
+/// The pad's height as a part of its width.
+const PAD_ASPECT: f32 = 0.85;
+/// The rows under the pad (readout, then Centre and Revert) with their gaps.
+const BELOW_PAD: f32 = 16.0 + 26.0 + 12.0;
+/// A tone name this close (in points) to the puck fades, so the puck never hides it.
+const FADE_RADIUS: f32 = 40.0;
+/// How faded a name is while the puck is near it.
+const FADE_ALPHA: f32 = 0.35;
+/// Darkening laid over the photo so it reads as a texture behind the controls.
+const PHOTO_DIM: u8 = 150;
 /// Space between the pad's edge and its corner tones, so the dots and the puck stay inside.
-const INSET: f32 = 14.0;
+const INSET: f32 = 34.0;
 /// A click this close to a tone (in points) lands exactly on it.
-const SNAP_RADIUS: f32 = 14.0;
+const SNAP_RADIUS: f32 = 22.0;
 /// The least time between two live sends while dragging, in seconds.
 const FLUSH_STEP: f64 = 0.05;
 /// Switch-like parameters (on/off, snapping choices) are sent while dragging too when true; when false only on release.
@@ -29,6 +40,37 @@ const FLUSH_STEP: f64 = 0.05;
 const SEND_SWITCHES_WHILE_DRAGGING: bool = false;
 
 // ---------------------------------------------------------------- pure parts
+
+/// The pad's width in a panel `full` points wide.
+pub fn pad_width(full: f32) -> f32 {
+    (full * PAD_SHARE).min(PAD_MAX_W).max(220.0)
+}
+
+/// The size of the pad for a width.
+fn pad_size(w: f32) -> Vec2 {
+    Vec2::new(w, (w * PAD_ASPECT).round())
+}
+
+/// The height of a block panel's body while it shows the pad: the pad, the rows under it and a margin.
+pub fn panel_height(w: f32) -> f32 {
+    pad_size(w).y + BELOW_PAD + 6.0
+}
+
+/// Whether a tone's name (its rectangle) is faded because the puck is close to it.
+fn label_faded(puck: Option<Pos2>, label: Rect, radius: f32) -> bool {
+    puck.is_some_and(|p| label.distance_to_pos(p) < radius)
+}
+
+/// The part of a picture (as 0..1 coordinates) that fills a rectangle of `rect` size without stretching ("cover").
+fn cover_uv(tex: Vec2, rect: Vec2) -> Rect {
+    let (tw, th) = (tex.x.max(1.0), tex.y.max(1.0));
+    let (u, v) = if tw / th > rect.x / rect.y.max(1.0) {
+        ((rect.x / rect.y.max(1.0)) * th / tw, 1.0)
+    } else {
+        (1.0, (rect.y / rect.x.max(1.0)) * tw / th)
+    };
+    Rect::from_min_max(Pos2::new((1.0 - u) / 2.0, (1.0 - v) / 2.0), Pos2::new((1.0 + u) / 2.0, (1.0 + v) / 2.0))
+}
 
 /// The square the puck moves in: the pad without its border.
 fn inner_rect(pad: Rect) -> Rect {
@@ -221,6 +263,7 @@ pub fn focus_pad(
     s: &SlotView,
     symbol: &str,
     model: &FocusModel,
+    width: f32,
 ) {
     let id = ui.make_persistent_id(("focus-pad", s.path, s.position, symbol));
     let mut st: PadState = ui.data(|d| d.get_temp(id)).unwrap_or_default();
@@ -235,7 +278,7 @@ pub fn focus_pad(
 
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 4.0;
-        let (rect, resp) = ui.allocate_exact_size(Vec2::splat(PAD_SIDE), Sense::click_and_drag());
+        let (rect, resp) = ui.allocate_exact_size(pad_size(width), Sense::click_and_drag());
         let inner = inner_rect(rect);
         if resp.dragged() {
             if let Some(p) = resp.interact_pointer_pos() {
@@ -257,7 +300,7 @@ pub fn focus_pad(
 
         // The status line, then the buttons (their gestures count this frame too).
         let status_h = 16.0;
-        let (srect, _) = ui.allocate_exact_size(Vec2::new(PAD_SIDE, status_h), Sense::hover());
+        let (srect, _) = ui.allocate_exact_size(Vec2::new(width, status_h), Sense::hover());
         let (centre, revert_it) = ui
             .horizontal(|ui| {
                 let c = super::switch_button(ui, "Centre", false);
@@ -303,45 +346,77 @@ pub fn focus_pad(
             }
         }
 
-        paint_pad(ui, rect, inner, model, st.puck, by_hand);
+        paint_pad(ui, rect, inner, model, symbol, st.puck, by_hand);
         let (text, col) = match (st.puck, by_hand) {
             (None, _) => ("Drag to change the character".to_owned(), muted()),
             (Some(_), true) => ("Edited by hand".to_owned(), muted()),
-            (Some((x, y)), false) => (model.region_name(nearest_tone(x, y)).to_owned(), ink()),
+            (Some((x, y)), false) => {
+                let k = nearest_tone(x, y);
+                let share = focus::weights(x, y)[RegionKey::ALL.iter().position(|r| *r == k).unwrap_or(0)] * 100.0;
+                (format!("{}  {:.0}%", model.region_name(k), share), ink())
+            }
         };
         ui.painter().text(srect.left_center(), Align2::LEFT_CENTER, text, FontId::proportional(12.5), col);
     });
     ui.data_mut(|d| d.insert_temp(id, st));
 }
 
-fn paint_pad(ui: &egui::Ui, rect: Rect, inner: Rect, model: &FocusModel, puck: Option<(f64, f64)>, by_hand: bool) {
+/// Where a tone's name sits: inside its corner of the pad (left corners left-aligned, right ones right-aligned, top at the top, bottom
+/// at the bottom), the centre one just below the centre ring. `size` is the pill's size.
+fn label_rect(rect: Rect, at: Pos2, x: f64, y: f64, size: Vec2) -> Rect {
+    let m = 6.0;
+    let ring = 12.0;
+    let (min_x, min_y) = if x < 0.0 {
+        (rect.left() + m, if y > 0.0 { rect.top() + m } else { rect.bottom() - m - size.y })
+    } else if x > 0.0 {
+        (rect.right() - m - size.x, if y > 0.0 { rect.top() + m } else { rect.bottom() - m - size.y })
+    } else {
+        (at.x - size.x / 2.0, at.y + ring)
+    };
+    Rect::from_min_size(Pos2::new(min_x, min_y), size)
+}
+
+fn paint_pad(ui: &egui::Ui, rect: Rect, inner: Rect, model: &FocusModel, symbol: &str, puck: Option<(f64, f64)>, by_hand: bool) {
     let p = ui.painter();
-    p.rect_filled(rect, CornerRadius::same(8), card_hi());
-    p.rect_stroke(rect, CornerRadius::same(8), Stroke::new(1.0_f32, line()), egui::StrokeKind::Inside);
-    let faint = Stroke::new(1.0_f32, line().gamma_multiply(0.6));
+    let round = CornerRadius::same(8);
+    p.rect_filled(rect, round, Color32::from_rgb(0x10, 0x11, 0x14));
+    // The model's photo as the background, "cover"-fitted and dimmed.
+    if let Some(tex) = crate::modelinfo::photo(ui.ctx(), symbol) {
+        egui::Image::new(&tex).uv(cover_uv(tex.size_vec2(), rect.size())).corner_radius(round).paint_at(ui, rect);
+        p.rect_filled(rect, round, Color32::from_black_alpha(PHOTO_DIM));
+    }
+    p.rect_stroke(rect, round, Stroke::new(1.0_f32, line()), egui::StrokeKind::Inside);
+    // Cross-hair through the centre.
+    let faint = Stroke::new(1.0_f32, Color32::from_white_alpha(40));
     let c = inner.center();
     p.line_segment([Pos2::new(c.x, inner.top()), Pos2::new(c.x, inner.bottom())], faint);
     p.line_segment([Pos2::new(inner.left(), c.y), Pos2::new(inner.right(), c.y)], faint);
-    let font = FontId::proportional(11.0);
+
+    let puck_at = puck.map(|(x, y)| pos_of(inner, x, y));
+    let leading = puck.filter(|_| !by_hand).map(|(x, y)| nearest_tone(x, y));
+    let font = FontId::proportional(12.5);
     for key in RegionKey::ALL {
         let (x, y) = key.at();
         let at = pos_of(inner, x, y);
-        p.circle_filled(at, 3.5, muted());
-        let name = model.region_name(key);
-        let (anchor, pos) = match (x < 0.0, x > 0.0, y < 0.0, y > 0.0) {
-            (true, _, true, _) => (Align2::LEFT_BOTTOM, Pos2::new(rect.left() + 7.0, at.y - 13.0)),
-            (true, _, _, true) => (Align2::LEFT_TOP, Pos2::new(rect.left() + 7.0, at.y + 13.0)),
-            (_, true, true, _) => (Align2::RIGHT_BOTTOM, Pos2::new(rect.right() - 7.0, at.y - 13.0)),
-            (_, true, _, true) => (Align2::RIGHT_TOP, Pos2::new(rect.right() - 7.0, at.y + 13.0)),
-            _ => (Align2::CENTER_TOP, Pos2::new(at.x, at.y + 13.0)),
-        };
-        p.text(pos, anchor, name, font.clone(), muted());
+        p.circle_stroke(at, 5.0, Stroke::new(1.5_f32, Color32::from_white_alpha(170)));
+        let lead = leading == Some(key);
+        let colour = if lead { accent() } else { Color32::from_gray(0xE4) };
+        let galley = p.layout_no_wrap(model.region_name(key).to_owned(), font.clone(), colour);
+        let pill = label_rect(rect, at, x, y, galley.size() + Vec2::new(12.0, 6.0));
+        let fade = if label_faded(puck_at, pill, FADE_RADIUS) { FADE_ALPHA } else { 1.0 };
+        p.rect_filled(pill, CornerRadius::same(6), Color32::from_black_alpha(150).gamma_multiply(fade));
+        if lead {
+            p.rect_stroke(pill, CornerRadius::same(6), Stroke::new(1.0_f32, accent().gamma_multiply(fade)), egui::StrokeKind::Inside);
+        }
+        p.galley_with_override_text_color(pill.center() - galley.size() / 2.0, galley, colour.gamma_multiply(fade));
     }
-    if let Some((x, y)) = puck {
-        let at = pos_of(inner, x, y);
-        let (fill, ring) = if by_hand { (theme::muted().gamma_multiply(0.6), muted()) } else { (accent_fill(), ink()) };
-        p.circle_filled(at, 9.0, fill);
-        p.circle_stroke(at, 9.0, Stroke::new(1.5_f32, ring));
+    if let Some(at) = puck_at {
+        let (fill, ring) = if by_hand { (theme::muted().gamma_multiply(0.7), muted()) } else { (accent_fill(), Color32::WHITE) };
+        p.circle_filled(at, 19.0, fill.gamma_multiply(0.25));
+        p.circle_stroke(at, 19.0, Stroke::new(1.0_f32, fill.gamma_multiply(0.5)));
+        p.circle_filled(at, 11.0, fill);
+        p.circle_stroke(at, 11.0, Stroke::new(2.0_f32, Color32::from_black_alpha(200)));
+        p.circle_stroke(at, 12.5, Stroke::new(1.0_f32, ring));
     }
 }
 
@@ -350,7 +425,7 @@ mod tests {
     use super::*;
 
     fn pad() -> Rect {
-        Rect::from_min_size(Pos2::new(100.0, 50.0), Vec2::splat(PAD_SIDE))
+        Rect::from_min_size(Pos2::new(100.0, 50.0), Vec2::new(300.0, 255.0))
     }
 
     #[test]
@@ -372,6 +447,58 @@ mod tests {
         assert_eq!(snap_to_tone(inner, near_corner, SNAP_RADIUS), Some((1.0, 1.0)));
         assert_eq!(snap_to_tone(inner, pos_of(inner, 0.0, 0.0) + Vec2::new(3.0, 3.0), SNAP_RADIUS), Some((0.0, 0.0)));
         assert_eq!(snap_to_tone(inner, pos_of(inner, 0.5, 0.5), SNAP_RADIUS), None);
+    }
+
+    #[test]
+    fn non_square_rectangle_maps_both_ways() {
+        let inner = inner_rect(pad());
+        assert!(inner.width() != inner.height());
+        for (x, y) in [(0.0, 0.0), (-1.0, 1.0), (1.0, -1.0), (0.3, 0.7)] {
+            let (rx, ry) = xy_at(inner, pos_of(inner, x, y));
+            assert!((rx - x).abs() < 1e-5 && (ry - y).abs() < 1e-5);
+        }
+        // The centre is the middle of the rectangle, and the corners are its corners.
+        assert_eq!(pos_of(inner, 0.0, 0.0), inner.center());
+        assert_eq!(pos_of(inner, -1.0, 1.0), inner.left_top());
+        assert_eq!(pos_of(inner, 1.0, -1.0), inner.right_bottom());
+    }
+
+    #[test]
+    fn snap_radius_is_generous_but_not_endless() {
+        let inner = inner_rect(pad());
+        let corner = pos_of(inner, -1.0, -1.0);
+        assert_eq!(snap_to_tone(inner, corner + Vec2::new(SNAP_RADIUS - 1.0, 0.0), SNAP_RADIUS), Some((-1.0, -1.0)));
+        assert_eq!(snap_to_tone(inner, corner + Vec2::new(SNAP_RADIUS + 1.0, 0.0), SNAP_RADIUS), None);
+    }
+
+    #[test]
+    fn a_name_fades_only_when_the_puck_is_close() {
+        let label = Rect::from_min_size(Pos2::new(10.0, 10.0), Vec2::new(80.0, 20.0));
+        assert!(label_faded(Some(Pos2::new(50.0, 20.0)), label, FADE_RADIUS));
+        assert!(label_faded(Some(Pos2::new(90.0 + FADE_RADIUS - 1.0, 20.0)), label, FADE_RADIUS));
+        assert!(!label_faded(Some(Pos2::new(90.0 + FADE_RADIUS + 1.0, 20.0)), label, FADE_RADIUS));
+        assert!(!label_faded(None, label, FADE_RADIUS));
+    }
+
+    #[test]
+    fn cover_fills_the_rectangle_without_stretching() {
+        // A wide picture in a squarish rectangle: full height, the middle part of the width.
+        let uv = cover_uv(Vec2::new(400.0, 200.0), Vec2::new(300.0, 255.0));
+        assert!((uv.height() - 1.0).abs() < 1e-5 && uv.width() < 1.0);
+        assert!(((uv.width() * 400.0) / (uv.height() * 200.0) - 300.0 / 255.0).abs() < 1e-4);
+        // A tall picture: full width, the middle part of the height.
+        let uv = cover_uv(Vec2::new(100.0, 300.0), Vec2::new(300.0, 255.0));
+        assert!((uv.width() - 1.0).abs() < 1e-5 && uv.height() < 1.0);
+        assert!((uv.center().x - 0.5).abs() < 1e-5 && (uv.center().y - 0.5).abs() < 1e-5);
+    }
+
+    #[test]
+    fn the_pad_is_bigger_in_a_wide_panel_and_the_panel_grows_to_hold_it() {
+        assert_eq!(pad_width(1500.0), PAD_MAX_W);
+        assert!(pad_width(800.0) < PAD_MAX_W && pad_width(800.0) >= 220.0);
+        let w = pad_width(1500.0);
+        assert!(panel_height(w) > super::super::BODY_H + 100.0);
+        assert!(panel_height(w) > pad_size(w).y);
     }
 
     #[test]

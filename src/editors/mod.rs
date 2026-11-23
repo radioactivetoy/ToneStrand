@@ -1284,6 +1284,28 @@ fn body_section(ui: &mut egui::Ui, side: bool, full: f32, h: f32, photo: Option<
         });
     });
 }
+/// Like `body_section`, but the left column can be the Focus pad instead of the photo: `pad_w` is its width. `content` is called with
+/// `true` to draw the pad in the left column and `false` for the settings on the right (one closure, so both can use the same preset).
+fn body_section_pad(ui: &mut egui::Ui, pad_w: f32, full: f32, h: f32, mut content: impl FnMut(&mut egui::Ui, bool)) {
+    ui.horizontal_top(|ui| {
+        ui.set_min_height(h);
+        ui.vertical(|ui| {
+            ui.set_width(pad_w);
+            content(ui, true);
+        });
+        ui.add_space(10.0);
+        let (r, _) = ui.allocate_exact_size(Vec2::new(1.0, h), egui::Sense::hover());
+        ui.painter().rect_filled(r, CornerRadius::ZERO, line());
+        ui.add_space(10.0);
+        let rest = full - pad_w - 21.0;
+        ui.vertical(|ui| {
+            ui.set_max_width(rest);
+            ui.set_min_width(rest.min(200.0));
+            content(ui, false);
+        });
+    });
+}
+
 /// A "Change cab" menu for the second model of a block: the cabs of the same kind
 /// (dual cabs for a dual cab's second cab, single mic cabs for an amp's cab; legacy
 /// cabs for legacy ones). Returns the cab picked.
