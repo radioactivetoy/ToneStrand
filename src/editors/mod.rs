@@ -15,6 +15,7 @@ use crate::theme::{self, *};
 
 mod device;
 mod doc;
+mod focus_pad;
 mod hlx_file;
 mod pacing;
 mod studio;
@@ -1332,7 +1333,12 @@ pub(crate) const ROW_GAP: f32 = 16.0;
 
 fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: bool) {
     let DeviceEdit { preset, live, cmds, cat, dirty } = ed;
-    let values = if cab { preset.paired_values(s.path, s.position) } else { s.values.clone() };
+    // Read the preset now, not the snapshot from the start of the frame, so the knobs follow the Focus pad in the same frame.
+    let values = if cab {
+        preset.paired_values(s.path, s.position)
+    } else {
+        preset.slots().get(s.global).map(|x| x.values.clone()).unwrap_or_else(|| s.values.clone())
+    };
     let model = if cab { s.paired } else { s.model };
     // For splits, merges, inputs and outputs the parameter names come from the same table.
     let per_row = ((ui.available_width() + 6.0) / 116.0).floor().max(1.0) as usize;

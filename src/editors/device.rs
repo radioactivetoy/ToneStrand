@@ -1,5 +1,6 @@
 //! The editor for the pedal's own preset documents, and its controllers card.
 
+use super::focus_pad;
 use super::*;
 
 // ------------------------------------------------------------ pedal preset ---
@@ -553,6 +554,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
         // An amp + cab (or dual cab) is two sections, each with its own photo.
         let cab_sym = s.paired.zip(cat).and_then(|(m, c)| c.symbol(m)).map(str::to_owned);
         let has_photo = |x: &Option<String>| x.as_deref().is_some_and(|x| crate::modelinfo::photo(ui.ctx(), x).is_some());
+        let focus_model = if s.kind == Kind::Block { sym.as_deref().and_then(focus_pad::model_for) } else { None };
         let side = (has_photo(&sym) || has_photo(&cab_sym)) && ui.available_width() > 700.0;
         let full = ui.available_width();
         let h = super::BODY_H;
@@ -587,10 +589,38 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                     }
                 }
                 theme::help(ui, "The footswitch that turns this block on and off. Knobs on footswitches, expression pedals, snapshots and MIDI are in the Controllers card below.");
+                // Focus mode: steer the character on an X-Y pad instead of (or with) the knobs.
+                if let (Some(sy), Some(_)) = (sym.as_deref(), focus_model) {
+                    ui.add_space(24.0);
+                    let on = focus_pad::in_focus(sy);
+                    if super::switch_button(ui, "Knobs", !on) {
+                        focus_pad::set_focus(sy, false);
+                    }
+                    if super::switch_button(ui, "Focus", on) {
+                        focus_pad::set_focus(sy, true);
+                    }
+                }
             });
                 ui.add_space(4.0);
             }
-            knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, false);
+            match (sym.as_deref(), focus_model) {
+                (Some(sy), Some(model)) if focus_pad::in_focus(sy) => {
+                    ui.horizontal_top(|ui| {
+                        focus_pad::focus_pad(ui, &mut *preset, live, &mut *cmds, &mut *dirty, &s, sy, model);
+                        ui.add_space(10.0);
+                        ui.vertical(|ui| {
+                            knob_grid(
+                                ui,
+                                DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty },
+                                &s,
+                                sel,
+                                false,
+                            );
+                        });
+                    });
+                }
+                _ => knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, false),
+            }
         });
         if let Some(cab) = s.paired {
             ui.add_space(6.0);

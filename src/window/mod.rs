@@ -1119,7 +1119,12 @@ impl App {
 
     /// The window's close button: ask first when presets have unsaved changes.
     fn guard_quit(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested()) && !self.quit_ok && self.docs.iter().any(Doc::needs_save) {
+        // A picture run (--screenshot) never asks: the pad preview or a knob may have made the document dirty, and nobody is there to answer.
+        if ctx.input(|i| i.viewport().close_requested())
+            && !self.quit_ok
+            && self.screenshot.is_none()
+            && self.docs.iter().any(Doc::needs_save)
+        {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.close_ask = Some(CloseAsk::Quit);
         }

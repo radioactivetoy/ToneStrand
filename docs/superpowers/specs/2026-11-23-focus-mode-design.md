@@ -125,3 +125,8 @@ Must be measured through the Box: how many parameter messages per second the ped
   not in HX Edit 3.82's list, 18 parameters left out; the pack is 75 KB. Same numbers as the analysis JSON, so the two routes agree.
   `focus/README.md` and a line in the main README's Line 6 notice. Tests: folder reader, export tool, and the bundled pack is well formed.
 - Next: phase 3, the pad in the editor (file editors first, no pedal needed).
+- **Phase 3 desktop UI done (2026-11-23):** `src/editors/focus_pad.rs`: a `Knobs | Focus` switch on the Footswitch row of a block that has tones, the X-Y pad
+  (five named tones, puck, snap within 14 px, Centre, Revert, "Edited by hand"), the knob grid beside it reading the preset each frame so the knobs turn with the
+  puck, and paced live sending (50 ms, everything on release; switches only on release, constant `SEND_SWITCHES_WHILE_DRAGGING`). Not yet tested on a pedal.
+  Pictures: `TONESTRAND_FOCUS=1` (Focus by default), `TONESTRAND_FOCUS_AT=x,y` (puck placed on the first frame). `--screenshot` runs no longer ask about unsaved changes on quit.
+  Not done: mode kept in settings, the .hlx editor, a model missing on the connected pedal.
