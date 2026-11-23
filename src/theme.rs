@@ -14,9 +14,11 @@ pub fn set_light(on: bool) {
     LIGHT.store(on, Ordering::Relaxed);
 }
 
-/// Whether the window is driven by touch (a later setting can force it on).
+/// Whether the window is driven by touch (a later setting can force it on). On the desktop, setting the environment variable
+/// TONESTRAND_TOUCH (to anything) makes it true, to try the touch layouts in pictures; nothing in the tests sets it.
 pub fn touch() -> bool {
-    cfg!(target_os = "android")
+    static FORCED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    cfg!(target_os = "android") || *FORCED.get_or_init(|| std::env::var_os("TONESTRAND_TOUCH").is_some())
 }
 
 /// What a row inside a scrolling list senses: on touch a plain drag must reach the scroll

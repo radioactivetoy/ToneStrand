@@ -571,12 +571,14 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
         let side = (has_photo(&sym) || has_photo(&cab_sym)) && ui.available_width() > 700.0;
         let full = ui.available_width();
         let focus_on = focus_model.is_some() && sym.as_deref().is_some_and(focus_pad::in_focus);
-        let pad_w = focus_pad::pad_width(full);
-        let h = if focus_on { focus_pad::panel_height(pad_w) } else { super::BODY_H };
+        let touch = theme::touch();
+        let pad = focus_pad::pad_size(full, ui.ctx().screen_rect().height(), touch);
+        let pad_w = pad.x;
+        let h = if focus_on { focus_pad::panel_height(pad, touch) } else { super::BODY_H };
         let mut content = |ui: &mut egui::Ui, left: bool| {
             if left {
                 if let (Some(sy), Some(model)) = (sym.as_deref(), focus_model) {
-                    focus_pad::focus_pad(ui, &mut *preset, live, &mut *cmds, &mut *dirty, &s, sy, model, pad_w);
+                    focus_pad::focus_pad(ui, &mut *preset, live, &mut *cmds, &mut *dirty, &s, sy, model, pad);
                 }
                 return;
             }
