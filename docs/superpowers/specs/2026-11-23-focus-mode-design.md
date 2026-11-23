@@ -136,3 +136,4 @@ Must be measured through the Box: how many parameter messages per second the ped
   leading tone in the accent colour, a name fades to 35% when the puck is within 40 px), a larger puck with glow, snap within 22 px, and the readout naming the
   leading tone with its percentage. Pure helpers (non-square mapping, snap radius, label fade, cover fit, sizes) have tests. Pictures checked: Hiwatt (dark), Simple
   Delay, Boss AC-2 and others, Focus off, and 1280x800.
+  Owner follow-up: the photo is no longer cover-fitted (it cropped sides/tops); it is drawn whole, centred at its own aspect ratio, scaled down to fit but never above 1.0x native pixels (`PHOTO_MAX_SCALE`), dimmed 120/255 on the photo only, with the plain dark card around it.

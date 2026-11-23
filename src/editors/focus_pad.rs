@@ -28,7 +28,9 @@ const FADE_RADIUS: f32 = 40.0;
 /// How faded a name is while the puck is near it.
 const FADE_ALPHA: f32 = 0.35;
 /// Darkening laid over the photo so it reads as a texture behind the controls.
-const PHOTO_DIM: u8 = 150;
+const PHOTO_DIM: u8 = 120;
+/// The most a photo is enlarged (1.0 = its own pixels).
+const PHOTO_MAX_SCALE: f32 = 1.0;
 /// Space between the pad's edge and its corner tones, so the dots and the puck stay inside.
 const INSET: f32 = 34.0;
 /// A click this close to a tone (in points) lands exactly on it.
@@ -61,15 +63,12 @@ fn label_faded(puck: Option<Pos2>, label: Rect, radius: f32) -> bool {
     puck.is_some_and(|p| label.distance_to_pos(p) < radius)
 }
 
-/// The part of a picture (as 0..1 coordinates) that fills a rectangle of `rect` size without stretching ("cover").
-fn cover_uv(tex: Vec2, rect: Vec2) -> Rect {
+/// Where a whole picture of `tex` size goes in `rect`: centred at its own aspect ratio, never cropped or stretched, scaled down to fit
+/// but never up past `PHOTO_MAX_SCALE` (so small art stays crisp).
+fn contain_rect(tex: Vec2, rect: Rect) -> Rect {
     let (tw, th) = (tex.x.max(1.0), tex.y.max(1.0));
-    let (u, v) = if tw / th > rect.x / rect.y.max(1.0) {
-        ((rect.x / rect.y.max(1.0)) * th / tw, 1.0)
-    } else {
-        (1.0, (rect.y / rect.x.max(1.0)) * tw / th)
-    };
-    Rect::from_min_max(Pos2::new((1.0 - u) / 2.0, (1.0 - v) / 2.0), Pos2::new((1.0 + u) / 2.0, (1.0 + v) / 2.0))
+    let scale = (rect.width() / tw).min(rect.height() / th).min(PHOTO_MAX_SCALE);
+    Rect::from_center_size(rect.center(), Vec2::new(tw * scale, th * scale))
 }
 
 /// The square the puck moves in: the pad without its border.
@@ -380,10 +379,11 @@ fn paint_pad(ui: &egui::Ui, rect: Rect, inner: Rect, model: &FocusModel, symbol:
     let p = ui.painter();
     let round = CornerRadius::same(8);
     p.rect_filled(rect, round, Color32::from_rgb(0x10, 0x11, 0x14));
-    // The model's photo as the background, "cover"-fitted and dimmed.
+    // The model's whole photo, centred at its own aspect ratio (never cropped or stretched), dimmed; the rest stays the dark card.
     if let Some(tex) = crate::modelinfo::photo(ui.ctx(), symbol) {
-        egui::Image::new(&tex).uv(cover_uv(tex.size_vec2(), rect.size())).corner_radius(round).paint_at(ui, rect);
-        p.rect_filled(rect, round, Color32::from_black_alpha(PHOTO_DIM));
+        let img = contain_rect(tex.size_vec2(), rect);
+        egui::Image::new(&tex).corner_radius(CornerRadius::same(4)).paint_at(ui, img);
+        p.rect_filled(img, CornerRadius::same(4), Color32::from_black_alpha(PHOTO_DIM));
     }
     p.rect_stroke(rect, round, Stroke::new(1.0_f32, line()), egui::StrokeKind::Inside);
     // Cross-hair through the centre.
@@ -481,15 +481,18 @@ mod tests {
     }
 
     #[test]
-    fn cover_fills_the_rectangle_without_stretching() {
-        // A wide picture in a squarish rectangle: full height, the middle part of the width.
-        let uv = cover_uv(Vec2::new(400.0, 200.0), Vec2::new(300.0, 255.0));
-        assert!((uv.height() - 1.0).abs() < 1e-5 && uv.width() < 1.0);
-        assert!(((uv.width() * 400.0) / (uv.height() * 200.0) - 300.0 / 255.0).abs() < 1e-4);
-        // A tall picture: full width, the middle part of the height.
-        let uv = cover_uv(Vec2::new(100.0, 300.0), Vec2::new(300.0, 255.0));
-        assert!((uv.width() - 1.0).abs() < 1e-5 && uv.height() < 1.0);
-        assert!((uv.center().x - 0.5).abs() < 1e-5 && (uv.center().y - 0.5).abs() < 1e-5);
+    fn contain_shows_the_whole_picture_centred_and_never_enlarged() {
+        let rect = Rect::from_min_size(Pos2::new(10.0, 20.0), Vec2::new(300.0, 255.0));
+        // Bigger than the pad: scaled down to fit, aspect kept, centred.
+        let r = contain_rect(Vec2::new(600.0, 200.0), rect);
+        assert!((r.width() - 300.0).abs() < 1e-3 && (r.width() / r.height() - 3.0).abs() < 1e-4);
+        assert!(r.center().distance(rect.center()) < 1e-4);
+        let r = contain_rect(Vec2::new(200.0, 600.0), rect);
+        assert!((r.height() - 255.0).abs() < 1e-3 && (r.width() / r.height() - 1.0 / 3.0).abs() < 1e-4);
+        // Smaller than the pad: native size, not enlarged.
+        let r = contain_rect(Vec2::new(100.0, 80.0), rect);
+        assert_eq!(r.size(), Vec2::new(100.0, 80.0) * PHOTO_MAX_SCALE);
+        assert!(rect.contains_rect(r));
     }
 
     #[test]
