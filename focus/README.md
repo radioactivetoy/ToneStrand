@@ -20,3 +20,6 @@ tonestrand --export-focus "C:\ProgramData\Line 6\Helix Stadium Native\res\meta-d
 
 It writes `focus/1.5.0/` and refuses if that folder already exists. Commit the two files. The app builds in the newest version.
 The pack needs the effects list it was made with: when a newer HX Edit adds models, make the pack again to give them a pad.
+
+Parameters whose five tones all hold the same value (1003 of them in `1.4.1`, counted as `params_constant` in `meta.json`) are left out of the pack, so
+Focus never overwrites a value the tones do not change.

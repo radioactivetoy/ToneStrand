@@ -166,6 +166,9 @@ pub struct FocusMeta {
     pub stadium_only: usize,
     pub not_in_catalog: usize,
     pub params_left_out: usize,
+    /// Parameters whose five tones all hold the same value: not a character parameter, so Focus leaves the user's own value alone.
+    #[serde(default)]
+    pub params_constant: usize,
 }
 
 /// A value to give a parameter.
@@ -237,6 +240,10 @@ pub struct Report {
     pub unmapped: Vec<String>,
     /// Parameters left out: not a parameter of that model on the pedal, or no description in the catalog.
     pub skipped_params: Vec<String>,
+    /// Parameters left out because all five tones hold the same value (Focus must not overwrite the user's own value).
+    pub constant_params: usize,
+    /// Models whose parameters are all constant: no pad, and not counted as unmapped.
+    pub constant_models: usize,
     /// Values outside the catalog's range (kept as given; clamped when evaluated).
     pub out_of_range: Vec<String>,
 }
@@ -326,6 +333,7 @@ impl FocusSet {
             return;
         }
         let mut found = false;
+        let constant_before = self.report.constant_models;
         for file in files {
             let Some(symbol) = ["HD2_", "L6SPB_", ""].iter().map(|p| format!("{p}{file}")).find(|s| cat.sym.iter().any(|e| &e.symbol == s))
             else {
@@ -336,7 +344,7 @@ impl FocusSet {
                 found = true;
             }
         }
-        if !found {
+        if !found && self.report.constant_models == constant_before {
             self.report.unmapped.push(format!("{name} [{}]", files.join(", ")));
         }
     }
@@ -368,12 +376,19 @@ fn tone_value(region: &Json, id: &str) -> Option<f64> {
     }
 }
 
+/// Whether five values are all the same (within 1e-6 of the larger of 1 and their size).
+fn is_constant(values: impl Iterator<Item = f64>) -> bool {
+    let v: Vec<f64> = values.collect();
+    v.iter().all(|x| (x - v[0]).abs() <= 1e-6 * v[0].abs().max(x.abs()).max(1.0))
+}
+
 fn build_model(m: &Json, name: &str, symbol: &str, cat: &Catalog, report: &mut Report) -> Option<FocusModel> {
     let entry = cat.sym.iter().find(|e| e.symbol == symbol)?;
     let info = cat.info_for_symbol(symbol)?;
     let regions = m.get("regions")?;
     let origin = regions.get(RegionKey::Origin.file_key())?;
     let mut params = Vec::new();
+    let mut constant_here = 0;
     let mut values: Vec<Vec<f64>> = vec![Vec::new(); 5];
     for (id, p) in m.get("params")?.as_object()? {
         let behaviour = p.get("behavior").and_then(Json::as_str).unwrap_or("interpolate");
@@ -390,8 +405,16 @@ fn build_model(m: &Json, name: &str, symbol: &str, cat: &Catalog, report: &mut R
             _ => Kind::Float,
         };
         let centre = tone_value(origin, id).unwrap_or(meta.default);
-        for key in RegionKey::ALL {
-            let v = regions.get(key.file_key()).and_then(|r| tone_value(r, id)).unwrap_or(centre);
+        let five: Vec<(RegionKey, f64)> = RegionKey::ALL
+            .iter()
+            .map(|key| (*key, regions.get(key.file_key()).and_then(|r| tone_value(r, id)).unwrap_or(centre)))
+            .collect();
+        if is_constant(five.iter().map(|x| x.1)) {
+            report.constant_params += 1;
+            constant_here += 1;
+            continue;
+        }
+        for (key, v) in five {
             let eps = (meta.max - meta.min).abs() * 1e-5; // the file holds 32-bit numbers: 19.899999618 is the range's 19.9
             if meta.max > meta.min && (v < meta.min - eps || v > meta.max + eps) && kind != Kind::Bool {
                 report.out_of_range.push(format!("{symbol} {id} {} = {v} (range {} to {})", key.file_key(), meta.min, meta.max));
@@ -401,6 +424,9 @@ fn build_model(m: &Json, name: &str, symbol: &str, cat: &Catalog, report: &mut R
         params.push(FocusParam { id: id.clone(), index, quantize: behaviour == "quantize", kind, min: meta.min, max: meta.max });
     }
     if params.is_empty() {
+        if constant_here > 0 {
+            report.constant_models += 1;
+        }
         return None;
     }
     let regions = RegionKey::ALL
@@ -553,6 +579,15 @@ mod tests {
         {"modelName": "Big Amp", "category": "amp", "files": ["AgouraBigAmp"], "params": {}, "regions": {}}
       ],
       "delay": [
+        {"modelName": "Mixed Delay", "category": "delay", "files": ["TS_TestDelayStereo"],
+         "params": {"TS_Time": {"id": 1, "behavior": "interpolate"}, "TS_Mix": {"id": 2, "behavior": "interpolate"}},
+         "regions": {
+           "origin": {"name": "a", "TS_Time": 0.5, "TS_Mix": 0.3}, "x_min_y_min": {"name": "b", "TS_Time": 0.1, "TS_Mix": 0.3},
+           "x_min_y_max": {"name": "c", "TS_Time": 0.9, "TS_Mix": 0.3}, "x_max_y_min": {"name": "d", "TS_Time": 1.5, "TS_Mix": 0.3},
+           "x_max_y_max": {"name": "e", "TS_Time": 0.2, "TS_Mix": 0.3}}},
+        {"modelName": "Flat Cab", "category": "cab", "files": ["TS_TestCab"], "params": {"TS_Size": {"id": 1, "behavior": "interpolate"}},
+         "regions": {"origin": {"name": "a", "TS_Size": 0.25}, "x_min_y_min": {"name": "b", "TS_Size": 0.25}, "x_min_y_max": {"name": "c", "TS_Size": 0.25},
+                     "x_max_y_min": {"name": "d", "TS_Size": 0.25}, "x_max_y_max": {"name": "e", "TS_Size": 0.25}}},
         {"modelName": "New Delay", "category": "delay", "files": ["DelayNewMono"], "params": {"Time": {"id": 1, "behavior": "interpolate"}}, "regions": {"origin": {"name": "x", "Time": 0.1}}}
       ]
     }"#;
@@ -561,9 +596,16 @@ mod tests {
     fn a_stadium_file_maps_onto_the_catalogs_symbols_and_indices() {
         let cat = Catalog::load(&mini_hx_edit_dir()).unwrap();
         let set = FocusSet::resolve(STADIUM, &cat).unwrap();
-        assert_eq!(set.report.models, 3);
+        assert_eq!(set.report.models, 5);
         assert_eq!(set.report.stadium_only, 1);
-        assert_eq!(set.report.mapped, 1);
+        assert_eq!(set.report.mapped, 2);
+        // The Mix that is the same in all five tones is the user's own value: left out and counted; the cab whose only
+        // parameter is constant gets no pad and is not counted as unmapped.
+        assert_eq!(set.report.constant_params, 2);
+        assert_eq!(set.report.constant_models, 1);
+        let delay = set.model_for("TS_TestDelayStereo").unwrap();
+        assert_eq!(delay.params.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), vec!["TS_Time"]);
+        assert!(set.model_for("TS_TestCab").is_none());
         assert_eq!(set.report.unmapped, vec!["New Delay [DelayNewMono]".to_owned()]);
         assert_eq!(set.report.skipped_params, vec!["TS_TestAmp Nonexistent".to_owned()], "excluded ones are left out without comment");
         assert_eq!(set.report.out_of_range.len(), 1, "{:?}", set.report.out_of_range);
@@ -581,6 +623,14 @@ mod tests {
             vec![(0, FocusValue::Float(1.0)), (1, FocusValue::Int(2))],
             "the Drive of 1.5 is held to the range"
         );
+    }
+
+    #[test]
+    fn constant_means_the_same_within_a_tiny_tolerance() {
+        assert!(is_constant([0.3, 0.3, 0.3, 0.3, 0.3].into_iter()));
+        assert!(is_constant([100.0, 100.00001, 100.0, 100.0, 100.0].into_iter()));
+        assert!(!is_constant([0.3, 0.3, 0.3, 0.3, 0.31].into_iter()));
+        assert!(is_constant([0.0, 0.0000005, 0.0, 0.0, 0.0].into_iter()));
     }
 
     #[test]
@@ -614,6 +664,10 @@ mod real_data {
             r.stadium_only,
             r.mapped,
             r.unmapped.len()
+        );
+        println!(
+            "parameters constant across the five tones (left alone) {}, in {} models with nothing else",
+            r.constant_params, r.constant_models
         );
         println!("parameters left out {}, values outside the catalog's range {}", r.skipped_params.len(), r.out_of_range.len());
         for l in r.skipped_params.iter().take(15) {

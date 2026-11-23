@@ -475,6 +475,7 @@ pub fn export_focus(
         stadium_only: r.stadium_only,
         not_in_catalog: r.unmapped.len(),
         params_left_out: r.skipped_params.len(),
+        params_constant: r.constant_params,
     };
     let mut meta_json = serde_json::to_string_pretty(&meta).map_err(|e| e.to_string())?;
     meta_json.push('\n');

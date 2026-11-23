@@ -1,11 +1,12 @@
 {
   "format": 1,
   "stadium_version": "1.4.1",
-  "created": "2026-11-22",
+  "created": "2026-11-23",
   "catalog": "HX Edit files in C:\\Program Files (x86)\\Line6\\HX Edit\\res",
   "files_read": 674,
   "mapped": 595,
   "stadium_only": 31,
   "not_in_catalog": 48,
-  "params_left_out": 18
+  "params_left_out": 18,
+  "params_constant": 1003
 }
