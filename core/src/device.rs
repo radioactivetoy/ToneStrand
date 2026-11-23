@@ -488,13 +488,13 @@ pub fn coalesce_set_params(cmds: Vec<Cmd>) -> Vec<Cmd> {
     let mut drop = vec![false; cmds.len()];
     for i in 0..cmds.len() {
         let Some(k) = key(&cmds[i]) else { continue };
-        for j in i + 1..cmds.len() {
-            if key(&cmds[j]) == Some(k) {
+        for later in cmds.iter().skip(i + 1) {
+            if key(later) == Some(k) {
                 drop[i] = true;
                 break;
             }
             // Another SetParam is no obstacle; a command for another block is none; anything else is.
-            let ok = matches!(cmds[j], Cmd::SetParam { .. }) || block_of(&cmds[j]).is_some_and(|b| b != k.0);
+            let ok = matches!(later, Cmd::SetParam { .. }) || block_of(later).is_some_and(|b| b != k.0);
             if !ok {
                 break;
             }

@@ -80,9 +80,9 @@ const SEND_SWITCHES_WHILE_DRAGGING: bool = false;
 /// The pad's width in a panel `full` points wide.
 pub fn pad_width(full: f32, touch: bool) -> f32 {
     if touch {
-        (full * PAD_SHARE_TOUCH).min(PAD_MAX_W_TOUCH).max(260.0)
+        (full * PAD_SHARE_TOUCH).clamp(260.0, PAD_MAX_W_TOUCH)
     } else {
-        (full * PAD_SHARE).min(PAD_MAX_W).max(220.0)
+        (full * PAD_SHARE).clamp(220.0, PAD_MAX_W)
     }
 }
 
@@ -552,6 +552,7 @@ fn write_values(preset: &mut DevicePreset, s: &SlotView, st: &mut PadState, live
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_at(preset: &mut DevicePreset, s: &SlotView, st: &mut PadState, model: &FocusModel, live: bool, dirty: &mut bool, x: f64, y: f64) {
     let cur = current_values(preset, s);
     if st.originals.is_empty() {
@@ -595,6 +596,7 @@ fn ghost_at() -> Option<(f64, f64)> {
 /// The pad, its tone name and its buttons. Writes into the preset (so the knobs drawn after it show the change in the same frame)
 /// and, on the live preset, sends the changed parameters in paced batches. Nothing is written until the person clicks or drags on
 /// the pad or presses a button.
+#[allow(clippy::too_many_arguments)]
 pub fn focus_pad(
     ui: &mut egui::Ui,
     preset: &mut DevicePreset,
