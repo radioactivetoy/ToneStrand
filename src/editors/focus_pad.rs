@@ -31,6 +31,8 @@ const FADE_ALPHA: f32 = 0.35;
 const PHOTO_DIM: u8 = 120;
 /// The most a photo is enlarged (1.0 = its own pixels).
 const PHOTO_MAX_SCALE: f32 = 1.0;
+/// How far (in points) a photo's edge fades into the card.
+const PHOTO_FEATHER: f32 = 22.0;
 /// Space between the pad's edge and its corner tones, so the dots and the puck stay inside.
 const INSET: f32 = 34.0;
 /// A click this close to a tone (in points) lands exactly on it.
@@ -61,6 +63,38 @@ pub fn panel_height(w: f32) -> f32 {
 /// Whether a tone's name (its rectangle) is faded because the puck is close to it.
 fn label_faded(puck: Option<Pos2>, label: Rect, radius: f32) -> bool {
     puck.is_some_and(|p| label.distance_to_pos(p) < radius)
+}
+
+/// Opacity of a photo at `dist` points from its nearest edge: 0 at the edge, 1 from `width` inward, smooth in between.
+fn feather(dist: f32, width: f32) -> f32 {
+    let t = (dist / width.max(1e-3)).clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// The photo as a mesh whose edges fade to nothing over `PHOTO_FEATHER`, with the dimming in the vertex colours (so the dim
+/// fades too and no rectangle is left): 4x4 vertices, 9 quads.
+fn photo_mesh(tex: &egui::TextureHandle, img: Rect) -> egui::Mesh {
+    let f = PHOTO_FEATHER.min(img.width() / 2.0).min(img.height() / 2.0);
+    let xs = [0.0, f, img.width() - f, img.width()];
+    let ys = [0.0, f, img.height() - f, img.height()];
+    let k = 1.0 - f32::from(PHOTO_DIM) / 255.0;
+    let mut mesh = egui::Mesh::with_texture(tex.id());
+    for y in ys {
+        for x in xs {
+            let a = feather(x.min(img.width() - x), f) * feather(y.min(img.height() - y), f);
+            let c = (255.0 * k * a).round() as u8;
+            let color = Color32::from_rgba_premultiplied(c, c, c, (255.0 * a).round() as u8);
+            let uv = Pos2::new(x / img.width(), y / img.height());
+            mesh.vertices.push(egui::epaint::Vertex { pos: img.min + Vec2::new(x, y), uv, color });
+        }
+    }
+    for r in 0..3u32 {
+        for c in 0..3u32 {
+            let i = r * 4 + c;
+            mesh.indices.extend_from_slice(&[i, i + 1, i + 5, i, i + 5, i + 4]);
+        }
+    }
+    mesh
 }
 
 /// Where a whole picture of `tex` size goes in `rect`: centred at its own aspect ratio, never cropped or stretched, scaled down to fit
@@ -382,8 +416,7 @@ fn paint_pad(ui: &egui::Ui, rect: Rect, inner: Rect, model: &FocusModel, symbol:
     // The model's whole photo, centred at its own aspect ratio (never cropped or stretched), dimmed; the rest stays the dark card.
     if let Some(tex) = crate::modelinfo::photo(ui.ctx(), symbol) {
         let img = contain_rect(tex.size_vec2(), rect);
-        egui::Image::new(&tex).corner_radius(CornerRadius::same(4)).paint_at(ui, img);
-        p.rect_filled(img, CornerRadius::same(4), Color32::from_black_alpha(PHOTO_DIM));
+        p.add(egui::Shape::mesh(photo_mesh(&tex, img)));
     }
     p.rect_stroke(rect, round, Stroke::new(1.0_f32, line()), egui::StrokeKind::Inside);
     // Cross-hair through the centre.
@@ -478,6 +511,18 @@ mod tests {
         assert!(label_faded(Some(Pos2::new(90.0 + FADE_RADIUS - 1.0, 20.0)), label, FADE_RADIUS));
         assert!(!label_faded(Some(Pos2::new(90.0 + FADE_RADIUS + 1.0, 20.0)), label, FADE_RADIUS));
         assert!(!label_faded(None, label, FADE_RADIUS));
+    }
+
+    #[test]
+    fn the_photo_edge_fades_smoothly_and_symmetrically() {
+        assert_eq!(feather(0.0, 20.0), 0.0);
+        assert_eq!(feather(20.0, 20.0), 1.0);
+        assert_eq!(feather(500.0, 20.0), 1.0);
+        assert!((feather(10.0, 20.0) - 0.5).abs() < 1e-6);
+        assert!(feather(5.0, 20.0) < feather(10.0, 20.0));
+        // Same fade from either side of a 100-wide photo.
+        let at = |x: f32| feather(x.min(100.0 - x), 20.0);
+        assert!((at(7.0) - at(93.0)).abs() < 1e-6);
     }
 
     #[test]
