@@ -145,19 +145,6 @@ impl App {
                                 reload = true;
                             }
                         });
-                        ui.add_space(4.0);
-                        ui.horizontal(|ui| {
-                            if ui.checkbox(&mut self.settings.focus_default, "Open effects in Focus mode when available").changed() {
-                                crate::editors::focus_set_default(self.settings.focus_default);
-                                self.settings.save();
-                            }
-                            theme::help(
-                                ui,
-                                "Focus mode steers an effect's character on an X-Y pad over its photo, instead of turning its knobs one by one. 
-                                 This opens every effect that has Focus tones that way; the Focus button in the block's header still switches one effect, 
-                                 and ToneStrand remembers that choice for that effect.",
-                            );
-                        });
                     });
                     if reload {
                         self.reload_catalog();
@@ -290,6 +277,18 @@ impl App {
                         ui.horizontal(|ui| {
                             changed |= ui.checkbox(&mut self.settings.reopen_tabs, "Reopen last session's presets at start").changed();
                             theme::help(ui, "Opens the preset files that were open when you last closed ToneStrand. Presets read from the pedal aren't included: they have no file.");
+                        });
+                        ui.horizontal(|ui| {
+                            if ui.checkbox(&mut self.settings.focus_default, "Open effects in Focus mode when available").changed() {
+                                crate::editors::focus_set_default(self.settings.focus_default);
+                                self.settings.save();
+                            }
+                            theme::help(
+                                ui,
+                                "Focus mode steers an effect's character on an X-Y pad over its photo, instead of turning its knobs one by one. \
+                                 This opens every effect that has Focus tones that way; the Focus button in the block's header still switches one effect, \
+                                 and ToneStrand remembers that choice for that effect.",
+                            );
                         });
                     });
                     ui.add_space(10.0);
