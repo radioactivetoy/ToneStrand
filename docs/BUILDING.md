@@ -93,6 +93,10 @@ page or file.
 | `TONESTRAND_SELECT` | With `TONESTRAND_OPEN`: the place in the chain to select (0 is the input) |
 | `TONESTRAND_CTL_TAB` | The Controllers card's tab to start on (0 Footswitches ... last = Command Center) |
 | `TONESTRAND_LAYOUT` | `chain` or `block`: start with the chain or the block panel maximized (not saved) |
+| `TONESTRAND_FOCUS` | `1`: show Focus (the pad) instead of the knobs for effects that have it, unless a saved choice exists (never read from your settings in a picture) |
+| `TONESTRAND_FOCUS_AT` | `x,y` in -1..1: put the Focus puck there on a block's first frame, as a gesture (for pictures) |
+| `TONESTRAND_FOCUS_GHOST` | `x,y` in -1..1: write the values at that point into the block with no gesture, as if saved from the pad, so the ghost ring shows there (for pictures) |
+| `TONESTRAND_TOUCH` | Any value: use the touch layouts (bigger Focus pad, buttons and snap radius) on the desktop |
 | `TONESTRAND_TABS` | Press Tab this many times in a picture (to see where the keyboard focus goes) |
 
 ## Read-only command-line tools
@@ -104,6 +108,7 @@ Handy when working on formats or the protocol; none of them writes to the pedal.
 | `--probe [host]` | Connect (USB, or a paired ToneStrand Box at `host`), list setlists/presets, disconnect |
 | `--find-boxes` | Look for boxes on the network (mDNS and the `.local` names) and print their status |
 | `--list-models` | Print the effects list in use (HX Edit's, else the built-in one): category, variant, name |
+| `--export-focus <Stadium Native res\meta-data\focus-view-xy-defaults> <out folder> <version>` | Make the Focus mode pack (`<out folder>/<version>/focus.json.gz` and `meta.json`) from Helix Stadium Native's tones, matched to the effects list in use; it refuses if that version's folder exists. The bundled pack is `focus/1.4.1` (see `focus/README.md`). Reads Line 6's folder and writes only the pack |
 | `--read-backup <file>` | List the presets inside an `.hxb` or `.hls` |
 | `--dump-doc <file>` | Print a pedal document's structure (`.hxpreset`) |
 | `--commands <file or slot> [host]` | Print a preset's Command Center as the pedal stores it (a `.hxpreset`, or a slot such as `42B` read from the pedal) |

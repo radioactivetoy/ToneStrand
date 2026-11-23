@@ -66,6 +66,8 @@ thread. Everything else is plain data structures edited in place every frame.
 | `icons.rs` | Effect-type icons cut from `assets/block Images/Blocks_stadium.png` (category line icons and per-kind tiles; the dark edge of each tile is un-mixed so it does not show as a band on a coloured block). `kind_label` names an amp carrying its cab "Amp+Cab" (a cab carrying a second cab "Dual Cab"); `paint_model` draws Amp+Cab as the amp tile with a small cab tile on its corner. |
 | `modelinfo.rs` | Effect photos and descriptions (`assets/models`, Line 6 material from its firmware release notes; see README). For an amp + cab or dual cab, `photo_tile()` draws one photo at a fixed size (the amp's, and the cab's in its own section); `about()` gives the description for the help pop-up. |
 | `core/src/realnames.rs` | Optional real-gear names for effects. |
+| `core/src/focus.rs` | Focus mode's data and maths, no drawing: the five tones of each model (`FocusModel`), `weights` (the blend on the plane), `evaluate` (the value of every parameter at a point), `locate` (where on the pad a block's current values sit, with `GHOST_MAX_ERROR`), the resolver from Helix Stadium Native's folder to the pedal's symbols and value indices (`FocusSet::resolve`, constant parameters left out), and the pack (gzip JSON, `to_pack` / `from_pack`). The built-in pack in `focus/<version>/` is embedded by `core/build.rs` (the newest version is used). |
+| `editors/focus_pad.rs` | The Focus pad of a pedal block: the photo as background, the five tones, the puck or a ghost ring, Centre / Revert / Undo / Redo, the pad's own history for the live preset, paced live sending, the on/off choice per effect (kept in the settings), and the knob-grid order and dots. Pure helpers (position and values, snapping, label fade, flush pacing, `knob_order`, `locate` rules, the undo stack) are at the top and tested. |
 
 ## Data model
 
@@ -77,7 +79,7 @@ thread. Everything else is plain data structures edited in place every frame.
     `origin` is `Live { setlist, index }` (the loaded preset: edits are also sent to the pedal as
     they happen), `Slot { .. }` (read from a slot, written back on request) or `File`.
 - Undo/redo: `track_history(i, before, history)` compares the document before and after each
-  frame's edits and pushes snapshots (merged when edits come within 700 ms). Live documents
+  frame's edits and pushes snapshots (merged when edits come within 700 ms), except that a Focus pad gesture (`editors::focus_gesture_*`) is always one step however long it lasts. Live documents
   have no undo (their changes are already on the pedal).
 - `Doc.selected`: the selected block. For pedal documents it is the index in
   `DevicePreset::slots()`; for `.hlx` it is the index in the editor's block list, or codes
@@ -120,7 +122,8 @@ the rest.
 `device::connect(target, repaint)` spawns the thread and returns `Link { tx: Sender<Cmd>,
 rx: Receiver<Event> }`. The loop:
 
-- Waits up to 40 ms for a `Cmd`; when idle, calls `Session::idle` (reads, acks, collects
+- Waits up to 40 ms for a `Cmd`; when one arrives it takes everything already waiting and drops each `SetParam` that a later `SetParam` for the same knob replaces (`coalesce_set_params`: nothing is dropped across another command for the same block or a command naming no block), then does the queue in order. A fast drag of the Focus pad sends about nine knobs every 50 ms, each a round trip to the pedal, so the pedal would otherwise keep catching up after the pointer stopped. A failed `SetParam` or `SetHidden` says which block and parameter.
+ when idle, calls `Session::idle` (reads, acks, collects
   notifications, keeps the Box link alive) and follows preset changes made on the pedal.
 - Every 15 s of inactivity asks for the preset info (heartbeat). If that fails it re-opens the
   loaded preset; if that fails too it reports `Disconnected`.

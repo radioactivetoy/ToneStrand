@@ -69,6 +69,12 @@ On the first connection, say which unit was found, which parts of the app are ch
   on the Stomp.
 - macOS and Linux builds: macOS has a CI job; Linux has none yet; running them needs a person with the machine.
 
+## 8. Focus mode: open items
+
+- A mic-placement pad for cabs (our own design, not Stadium data), Focus in the `.hlx` file editor, and the Android checks.
+  Focus mode itself (design: `docs/superpowers/specs/2026-11-23-focus-mode-design.md`, guide: `docs/FOCUS_MODE.md`) is done on the desktop
+  and used on an HX Stomp.
+
 ## What a tester does for item 1 (about 30 minutes per unit)
 
 1. Install this app and a ToneStrand Box on the unit (or connect by USB if the other editor is not used).

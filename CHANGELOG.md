@@ -1,13 +1,41 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-beta.6 - 2026-11-23
 
 ### New
+- **Focus mode.** A **Focus** button in the header of an amp or effect turns its photo into a pad with the model's five named tones
+  (a centre and four corners; Line 6's Helix Stadium tones). Drag or tap and several parameters move together while the knobs beside the
+  pad turn with the puck; on the loaded preset the pedal follows live. Click near a ring to land exactly on a tone; **Centre**,
+  **Revert** and, for the loaded preset, **Undo** and **Redo** buttons; on a file a drag, tap, Centre or Revert is one step of the normal
+  undo. Nothing is written until you click or drag. A **ghost ring** shows where the effect's current sound sits on the pad
+  ("On the pad: Wall 42%"); a sound set by knobs says "Set by hand: closest tone ...". The knobs Focus moves are listed first, the others
+  dimmed under "Not moved by Focus", and a dot marks a knob changed since your first move. Parameters that are the same in all five tones
+  are left alone. The choice is remembered per effect, and Settings > Behaviour has "Open effects in Focus mode when available".
+  The tones come from Helix Stadium Native 1.4.1 and are bundled for about 595 effect versions (`focus/`, made with
+  `tonestrand --export-focus`); cabs, IRs, EQs and the Stadium-only amps have none. On a touch screen the pad, rings and buttons are larger.
+  See `docs/FOCUS_MODE.md`. Not in the `.hlx` file editor yet.
+- **Maximize the editor.** A Maximize button gives the whole page to the signal chain or to the block panel (Restore goes back; the choice is
+  remembered), and a **strip of chips** shows the chain's blocks, per path and lane, with names cut short.
+- **Type values in the knob's own units**: ranges of controllers (also the `.hlx` Low / High) and typed values use the units the knob shows
+  (ms, %, dB, ...).
+- **Android files and storage (work in progress, not tried on a real tablet).** File dialogs go through one asynchronous picker, the library can live
+  in a shared ToneStrand folder on Android (missing files are copied across without ever replacing one) and backups are kept in both folders;
+  the window keeps clear of the system bars, the on-screen keyboard works, touch scrolls lists and press-and-hold picks a preset up.
 - **A built-in effects list.** The effect names, knob names, ranges and categories made from HX Edit 3.82 are kept in `catalogs/`.
   `tonestrand --export-catalog <HX Edit res folder> <catalogs folder> <version>` makes a list for another HX Edit version.
 - **Android app (work in progress).** The editor runs on an Android tablet with touch, the on-screen keyboard and the system bars handled. The Android app takes a Wi-Fi multicast lock at start so it can find the ToneStrand Box, and has the ToneStrand launcher icon. CI builds a debug APK (informational). See `docs/ANDROID.md`.
 
 ### Changed
+- **A single cab's Mic** is shown as the first control and named (it is 16 choices, no longer "Setting 6"), like a cab block and HX Edit.
+- **Trails** (a delay's switch, and on any other effect that has one) is named and can be edited. The pedal refuses to change it as a single parameter, so ToneStrand
+  changes it by sending the document back and checks what the pedal kept; the Mic is changed the same way.
+- **Off / On switches and two-choice controls** are drawn as buttons in both states (the off state no longer looks like loose text), and
+  rows of knobs have more room between them.
+- **Smoother live editing.** A knob is sent about every 80 ms while it turns and its final value on release; changes waiting for the pedal
+  collapse to the newest value of each knob; a Focus drag skips changes smaller than 0.1% of a knob's range.
+- **Error messages** for a failed parameter change say which block and parameter.
+- The effects list and the pedal and document code are in their own crate (`tonestrand-core`) with no UI dependency, and Settings says why
+  the built-in effects list is in use (no HX Edit files, an older HX Edit, or not installed).
 - The Getting started card shows the Install HX Edit step only when no effects list is loaded at all; the other steps are renumbered.
 
 ## 1.0.0-beta.5 - 2026-11-18

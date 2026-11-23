@@ -2,6 +2,7 @@
 
 A desktop preset editor for Line 6 Helix-family pedals (HX Stomp, HX Stomp XL, HX Effects,
 Helix Floor / LT / Rack), connected over **USB** or wirelessly through a [**ToneStrand Box**](https://github.com/radioactivetoy/tonestrand-box).
+Besides editing every knob, you can steer an effect's character on a **Focus** pad (see below).
 
 Written in Rust with [egui](https://github.com/emilk/egui) / eframe. One self-contained
 program; no account, no cloud, nothing leaves your computer.
@@ -10,6 +11,20 @@ program; no account, no cloud, nothing leaves your computer.
 > the same computer and newer than the built-in list, ToneStrand reads the effect names, knob
 > names and ranges, and categories from HX Edit's own files. If not, it uses the list built
 > into the program, made from HX Edit 3.82 (see "Third-party material and trademarks").
+
+## Focus mode: change the character, not just the knobs
+
+![The Focus pad over the Hiwatt DR-103's photo: five named tones in the corners and the middle, a puck, and the knobs beside it with dots on the ones that moved](docs/images/focus-mode.png)
+
+*Focus on a Hiwatt DR-103 amp (block panel maximized): the effect's photo behind the pad, its five named tones, the puck, and the knobs
+Focus moves listed first, with a dot on each one that has changed since the first move.*
+
+Every amp and effect that has Focus tones gets a **Focus** button in its block's header. Press it and the effect's photo
+becomes a pad with five named tones (a centre and four corners; the names come from Line 6's Helix Stadium). Drag or tap on
+the pad and several parameters move together, blended between the tones; the knobs beside it turn with the puck and the pedal
+follows live. Nothing is written until you click or drag, a gesture is one undo step, and Revert goes back to how the effect
+was before. It has been used on an HX Stomp (the other Helix-family pedals share the effects but have not been tried), and it is something HX Edit does not have.
+Read [docs/FOCUS_MODE.md](docs/FOCUS_MODE.md) for how to use it and where the tones come from.
 
 ![The ToneStrand editor connected to an HX Stomp: the pedal's presets on the left, the loaded preset's signal chain on top, the selected amp's knobs below](docs/images/editor.png)
 
@@ -41,6 +56,7 @@ The effect pictures and names come from Line 6; see "Third-party material" below
 
 ## What it does
 
+- **Focus mode**: a pad over the effect's photo that moves several parameters at once between five named tones, with the knobs following ([docs/FOCUS_MODE.md](docs/FOCUS_MODE.md)).
 - **Live editing** of the preset loaded on the pedal: every knob, switch, effect swap, move,
   split/merge and snapshot change is heard at once; "Save on pedal" keeps it.
 - **Offline editing** of `.hlx` files (the JSON format Helix editors export) and of the pedal's
@@ -140,6 +156,7 @@ changes your presets. It is also a Bluetooth MIDI device for setlist apps.
 | [docs/PROTOCOL.md](docs/PROTOCOL.md) | The pedal's USB protocol and the box relay (ToneRelay) |
 | [docs/FILE_FORMATS.md](docs/FILE_FORMATS.md) | Preset documents, `.hlx`, `.hxb`/`.hls`, IR `.wav`, NAM conversion |
 | [docs/COMMAND_CENTER.md](docs/COMMAND_CENTER.md) | Command Center: slots, command types, document layout, live editing |
+| [docs/FOCUS_MODE.md](docs/FOCUS_MODE.md) | Focus mode: what it is, how to use it, where the tones come from, how the pack is made |
 | [AGENTS.md](AGENTS.md) | Working rules and checklists for coding agents (Claude, Antigravity, ...) |
 
 ## Status
@@ -162,8 +179,9 @@ supported by Line 6, Yamaha Guitar Group, or the makers of the Helrig Box.
   release notes.
 - **Effects lists** (`catalogs/`): effect names, knob names and ranges, and categories, converted
   from HX Edit's resource files into one compressed file per HX Edit version.
-- **Focus mode tones** (`focus/`): each effect's five named tones and their values, from Helix Stadium Native's `focus-view-xy-defaults`,
-  converted into one compressed file per Helix Stadium Native version and matched to the pedal's effects.
+- **Focus mode tones** (`focus/`): each effect's five named tones (their names and values) are Line 6's, from Helix Stadium Native's
+  `focus-view-xy-defaults`, converted into one compressed file per Helix Stadium Native version and matched to the pedal's effects
+  (parameters that are the same in all five tones are left out). They are Stadium's tones played on the pedal's own DSP, so close but not identical.
 - **Effect-type icons** (`assets/block Images/`) are Line 6 artwork from HX Edit / Helix Stadium.
 
 This material is © Yamaha Guitar Group, Inc. (Line 6) and remains theirs. It is included free of
