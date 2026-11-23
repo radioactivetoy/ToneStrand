@@ -615,7 +615,18 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
             });
                 ui.add_space(4.0);
             }
-            knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, false);
+            let focus_knobs = match (focus_on, sym.as_deref(), focus_model) {
+                (true, Some(sy), Some(model)) => Some(focus_pad::knobs_for(ui.ctx(), &s, sy, model)),
+                _ => None,
+            };
+            knob_grid(
+                ui,
+                DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty },
+                &s,
+                sel,
+                false,
+                focus_knobs.as_ref(),
+            );
         };
         if focus_on {
             super::body_section_pad(ui, pad_w, full, h, &mut content);
@@ -644,7 +655,7 @@ pub fn device_editor(ui: &mut egui::Ui, ed: DeviceEdit, selected: &mut Option<us
                     }
                 }
                 ui.add_space(4.0);
-                knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, true);
+                knob_grid(ui, DeviceEdit { preset: &mut *preset, live, cmds: &mut *cmds, cat, dirty: &mut *dirty }, &s, sel, true, None);
             });
         }
     });

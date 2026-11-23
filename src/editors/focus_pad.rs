@@ -19,8 +19,8 @@ use crate::theme::{self, *};
 /// The pad's widest size and its share of the panel's width (the pad is bigger on touch, for a finger).
 const PAD_MAX_W: f32 = 340.0;
 const PAD_SHARE: f32 = 0.30;
-const PAD_MAX_W_TOUCH: f32 = 520.0;
-const PAD_SHARE_TOUCH: f32 = 0.48;
+const PAD_MAX_W_TOUCH: f32 = 640.0;
+const PAD_SHARE_TOUCH: f32 = 0.55;
 /// What the window's chrome above a block panel takes, for capping the pad's height on touch.
 const CHROME_H: f32 = 410.0;
 /// The pad's height as a part of its width.
@@ -220,6 +220,31 @@ fn take_flush(pending: &mut BTreeMap<usize, Value>, deferred: impl Fn(usize) -> 
     keys.into_iter().filter_map(|k| pending.remove(&k).map(|v| (k, v))).collect()
 }
 
+/// One knob of the grid: its value index, whether Focus moves it, and whether it differs from before the first pad gesture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct KnobSlot {
+    pub index: usize,
+    pub moved: bool,
+    pub changed: bool,
+}
+
+/// The knobs in the order to show them: the ones Focus moves first, then the rest, each in its normal order. With no `focus`
+/// indices (Knobs mode) every knob counts as moved and the order is the normal one. `changed` is set for a knob whose current
+/// value differs from the one in `originals` (none before the first gesture and after Revert).
+pub(super) fn knob_order(n: usize, focus: &[usize], originals: &[(usize, Value)], current: &[Value]) -> Vec<KnobSlot> {
+    let slot = |index: usize, moved: bool| KnobSlot {
+        index,
+        moved,
+        changed: originals.iter().any(|(i, v)| *i == index && current.get(index).is_some_and(|c| !same(c, v))),
+    };
+    if focus.is_empty() {
+        return (0..n).map(|i| slot(i, true)).collect();
+    }
+    let first = (0..n).filter(|i| focus.contains(i)).map(|i| slot(i, true));
+    let rest = (0..n).filter(|i| !focus.contains(i)).map(|i| slot(i, false));
+    first.chain(rest).collect()
+}
+
 // ---------------------------------------------------------------- availability and mode memory
 
 fn set() -> Option<&'static FocusSet> {
@@ -258,6 +283,16 @@ fn preview_at() -> Option<(f64, f64)> {
 }
 
 // ---------------------------------------------------------------- the widget
+
+fn pad_id(s: &SlotView, symbol: &str) -> egui::Id {
+    egui::Id::new(("focus-pad", s.path, s.position, symbol))
+}
+
+/// What the knob grid beside the pad needs: the knobs the pad moves and the values before its first gesture.
+pub(super) fn knobs_for(ctx: &egui::Context, s: &SlotView, symbol: &str, model: &FocusModel) -> super::FocusKnobs {
+    let st: PadState = ctx.data(|d| d.get_temp(pad_id(s, symbol))).unwrap_or_default();
+    super::FocusKnobs { moved: model.params.iter().map(|p| p.index).collect(), originals: st.originals }
+}
 
 /// What one block's pad remembers (in egui's temporary memory).
 #[derive(Clone, Default)]
@@ -340,7 +375,7 @@ pub fn focus_pad(
     size: Vec2,
 ) {
     let look = Look::new(theme::touch());
-    let id = ui.make_persistent_id(("focus-pad", s.path, s.position, symbol));
+    let id = pad_id(s, symbol);
     let mut st: PadState = ui.data(|d| d.get_temp(id)).unwrap_or_default();
     let mut gesture = None;
     if !st.started {
@@ -629,15 +664,41 @@ mod tests {
     }
 
     #[test]
+    fn the_knobs_focus_moves_come_first_in_their_normal_order() {
+        let cur = vec![Value::F32(0.1), Value::F32(0.2), Value::F32(0.3), Value::F32(0.4), Value::F32(0.5)];
+        let o = knob_order(5, &[3, 1], &[], &cur);
+        assert_eq!(
+            o.iter().map(|k| (k.index, k.moved)).collect::<Vec<_>>(),
+            vec![(1, true), (3, true), (0, false), (2, false), (4, false)]
+        );
+        assert!(o.iter().all(|k| !k.changed), "no dots before the first gesture");
+        // Knobs mode (no Focus indices): the normal order, everything counts as moved.
+        let plain = knob_order(5, &[], &[], &cur);
+        assert_eq!(plain.iter().map(|k| k.index).collect::<Vec<_>>(), vec![0, 1, 2, 3, 4]);
+        assert!(plain.iter().all(|k| k.moved));
+    }
+
+    #[test]
+    fn a_knob_that_differs_from_before_the_first_gesture_is_marked() {
+        let originals = vec![(1, Value::F32(0.2)), (3, Value::F32(0.4))];
+        let cur = vec![Value::F32(0.1), Value::F32(0.9), Value::F32(0.3), Value::F32(0.4), Value::F32(0.5)];
+        let o = knob_order(5, &[1, 3], &originals, &cur);
+        let changed: Vec<usize> = o.iter().filter(|k| k.changed).map(|k| k.index).collect();
+        assert_eq!(changed, vec![1], "knob 3 is back at its original, knob 0 was never captured");
+        // After Revert the originals are gone: no dots.
+        assert!(knob_order(5, &[1, 3], &[], &cur).iter().all(|k| !k.changed));
+    }
+
+    #[test]
     fn touch_makes_everything_bigger() {
         let (d, t) = (Look::new(false), Look::new(true));
         assert_eq!((d.snap, d.puck, d.inset, d.fade, d.button_h), (22.0, 11.0, 34.0, 40.0, 26.0));
         assert_eq!((t.snap, t.puck, t.inset, t.fade, t.button_h, t.text), (32.0, 14.0, 40.0, 48.0, 36.0, 14.0));
         assert!(t.halo >= 26.0 && t.halo > t.puck * 1.5);
         assert!(t.below() > d.below());
-        // Width: min(520, 48%), at least 260 on touch; the desktop is as before.
-        assert_eq!(pad_width(1080.0, true), 1080.0 * 0.48);
-        assert_eq!(pad_width(2000.0, true), 520.0);
+        // Width: min(640, 55%), at least 260 on touch; the desktop is as before.
+        assert_eq!(pad_width(1080.0, true), 1080.0 * 0.55);
+        assert_eq!(pad_width(2000.0, true), 640.0);
         assert_eq!(pad_width(400.0, true), 260.0);
         assert_eq!(pad_width(1080.0, false), 324.0);
     }
@@ -649,7 +710,7 @@ mod tests {
         assert!(tall.y < tall.x * PAD_ASPECT);
         assert!(panel_height(tall, true) + CHROME_H <= 800.0 + 1.0);
         // A huge window: no cap. A tiny one: never under 200.
-        assert_eq!(pad_size(1080.0, 3000.0, true).y, (1080.0f32 * 0.48 * PAD_ASPECT).round());
+        assert_eq!(pad_size(1080.0, 3000.0, true).y, (1080.0f32 * 0.55 * PAD_ASPECT).round());
         assert_eq!(pad_size(1080.0, 300.0, true).y, 200.0);
         // The desktop pad is never capped.
         assert_eq!(pad_size(1500.0, 300.0, false).y, (340.0f32 * PAD_ASPECT).round());

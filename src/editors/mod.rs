@@ -1353,7 +1353,13 @@ pub struct DeviceEdit<'a> {
 /// The vertical gap between two rows of knobs, so a row's value text does not touch the next row's names.
 pub(crate) const ROW_GAP: f32 = 16.0;
 
-fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: bool) {
+/// In Focus mode: the knobs the pad moves (by value index) and the block's values before the first pad gesture, for ordering and marking the grid.
+pub(crate) struct FocusKnobs {
+    pub moved: Vec<usize>,
+    pub originals: Vec<(usize, Value)>,
+}
+
+fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: bool, focus: Option<&FocusKnobs>) {
     let DeviceEdit { preset, live, cmds, cat, dirty } = ed;
     // Read the preset now, not the snapshot from the start of the frame, so the knobs follow the Focus pad in the same frame.
     let values = if cab {
@@ -1364,54 +1370,89 @@ fn knob_grid(ui: &mut egui::Ui, ed: DeviceEdit, s: &SlotView, sel: usize, cab: b
     let model = if cab { s.paired } else { s.model };
     // For splits, merges, inputs and outputs the parameter names come from the same table.
     let per_row = ((ui.available_width() + 6.0) / 116.0).floor().max(1.0) as usize;
-    let mut all: Vec<(usize, &Value)> = values.iter().enumerate().collect();
+    // In Focus mode the knobs the pad moves come first, the rest after them (dimmed); a knob changed since the first pad gesture gets a dot.
+    let mut all = match focus {
+        Some(f) => focus_pad::knob_order(values.len(), &f.moved, &f.originals, &values),
+        None => focus_pad::knob_order(values.len(), &[], &[], &values),
+    };
     // A single cab keeps its Mic last in the pedal's list, but it is the first control of a cab block (and in HX Edit): show it first.
     if let (Some(m), Some(c)) = (model, cat) {
-        if let Some(at) = all.iter().position(|(vi, _)| c.param(m, *vi).1.is_some_and(|p| p.id == "@mic")) {
+        if let Some(at) = all.iter().position(|k| c.param(m, k.index).1.is_some_and(|p| p.id == "@mic")) {
             let mic = all.remove(at);
             all.insert(0, mic);
         }
     }
-    for (row_no, row) in all.chunks(per_row).enumerate() {
-        if row_no > 0 {
-            ui.add_space(ROW_GAP);
+    // Sections: the moved knobs (or all of them), then, in Focus mode, a caption and the others.
+    let first_dim = focus.and_then(|_| all.iter().position(|k| !k.moved));
+    let mut sections: Vec<&[focus_pad::KnobSlot]> = Vec::new();
+    match first_dim {
+        Some(at) if at > 0 => {
+            sections.push(&all[..at]);
+            sections.push(&all[at..]);
         }
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing = Vec2::new(6.0, 12.0);
-            for &(vi, v) in row.iter() {
-                let (name, meta) = match (model, cat) {
-                    (Some(m), Some(c)) => c.param(m, vi),
-                    _ => (format!("Setting {}", vi + 1), None),
-                };
-                let (nv, commit) = param_cell(ui, &name, meta.as_ref(), v);
-                if let Some(nv) = &nv {
-                    if cab {
-                        preset.set_paired_value(s.path, s.position, vi, nv.clone());
-                    } else {
-                        preset.set_value(s.path, s.position, vi, nv.clone());
-                    }
-                    *dirty = true;
-                }
-                let hidden = model.zip(cat).is_some_and(|(m, c)| c.is_hidden_value(m, vi));
-                // A hidden value writes the pedal's edit buffer: it goes on commit only, never paced mid-drag.
-                let go = live && if hidden { commit } else { pacing::live_send(ui, ("blk", s.global, cab, vi), nv.is_some(), commit) };
-                if go {
-                    let cur = if cab {
-                        preset.paired_values(s.path, s.position).get(vi).cloned()
-                    } else {
-                        preset.slots().get(sel).and_then(|x| x.values.get(vi).cloned())
-                    };
-                    if let Some(value) = cur {
-                        // Key 26 picks the block's own knobs (0) or its cab's (1). The Mic and Trails are not settable that way.
-                        cmds.push(if hidden {
-                            Cmd::SetHidden { block: s.wire_block(), cab, index: vi as i64, value }
-                        } else {
-                            Cmd::SetParam { block: s.wire_block(), path: cab as i64, index: vi as i64, value }
-                        });
-                    }
-                }
+        _ => sections.push(&all[..]),
+    }
+    let mut row_no = 0;
+    for (sec_no, section) in sections.iter().enumerate() {
+        let dim = focus.is_some() && !section[0].moved;
+        if dim && sec_no > 0 {
+            ui.add_space(ROW_GAP);
+            ui.label(RichText::new("Not moved by Focus").small().color(muted()));
+        }
+        for row in section.chunks(per_row) {
+            if row_no > 0 {
+                ui.add_space(ROW_GAP);
             }
-        });
+            row_no += 1;
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(6.0, 12.0);
+                for k in row.iter() {
+                    let (vi, v) = (k.index, &values[k.index]);
+                    let (name, meta) = match (model, cat) {
+                        (Some(m), Some(c)) => c.param(m, vi),
+                        _ => (format!("Setting {}", vi + 1), None),
+                    };
+                    let sc = ui.scope(|ui| {
+                        if dim {
+                            ui.set_opacity(0.55);
+                        }
+                        param_cell(ui, &name, meta.as_ref(), v)
+                    });
+                    let (nv, commit) = sc.inner;
+                    // A small accent dot at the cell's top-left for a knob changed since the first pad gesture.
+                    if k.changed {
+                        let at = sc.response.rect.left_top() + Vec2::new(4.0, 7.0);
+                        ui.painter().circle_filled(at, 3.0, accent());
+                    }
+                    if let Some(nv) = &nv {
+                        if cab {
+                            preset.set_paired_value(s.path, s.position, vi, nv.clone());
+                        } else {
+                            preset.set_value(s.path, s.position, vi, nv.clone());
+                        }
+                        *dirty = true;
+                    }
+                    let hidden = model.zip(cat).is_some_and(|(m, c)| c.is_hidden_value(m, vi));
+                    // A hidden value writes the pedal's edit buffer: it goes on commit only, never paced mid-drag.
+                    let go = live && if hidden { commit } else { pacing::live_send(ui, ("blk", s.global, cab, vi), nv.is_some(), commit) };
+                    if go {
+                        let cur = if cab {
+                            preset.paired_values(s.path, s.position).get(vi).cloned()
+                        } else {
+                            preset.slots().get(sel).and_then(|x| x.values.get(vi).cloned())
+                        };
+                        if let Some(value) = cur {
+                            // Key 26 picks the block's own knobs (0) or its cab's (1). The Mic and Trails are not settable that way.
+                            cmds.push(if hidden {
+                                Cmd::SetHidden { block: s.wire_block(), cab, index: vi as i64, value }
+                            } else {
+                                Cmd::SetParam { block: s.wire_block(), path: cab as i64, index: vi as i64, value }
+                            });
+                        }
+                    }
+                }
+            });
+        }
     }
 }
 
