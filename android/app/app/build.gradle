@@ -1,5 +1,16 @@
 // GameActivity wrapper around the Rust library; MainActivity adds the system file picker and the storage permission.
+//
+// Version: -PappVersion=<x> -PappVersionCode=<n> (defaults keep the test build as it was).
+// Release signing: only when ANDROID_KEYSTORE_FILE, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and
+// ANDROID_KEY_PASSWORD are all set; otherwise assembleRelease gives an unsigned APK.
 plugins { id 'com.android.application' }
+
+def releaseKeystore = System.getenv('ANDROID_KEYSTORE_FILE')
+def releaseStorePassword = System.getenv('ANDROID_KEYSTORE_PASSWORD')
+def releaseKeyAlias = System.getenv('ANDROID_KEY_ALIAS')
+def releaseKeyPassword = System.getenv('ANDROID_KEY_PASSWORD')
+def haveReleaseKey = [releaseKeystore, releaseStorePassword, releaseKeyAlias, releaseKeyPassword].every { it }
+
 android {
     namespace 'com.tonestrand.app'
     compileSdk 35
@@ -7,8 +18,24 @@ android {
         applicationId 'com.tonestrand.app'
         minSdk 26
         targetSdk 35
-        versionCode 1
-        versionName '1.0.0-test'
+        versionCode = (project.findProperty("appVersionCode") ?: "1").toString().toInteger()
+        versionName = (project.findProperty("appVersion") ?: "1.0.0-test").toString()
+    }
+    signingConfigs {
+        if (haveReleaseKey) {
+            release {
+                storeFile file(releaseKeystore)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (haveReleaseKey) { signingConfig signingConfigs.release }
+        }
     }
     sourceSets { main { jniLibs.srcDirs = ['../jniLibs'] } }
     packaging { jniLibs { useLegacyPackaging true } }
