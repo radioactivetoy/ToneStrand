@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.0-beta.7 - 2026-11-24
+
+### New
+- **The Android app is a download (work in progress).** Each release now also carries `ToneStrand-<version>-android-arm64.apk`, a
+  signed build for arm64 devices. It is not on the Play Store: sideload it (allow installing unknown apps, then open the file; Google
+  Play Protect may warn). The author has tried it on one tablet; its main use is editing through the ToneStrand Box. If you installed
+  a debug test build before, uninstall it first (the release is signed with a different key). See `docs/ANDROID.md`.
+
+### Changed
+- Release builds of the Android app are called "ToneStrand"; test builds keep "ToneStrand (test)".
+- Behind the scenes: lint fixes (no change in behaviour) and the release workflow builds and signs the Android app.
+
 ## 1.0.0-beta.6 - 2026-11-23
 
 ### New

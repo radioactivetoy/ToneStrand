@@ -3015,7 +3015,7 @@ dependencies = [
 
 [[package]]
 name = "tonestrand"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 dependencies = [
  "dirs",
  "eframe",
@@ -3042,7 +3042,7 @@ dependencies = [
 
 [[package]]
 name = "tonestrand-core"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 dependencies = [
  "dirs",
  "flate2",
