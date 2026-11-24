@@ -101,8 +101,8 @@ The effect pictures and names come from Line 6; see "Third-party material" below
 
 ## Download
 
-Get the latest Windows build (a beta is marked as a pre-release) from the [Releases](https://github.com/radioactivetoy/ToneStrand/releases)
-page, in either form:
+Get the latest build (a beta is marked as a pre-release) from the [Releases](https://github.com/radioactivetoy/ToneStrand/releases)
+page. For Windows, in either form:
 
 - **`ToneStrand-Setup-<version>.exe`**: the installer. It installs for your user only (no
   administrator rights), adds a Start menu entry and an uninstaller.
@@ -115,7 +115,7 @@ page, in either form:
 
 HX Edit is not needed (see above). The program isn't
 code-signed, so Windows SmartScreen may warn the first time: choose **More info**, then
-**Run anyway**. Only Windows has been tried. On a Mac you can build from source (CI builds it; nobody has run it). Linux is not supported.
+**Run anyway**. Windows, and the Android app on one tablet, are what has been tried. On a Mac you can build from source (CI builds it; nobody has run it). Linux is not supported.
 
 ## Quick start (build from source)
 
