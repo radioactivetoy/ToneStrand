@@ -26,6 +26,7 @@ jobs:
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          trap 'rm -f "$RUNNER_TEMP"/check.keystore* "$RUNNER_TEMP"/dummy.jar "$RUNNER_TEMP"/f.txt' EXIT
           echo "ANDROID_KEYSTORE_BASE64 length: ${#KEYSTORE_BASE64}"
           echo "ANDROID_KEYSTORE_PASSWORD length: ${#KEYSTORE_PASSWORD}"
           echo "ANDROID_KEY_ALIAS length: ${#KEY_ALIAS}"
@@ -65,12 +66,12 @@ jobs:
             if [ "$KEY_ALIAS" = "$KEY_PASSWORD" ]; then echo "The alias secret is the SAME as the key password: the values were probably entered in the wrong order."; fi
             exit 1
           fi
-          cp "$F" "$F.copy"
-          if keytool -keypasswd -alias "$REAL" -keystore "$F.copy" -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -new "$KEY_PASSWORD" >/dev/null 2>&1; then
+          cd "$RUNNER_TEMP"
+          printf x > f.txt && jar cf dummy.jar f.txt
+          if jarsigner -keystore "$F" -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" -sigalg SHA256withRSA -digestalg SHA-256 dummy.jar "$REAL" >/dev/null 2>&1; then
             echo "key password: OK"
             echo "RESULT: all four secrets fit together. Signing should work."
           else
-            echo "RESULT: ANDROID_KEY_PASSWORD is NOT the password of that key. (If you pressed Enter for the key password in keytool, it is the same as the keystore password.)"
+            echo "RESULT: signing with the key failed: ANDROID_KEY_PASSWORD (or the keystore password) does not fit the key."
             exit 1
           fi
-          rm -f "$F" "$F.copy"
