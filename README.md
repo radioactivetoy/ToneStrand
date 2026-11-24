@@ -107,6 +107,11 @@ page, in either form:
 - **`ToneStrand-Setup-<version>.exe`**: the installer. It installs for your user only (no
   administrator rights), adds a Start menu entry and an uninstaller.
 - **`ToneStrand-<version>-windows.zip`**: portable. Unzip anywhere and run `tonestrand.exe`.
+- **`ToneStrand-<version>-android-arm64.apk`**: the Android app, a work in progress for arm64 tablets and phones. The
+  author has tried it on one tablet only; its main use is editing through the ToneStrand Box. It is not on the Play
+  Store: sideload it (allow installing unknown apps for your browser or file manager, then open the file). Google Play
+  Protect may warn because the app comes from outside the Play Store. If you have a debug test build installed,
+  uninstall it first.
 
 HX Edit is not needed (see above). The program isn't
 code-signed, so Windows SmartScreen may warn the first time: choose **More info**, then

@@ -79,3 +79,124 @@ jobs:
           if [[ "$VERSION" == *-* ]]; then PRE="--prerelease"; fi
           gh release create "$GITHUB_REF_NAME" --title "ToneStrand $VERSION" --notes-file notes.md $PRE \
             "ToneStrand-$VERSION-windows.zip" "installer/Output/ToneStrand-Setup-$VERSION.exe"
+
+  # The Android app (android/, see docs/ANDROID.md): a signed arm64 release APK, attached to the release the
+  # Windows job created. It needs the repository secrets ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+  # ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD. Without them the APK is built unsigned and only kept as a
+  # run artifact; the release is not touched. A run started by hand never publishes.
+  android:
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      NDK_VERSION: 27.2.12479018
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Version
+        shell: bash
+        run: |
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF_NAME#v}" != "$VERSION" ]]; then
+            echo "The tag $GITHUB_REF_NAME does not match Cargo.toml's version $VERSION" >&2
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: android
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v4
+        with:
+          # Only platform-tools here; the NDK, platform and build tools come from the next step.
+          packages: platform-tools
+      - name: Install the NDK
+        run: sdkmanager "ndk;${NDK_VERSION}" "platforms;android-35" "build-tools;35.0.0"
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: 8.9
+
+      - name: Build the native library
+        working-directory: android
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION"
+          cargo ndk -t arm64-v8a -P 26 -o app/jniLibs --link-libcxx-shared build --release
+      - name: Check the native library is where Gradle expects it
+        run: ls -la android/app/jniLibs/arm64-v8a
+
+      # The secrets only come in through env: and are never printed. SIGNED=true only when all four exist.
+      - name: Signing key
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/tonestrand-release.keystore"
+            echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/tonestrand-release.keystore" >> "$GITHUB_ENV"
+            echo "SIGNED=true" >> "$GITHUB_ENV"
+            echo "The Android signing secrets are present: the APK will be signed."
+          else
+            echo "SIGNED=false" >> "$GITHUB_ENV"
+            echo "The Android signing secrets (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD) are not all set: building an UNSIGNED APK, which will not be published."
+          fi
+
+      - name: Build the release APK
+        working-directory: android/app
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: gradle --no-daemon assembleRelease -PappVersion="$VERSION" -PappVersionCode="$((100 + GITHUB_RUN_NUMBER))"
+
+      - name: Verify and name the APK
+        shell: bash
+        run: |
+          OUT=android/app/app/build/outputs/apk/release
+          if [ "$SIGNED" = "true" ]; then
+            "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$OUT/app-release.apk"
+            cp "$OUT/app-release.apk" "ToneStrand-$VERSION-android-arm64.apk"
+            echo "APK_FILE=ToneStrand-$VERSION-android-arm64.apk" >> "$GITHUB_ENV"
+          else
+            cp "$OUT/app-release-unsigned.apk" "ToneStrand-$VERSION-android-arm64-unsigned.apk"
+            echo "APK_FILE=ToneStrand-$VERSION-android-arm64-unsigned.apk" >> "$GITHUB_ENV"
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ToneStrand-${{ env.VERSION }}-android
+          path: ${{ env.APK_FILE }}
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v') && env.SIGNED == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" "$APK_FILE" --clobber
+          gh release view "$GITHUB_REF_NAME" --json body -q .body > notes.md
+          {
+            echo
+            echo "### Android (work in progress)"
+            echo "- **$APK_FILE**: arm64 devices only. Sideload it: allow installing unknown apps for your browser or file manager, then open the file; Google Play Protect may warn because the app is not from the Play Store."
+            echo "- Tested by the author on one tablet. The main use is editing presets through the ToneStrand Box, not a Play Store app."
+            echo "- If you installed a debug-signed test build before, uninstall it first: the release is signed with a different key, so Android will not update over it."
+          } >> notes.md
+          gh release edit "$GITHUB_REF_NAME" --notes-file notes.md
+
+      - name: Remove the signing key
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/tonestrand-release.keystore"

@@ -15,7 +15,7 @@ Android-specific reaches the Windows build.
     android\build.ps1 [-Abi x86_64|arm64-v8a] [-Device emulator-5554] [-NoInstall]
 
 It runs `cargo ndk`, strips the library, runs Gradle (`android/app`), and (unless `-NoInstall`)
-reinstalls and starts `com.tonestrand.app` (label "ToneStrand (test)"). The APK is
+reinstalls and starts `com.tonestrand.app` (debug label "ToneStrand (test)"; `-Release` is described under Releasing the Android app below). The APK is
 `android/app/app/build/outputs/apk/debug/app-debug.apk`, signed with the Gradle debug key.
 It also removes the old spike app `com.tonestrand.spike` if present.
 
@@ -115,3 +115,50 @@ What the emulator reports (one debug-level line at start-up in `android/src/lib.
    a. In `android/src/lib.rs`, before painting, turn `FRAMEBUFFER_SRGB` (0x8DB9) off through `frame.gl()` when the extension list has `GL_EXT_sRGB_write_control` (the start-up log line shows whether it does).
    b. A vendored eframe under `android/vendor/eframe`, changed only to ask for a plain (non-sRGB) window surface, wired through `[patch.crates-io]` in `android/Cargo.toml`. Never touch the root `Cargo.toml`.
    c. eframe's `wgpu` renderer, for the Android build only.
+
+## Releasing the Android app
+
+The release workflow (`.github/workflows/release.yml`) has a job `android` (ubuntu-latest, `needs: windows`, so the
+GitHub release it attaches to already exists). It reads the version from `Cargo.toml` (and fails if a `v*` tag does not
+match it), builds the native library for arm64-v8a, runs `gradle assembleRelease -PappVersion=<version>
+-PappVersionCode=<100 + the workflow run number>`, checks the signature with `apksigner verify --print-certs`, and
+uploads `ToneStrand-<version>-android-arm64.apk` as a run artifact. On a tag, and only when the APK is signed, it also
+attaches the APK to the release (`gh release upload --clobber`) and appends an "Android (work in progress)" paragraph to
+the release notes. A run started by hand (workflow_dispatch) only uploads the artifact.
+
+Without the secrets below the job still passes: it builds an unsigned APK (`...-arm64-unsigned.apk`, run artifact only),
+says so in its log, and the release is not touched.
+
+The version code is `100 + the run number`, so it grows with every run and Android accepts the APK as an update. The
+version name is the `Cargo.toml` version. The application id is `com.tonestrand.app` for every build, so a debug-signed
+test build (label "ToneStrand (test)") and a release-signed build are the same app to Android: **uninstall the
+debug-signed one before installing a release-signed one** (the signatures differ, so it cannot update in place; the
+app's settings and Box pairing are lost).
+
+### The four secrets
+
+The release key is made once by the owner and kept as GitHub Actions secrets (Settings, Secrets and variables, Actions):
+`ANDROID_KEYSTORE_BASE64` (the keystore file, base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
+`ANDROID_KEY_PASSWORD`. In Windows PowerShell, in a folder outside the repository:
+
+    & "$env:LOCALAPPDATA\Android\jdk17\bin\keytool.exe" -genkeypair -v -keystore tonestrand-release.keystore -alias tonestrand -keyalg RSA -keysize 4096 -validity 10000
+    [Convert]::ToBase64String([IO.File]::ReadAllBytes("tonestrand-release.keystore")) | gh secret set ANDROID_KEYSTORE_BASE64
+    gh secret set ANDROID_KEYSTORE_PASSWORD
+    gh secret set ANDROID_KEY_ALIAS
+    gh secret set ANDROID_KEY_PASSWORD
+
+`keytool` asks for the keystore password (use the same for the key, or give the key its own) and the certificate name.
+`gh secret set NAME` prompts for the value, so nothing is typed into a chat or a file. The alias is `tonestrand`.
+
+**Back the keystore and its passwords up outside the repository** (a password manager, an encrypted drive). Losing
+the key means no further update can be installed over an existing install: every user would have to uninstall first.
+`*.keystore` and `*.jks` are git-ignored; never commit them.
+
+### Building a release locally
+
+    android\build.ps1 -Release [-Abi arm64-v8a] [-NoInstall] [-Version 1.0.0-beta.6] [-VersionCode 106]
+
+Signing comes from the environment variables `ANDROID_KEYSTORE_FILE` (a path to the keystore), `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`; the build is signed only when all four are set, otherwise it gives an
+unsigned APK (`app-release-unsigned.apk`, which cannot be installed) and a warning. It prints the APK path and size. The
+APK is in `android/app/app/build/outputs/apk/release/`. Without `-Release` nothing changes: a debug build, installed on the emulator.
